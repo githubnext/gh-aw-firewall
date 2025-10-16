@@ -175,20 +175,18 @@ export async function runCopilotCommand(workDir: string): Promise<number> {
  * Stops and removes Docker Compose services
  */
 export async function stopContainers(workDir: string, keepContainers: boolean): Promise<void> {
+  if (keepContainers) {
+    logger.info('Keeping containers running (--keep-containers enabled)');
+    return;
+  }
+
   logger.info('Stopping containers...');
 
   try {
-    if (keepContainers) {
-      await execa('docker', ['compose', 'stop'], {
-        cwd: workDir,
-        stdio: 'inherit',
-      });
-    } else {
-      await execa('docker', ['compose', 'down', '-v'], {
-        cwd: workDir,
-        stdio: 'inherit',
-      });
-    }
+    await execa('docker', ['compose', 'down', '-v'], {
+      cwd: workDir,
+      stdio: 'inherit',
+    });
     logger.success('Containers stopped successfully');
   } catch (error) {
     logger.error('Failed to stop containers:', error);
