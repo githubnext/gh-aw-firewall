@@ -1,0 +1,80 @@
+name: Test Firewall Wrapper with Copilot Help
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-copilot-help:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Make wrapper available globally
+        run: |
+          npm link
+          which firewall-wrapper
+          firewall-wrapper --version
+
+      - name: Test Copilot CLI --help through firewall
+        timeout-minutes: 3
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+        run: |
+          set -o pipefail
+
+          # Run copilot --help through the firewall wrapper
+          # Only allow essential domains for Copilot CLI
+          firewall-wrapper \
+            --allow-domains raw.githubusercontent.com,api.github.com,github.com \
+            --log-level debug \
+            "copilot --help" \
+            2>&1 | tee /tmp/copilot-help-output.log
+
+          # Verify the help output contains expected content
+          if grep -q "Usage: copilot" /tmp/copilot-help-output.log; then
+            echo "✓ Copilot help command succeeded"
+            exit 0
+          else
+            echo "✗ Copilot help output not found"
+            exit 1
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-help-logs
+          path: /tmp/copilot-help-output.log
+          if-no-files-found: warn
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Firewall Wrapper + Copilot --help Test"
+          echo "=========================================="
+          echo "This test validates that:"
+          echo "  1. Copilot CLI can run inside the firewall wrapper"
+          echo "  2. Basic help command works with minimal domain whitelist"
+          echo "  3. The firewall doesn't interfere with simple commands"
+          echo "=========================================="
