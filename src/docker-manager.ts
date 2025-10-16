@@ -173,11 +173,17 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
   logger.info('Stopping containers...');
 
   try {
-    const command = keepContainers ? 'stop' : 'down';
-    await execa('docker', ['compose', command, '-v'], {
-      cwd: workDir,
-      stdio: 'inherit',
-    });
+    if (keepContainers) {
+      await execa('docker', ['compose', 'stop'], {
+        cwd: workDir,
+        stdio: 'inherit',
+      });
+    } else {
+      await execa('docker', ['compose', 'down', '-v'], {
+        cwd: workDir,
+        stdio: 'inherit',
+      });
+    }
     logger.success('Containers stopped successfully');
   } catch (error) {
     logger.error('Failed to stop containers:', error);
