@@ -45,9 +45,9 @@ jobs:
           # Run copilot --help through the firewall wrapper
           # Only allow essential domains for Copilot CLI
           firewall-wrapper \
-            --allow-domains raw.githubusercontent.com,api.github.com,github.com \
+            --allow-domains raw.githubusercontent.com,api.github.com,github.com,registry.npmjs.org \
             --log-level debug \
-            "copilot --help" \
+            "npx -y @github/copilot@0.0.343 --help" \
             2>&1 | tee /tmp/copilot-help-output.log
 
           # Verify the help output contains expected content

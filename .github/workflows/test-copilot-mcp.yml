@@ -93,7 +93,7 @@ jobs:
           firewall-wrapper \
             --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,registry.npmjs.org,statsig.anthropic.com,ghcr.io,docker.io,registry-1.docker.io \
             --log-level debug \
-            "copilot --allow-tool 'github(create_issue)' --allow-tool 'github(get_me)' --prompt \"$PROMPT\"" \
+            "npx -y @github/copilot@0.0.343 --allow-tool 'github(create_issue)' --allow-tool 'github(get_me)' --prompt \"$PROMPT\"" \
             2>&1 | tee /tmp/copilot-output.log
 
       - name: Upload logs

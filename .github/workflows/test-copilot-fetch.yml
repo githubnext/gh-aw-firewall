@@ -56,9 +56,9 @@ jobs:
           # Run copilot through the firewall wrapper
           # Only allow essential domains for Copilot CLI and GitHub API
           firewall-wrapper \
-            --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,statsig.anthropic.com \
+            --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,statsig.anthropic.com,registry.npmjs.org \
             --log-level debug \
-            "copilot --prompt \"$PROMPT\"" \
+            "npx -y @github/copilot@0.0.343 --prompt \"$PROMPT\"" \
             2>&1 | tee /tmp/copilot-fetch-output.log
 
           # Verify the output contains expected data from the API fetch
@@ -93,9 +93,9 @@ jobs:
           # Run copilot through firewall WITHOUT allowing httpbin.org
           # This should fail or return an error about network access
           firewall-wrapper \
-            --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,statsig.anthropic.com \
+            --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,statsig.anthropic.com,registry.npmjs.org \
             --log-level debug \
-            "copilot --prompt \"$PROMPT\"" \
+            "npx -y @github/copilot@0.0.343 --prompt \"$PROMPT\"" \
             2>&1 | tee /tmp/copilot-blocked-output.log || true
 
           # Verify that the request was blocked (look for connection errors or proxy denial)
