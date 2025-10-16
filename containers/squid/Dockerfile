@@ -1,11 +1,12 @@
 FROM ubuntu/squid:latest
 
-# Install additional tools for debugging
+# Install additional tools for debugging and healthcheck
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     dnsutils \
-    net-tools && \
+    net-tools \
+    netcat-openbsd && \
     rm -rf /var/lib/apt/lists/*
 
 # Create log directory

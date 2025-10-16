@@ -46,6 +46,7 @@ export interface DockerService {
     interval: string;
     timeout: string;
     retries: number;
+    start_period?: string;
   };
   cap_add?: string[];
   stdin_open?: boolean;

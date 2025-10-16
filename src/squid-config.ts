@@ -7,21 +7,14 @@ export function generateSquidConfig(config: SquidConfig): string {
   const { domains, port } = config;
 
   // Generate ACL entries for allowed domains
+  // Use dot-prefix for subdomain matching (e.g., .github.com matches both github.com and api.github.com)
   const domainAcls = domains
     .map(domain => {
       // Normalize domain - remove protocol if present
       const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      // Add leading dot for subdomain matching (e.g., .github.com matches api.github.com)
+      // Add leading dot for subdomain matching unless already present
       const domainPattern = cleanDomain.startsWith('.') ? cleanDomain : `.${cleanDomain}`;
       return `acl allowed_domains dstdomain ${domainPattern}`;
-    })
-    .join('\n');
-
-  // Also add exact domain matches (without leading dot)
-  const exactDomainAcls = domains
-    .map(domain => {
-      const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      return `acl allowed_domains dstdomain ${cleanDomain}`;
     })
     .join('\n');
 
@@ -38,7 +31,6 @@ http_port ${port}
 
 # ACL definitions for allowed domains
 ${domainAcls}
-${exactDomainAcls}
 
 # Network ACLs
 acl localnet src 10.0.0.0/8
