@@ -68,7 +68,7 @@ via off
 error_directory /usr/share/squid/errors/en
 
 # Logging
-logformat combined %>a %[ui %[un [%tl] "%rm %ru HTTP/%rv" %>Hs %<st "%{Referer}>h" "%{User-Agent}>h" %Ss:%Sh
+logformat combined %>a %ui %un [%tl] "%rm %ru HTTP/%rv" %>Hs %<st "%{Referer}>h" "%{User-Agent}>h" %Ss:%Sh
 access_log /var/log/squid/access.log combined
 
 # Memory and file descriptor limits
