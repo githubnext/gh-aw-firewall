@@ -9,7 +9,6 @@ import { generateSquidConfig } from './squid-config';
 const SQUID_PORT = 3128;
 const NETWORK_SUBNET = '172.30.0.0/24';
 const SQUID_IP = '172.30.0.10';
-const COPILOT_IP = '172.30.0.20';
 
 /**
  * Generates Docker Compose configuration
@@ -143,7 +142,7 @@ export async function runCopilotCommand(workDir: string): Promise<number> {
   logger.info('Executing copilot command...');
 
   try {
-    const result = await execa('docker', ['compose', 'logs', '-f', 'copilot'], {
+    await execa('docker', ['compose', 'logs', '-f', 'copilot'], {
       cwd: workDir,
       stdio: 'inherit',
       reject: false,
