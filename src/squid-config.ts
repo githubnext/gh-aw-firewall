@@ -8,12 +8,25 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Generate ACL entries for allowed domains
   // Use dot-prefix for subdomain matching (e.g., .github.com matches both github.com and api.github.com)
-  const domainAcls = domains
+  const normalizedDomains = domains.map(domain => {
+    // Normalize domain - remove protocol if present
+    return domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  });
+
+  // Remove redundant subdomains (e.g., if github.com is present, api.github.com is redundant)
+  const uniqueDomains = normalizedDomains.filter((domain, index, arr) => {
+    // Check if this domain is a subdomain of another domain in the list
+    return !arr.some((otherDomain, otherIndex) => {
+      if (index === otherIndex) return false;
+      // Check if domain is a subdomain of otherDomain (but not an exact duplicate)
+      return domain !== otherDomain && domain.endsWith('.' + otherDomain);
+    });
+  });
+
+  const domainAcls = uniqueDomains
     .map(domain => {
-      // Normalize domain - remove protocol if present
-      const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
       // Add leading dot for subdomain matching unless already present
-      const domainPattern = cleanDomain.startsWith('.') ? cleanDomain : `.${cleanDomain}`;
+      const domainPattern = domain.startsWith('.') ? domain : `.${domain}`;
       return `acl allowed_domains dstdomain ${domainPattern}`;
     })
     .join('\n');
@@ -66,10 +79,6 @@ via off
 
 # Error page customization
 error_directory /usr/share/squid/errors/en
-
-# Logging
-logformat combined %>a %ui %un [%tl] "%rm %ru HTTP/%rv" %>Hs %<st "%{Referer}>h" "%{User-Agent}>h" %Ss:%Sh
-access_log /var/log/squid/access.log combined
 
 # Memory and file descriptor limits
 cache_mem 64 MB
