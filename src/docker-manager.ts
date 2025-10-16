@@ -54,6 +54,7 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
             ipv4_address: '172.30.0.20',
           },
         },
+        dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
         volumes: [
           // Mount host filesystem for copilot access
           '/:/host:rw',
