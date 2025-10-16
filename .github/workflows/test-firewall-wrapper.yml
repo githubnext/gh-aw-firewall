@@ -123,12 +123,14 @@ jobs:
             --log-level debug \
             'echo "Test with keep-containers"'
 
-          # Verify containers are still running
+          # Verify squid container is still running
           docker ps | grep firewall-wrapper-squid
-          docker ps | grep firewall-wrapper-copilot
+
+          # Verify copilot container still exists (it will have exited after running the command)
+          docker ps -a | grep firewall-wrapper-copilot
 
           # Clean up manually
-          docker stop firewall-wrapper-squid firewall-wrapper-copilot || true
+          docker stop firewall-wrapper-squid || true
           docker rm firewall-wrapper-squid firewall-wrapper-copilot || true
 
       - name: Test Summary

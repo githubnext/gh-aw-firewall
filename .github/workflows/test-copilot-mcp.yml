@@ -1,0 +1,120 @@
+name: Test Firewall Wrapper with Copilot CLI and GitHub MCP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test-copilot-with-firewall:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Make wrapper available globally
+        run: |
+          npm link
+          which firewall-wrapper
+          firewall-wrapper --version
+
+      - name: Pull GitHub MCP Server Docker image
+        run: |
+          docker pull ghcr.io/github/github-mcp-server:v0.18.0
+
+      - name: Setup MCP configuration
+        run: |
+          mkdir -p /home/runner/.copilot
+          cat > /home/runner/.copilot/mcp-config.json << 'EOF'
+          {
+            "mcpServers": {
+              "github": {
+                "type": "local",
+                "command": "docker",
+                "args": [
+                  "run",
+                  "-i",
+                  "--rm",
+                  "-e",
+                  "GITHUB_PERSONAL_ACCESS_TOKEN",
+                  "-e",
+                  "GITHUB_TOOLSETS=all",
+                  "ghcr.io/github/github-mcp-server:v0.18.0"
+                ],
+                "env": {
+                  "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+                }
+              }
+            }
+          }
+          EOF
+
+          echo "-------START MCP CONFIG-----------"
+          cat /home/runner/.copilot/mcp-config.json
+          echo "-------END MCP CONFIG-----------"
+
+      - name: Test Copilot CLI with GitHub MCP through firewall
+        timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          XDG_CONFIG_HOME: /home/runner
+        run: |
+          set -o pipefail
+
+          # Define the prompt for creating a test issue
+          PROMPT="Create a test issue in the repository githubnext/gh-aw-firewall with the following details:
+          - Title: 'Test Issue from Firewall Wrapper CI'
+          - Body: 'This is an automated test issue created by the firewall wrapper CI test at $(date -u +"%Y-%m-%d %H:%M:%S UTC"). This test validates that Copilot CLI can access the GitHub MCP server through the firewall wrapper to create issues. The workflow run that created this issue: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          - Labels: 'test', 'automated'
+
+          After creating the issue, confirm the issue number and URL."
+
+          # Run copilot CLI through the firewall wrapper
+          # Allow all domains needed for Copilot CLI and GitHub MCP server
+          firewall-wrapper \
+            --allow-domains raw.githubusercontent.com,api.github.com,github.com,api.anthropic.com,api.enterprise.githubcopilot.com,registry.npmjs.org,statsig.anthropic.com,ghcr.io,docker.io,registry-1.docker.io \
+            --log-level debug \
+            "copilot --allow-tool 'github(create_issue)' --allow-tool 'github(get_me)' --prompt \"$PROMPT\"" \
+            2>&1 | tee /tmp/copilot-output.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-logs
+          path: /tmp/copilot-output.log
+          if-no-files-found: warn
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Firewall Wrapper + Copilot CLI Test"
+          echo "=========================================="
+          echo "This test validates that:"
+          echo "  1. Copilot CLI can run inside the firewall wrapper"
+          echo "  2. GitHub MCP server can be accessed through the firewall"
+          echo "  3. The firewall allows necessary GitHub API domains"
+          echo "  4. Issues can be created in external repositories"
+          echo ""
+          echo "Target repository: githubnext/gh-aw-firewall"
+          echo "=========================================="
