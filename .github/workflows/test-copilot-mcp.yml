@@ -1,0 +1,122 @@
+name: Test Firewall with Copilot CLI and GitHub MCP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test-copilot-with-firewall:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Make wrapper available globally with sudo
+        run: |
+          # Create sudo wrapper script for iptables manipulation
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec $(which node) $GITHUB_WORKSPACE/dist/cli.js "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
+          which awf
+          awf --version
+
+      - name: Cleanup any existing awf resources
+        run: ./scripts/ci/cleanup.sh || true
+
+      - name: Pull GitHub MCP Server Docker image
+        run: |
+          docker pull ghcr.io/github/github-mcp-server:v0.19.0
+
+      - name: Setup MCP configuration
+        run: ./scripts/ci/setup-mcp-config.sh
+
+      - name: Test Docker access and MCP config inside copilot container
+        timeout-minutes: 3
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/ci/test-docker-diagnostics.sh
+
+      - name: Test Copilot CLI with GitHub MCP through firewall
+        timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+        run: ./scripts/ci/test-copilot-mcp.sh
+
+      - name: Cleanup diagnostic containers
+        if: always()
+        run: ./scripts/ci/cleanup.sh || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-mcp-logs
+          path: |
+            /tmp/copilot-output.log
+            /tmp/copilot-simple-prompt.log
+            /tmp/copilot-logs-test1/
+            /tmp/copilot-logs-test2/
+            /tmp/docker-mcp-diagnostics.log
+          if-no-files-found: warn
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Firewall + Copilot CLI + MCP Test"
+          echo "=========================================="
+          echo "Copilot CLI Version: 0.0.347"
+          echo "GitHub MCP Server: v0.19.0"
+          echo ""
+          echo "This test validates that:"
+          echo "  1. MCP configuration is correctly set up at ~/.copilot/mcp-config.json"
+          echo "  2. Copilot CLI can use local GitHub MCP server through firewall"
+          echo "  3. sudo -E correctly passes GITHUB_TOKEN and GITHUB_PERSONAL_ACCESS_TOKEN"
+          echo "  4. The firewall allows necessary domains for MCP operations"
+          echo "  5. Issues can be created via MCP server tools"
+          echo ""
+          echo "Key configuration breakthrough:"
+          echo "  • MCP server name: 'github' (not 'github-local')"
+          echo "  • Config format: Uses 'type': 'local' and 'env' section"
+          echo "  • Environment variables: Passed via sudo -E to container"
+          echo "  • Copilot flags: --disable-builtin-mcps --allow-tool github"
+          echo ""
+          echo "Test scenarios:"
+          echo "  - Test 1: Simple MCP prompt (get GitHub username)"
+          echo "  - Test 2: Issue creation with GitHub MCP server"
+          echo ""
+          echo "Diagnostic logs uploaded as artifacts:"
+          echo "  - docker-mcp-diagnostics.log: Docker & MCP diagnostics from inside copilot container"
+          echo "  - copilot-simple-prompt.log: Test 1 stdout/stderr output"
+          echo "  - copilot-output.log: Test 2 stdout/stderr output"
+          echo "  - copilot-logs-test1/: Test 1 Copilot debug logs"
+          echo "  - copilot-logs-test2/: Test 2 Copilot debug logs"
+          echo ""
+          echo "Target repository: githubnext/gh-aw-firewall"
+          echo "=========================================="

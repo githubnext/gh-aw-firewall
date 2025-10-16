@@ -1,0 +1,93 @@
+name: Test GitHub MCP Server Direct
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-mcp-server-direct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pull GitHub MCP Server Docker image
+        run: |
+          docker pull ghcr.io/github/github-mcp-server:v0.18.0
+
+      - name: Test Docker access
+        run: |
+          echo "==========================================="
+          echo "Docker Access Check"
+          echo "==========================================="
+          docker ps
+          docker --version
+          echo "✓ Docker is accessible"
+          echo "==========================================="
+
+      - name: Test MCP server directly
+        timeout-minutes: 3
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "==========================================="
+          echo "Direct MCP Server Test"
+          echo "==========================================="
+          echo "Testing GitHub MCP server directly..."
+          echo "This tests if the MCP server Docker image can run and respond to JSON-RPC requests."
+          echo ""
+
+          # Test if the MCP server Docker image runs and lists available tools
+          echo "Sending tools/list JSON-RPC request to MCP server..."
+          echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | \
+            docker run -i --rm \
+              -e GITHUB_PERSONAL_ACCESS_TOKEN="${GITHUB_PERSONAL_ACCESS_TOKEN}" \
+              -e GITHUB_TOOLSETS=all \
+              ghcr.io/github/github-mcp-server:v0.18.0 2>&1 | tee /tmp/mcp-direct-test.log
+
+          echo ""
+          echo "Analyzing MCP server response..."
+
+          # Check if the response contains tool definitions
+          if grep -qi "create_issue\|get_me\|tools" /tmp/mcp-direct-test.log; then
+            echo "✓ MCP server responded with tool definitions"
+            echo "✓ MCP server is working correctly"
+          else
+            echo "✗ MCP server response doesn't contain expected tool definitions"
+            echo "This may indicate an issue with the MCP server or authentication"
+            exit 1
+          fi
+          echo "==========================================="
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-logs
+          path: /tmp/mcp-direct-test.log
+          if-no-files-found: warn
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "GitHub MCP Server Direct Test"
+          echo "=========================================="
+          echo "This test validates that:"
+          echo "  1. Docker is accessible in the CI environment"
+          echo "  2. GitHub MCP server Docker image can be pulled"
+          echo "  3. MCP server can run and respond to JSON-RPC requests"
+          echo "  4. MCP server authentication is working"
+          echo "  5. Available tools can be listed via tools/list"
+          echo ""
+          echo "This is a prerequisite test for the full Copilot CLI + MCP"
+          echo "integration test in test-copilot-mcp.yml"
+          echo "=========================================="

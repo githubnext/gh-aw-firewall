@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+
+import { Command } from 'commander';
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
+import { WrapperConfig, LogLevel } from './types';
+import { logger } from './logger';
+import {
+  writeConfigs,
+  startContainers,
+  runCopilotCommand,
+  stopContainers,
+  cleanup,
+} from './docker-manager';
+import {
+  ensureFirewallNetwork,
+  setupHostIptables,
+  cleanupHostIptables,
+  cleanupFirewallNetwork,
+} from './host-iptables';
+
+/**
+ * Redacts sensitive information from command strings
+ */
+function redactSecrets(command: string): string {
+  return command
+    // Redact Authorization: Bearer <token>
+    .replace(/(Authorization:\s*Bearer\s+)(\S+)/gi, '$1***REDACTED***')
+    // Redact Authorization: <token> (non-Bearer)
+    .replace(/(Authorization:\s+(?!Bearer\s))(\S+)/gi, '$1***REDACTED***')
+    // Redact tokens in environment variables (TOKEN, SECRET, PASSWORD, KEY, API_KEY, etc)
+    .replace(/(\w*(?:TOKEN|SECRET|PASSWORD|KEY|AUTH)\w*)=(\S+)/gi, '$1=***REDACTED***')
+    // Redact GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
+    .replace(/\b(gh[pousr]_[a-zA-Z0-9]{36,255})/g, '***REDACTED***');
+}
+
+const program = new Command();
+
+program
+  .name('awf')
+  .description('Network firewall for agentic workflows with domain whitelisting')
+  .version('0.1.0')
+  .requiredOption(
+    '--allow-domains <domains>',
+    'Comma-separated list of allowed domains (e.g., github.com,api.github.com)'
+  )
+  .option(
+    '--log-level <level>',
+    'Log level: debug, info, warn, error',
+    'info'
+  )
+  .option(
+    '--keep-containers',
+    'Keep containers running after command exits',
+    false
+  )
+  .option(
+    '--work-dir <dir>',
+    'Working directory for temporary files',
+    path.join(os.tmpdir(), `awf-${Date.now()}`)
+  )
+  .argument('<command>', 'Copilot command to execute (wrap in quotes)')
+  .action(async (copilotCommand: string, options) => {
+    // Parse and validate options
+    const logLevel = options.logLevel as LogLevel;
+    if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
+      console.error(`Invalid log level: ${logLevel}`);
+      process.exit(1);
+    }
+
+    logger.setLevel(logLevel);
+
+    const allowedDomains = options.allowDomains
+      .split(',')
+      .map((d: string) => d.trim())
+      .filter((d: string) => d.length > 0);
+
+    if (allowedDomains.length === 0) {
+      logger.error('At least one domain must be specified with --allow-domains');
+      process.exit(1);
+    }
+
+    const config: WrapperConfig = {
+      allowedDomains,
+      copilotCommand,
+      logLevel,
+      keepContainers: options.keepContainers,
+      workDir: options.workDir,
+    };
+
+    // Log config with redacted secrets
+    const redactedConfig = {
+      ...config,
+      copilotCommand: redactSecrets(config.copilotCommand),
+    };
+    logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
+    logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
+
+    let exitCode = 0;
+    let containersStarted = false;
+    let hostIptablesSetup = false;
+
+    // Handle cleanup on process exit
+    const performCleanup = async (signal?: string) => {
+      if (signal) {
+        logger.info(`Received ${signal}, cleaning up...`);
+      }
+
+      if (containersStarted) {
+        await stopContainers(config.workDir, config.keepContainers);
+      }
+
+      if (hostIptablesSetup && !config.keepContainers) {
+        await cleanupHostIptables();
+      }
+
+      if (!config.keepContainers) {
+        await cleanup(config.workDir, false);
+        // Note: We don't remove the firewall network here since it can be reused
+        // across multiple runs. Cleanup script will handle removal if needed.
+      } else {
+        logger.info(`Configuration files preserved at: ${config.workDir}`);
+        logger.info(`Copilot logs available at: ${config.workDir}/copilot-logs/`);
+        logger.info(`Squid logs available at: ${config.workDir}/squid-logs/`);
+        logger.info(`Host iptables rules preserved (--keep-containers enabled)`);
+      }
+    };
+
+    // Register signal handlers
+    process.on('SIGINT', async () => {
+      await performCleanup('SIGINT');
+      process.exit(130); // Standard exit code for SIGINT
+    });
+
+    process.on('SIGTERM', async () => {
+      await performCleanup('SIGTERM');
+      process.exit(143); // Standard exit code for SIGTERM
+    });
+
+    try {
+      // Step 0: Setup host-level network and iptables
+      logger.info('Setting up host-level firewall network and iptables rules...');
+      const networkConfig = await ensureFirewallNetwork();
+      await setupHostIptables(networkConfig.squidIp, 3128);
+      hostIptablesSetup = true;
+
+      // Step 1: Write configuration files
+      logger.info('Generating configuration files...');
+      await writeConfigs(config);
+
+      // Step 2: Start containers
+      await startContainers(config.workDir, config.allowedDomains);
+      containersStarted = true;
+
+      // Step 3: Wait for copilot to complete
+      const result = await runCopilotCommand(config.workDir, config.allowedDomains);
+      exitCode = result.exitCode;
+
+      // Step 4: Cleanup (logs will be preserved automatically if they exist)
+      await performCleanup();
+
+      if (exitCode === 0) {
+        logger.success(`Command completed successfully`);
+      } else {
+        logger.warn(`Command completed with exit code: ${exitCode}`);
+      }
+      process.exit(exitCode);
+    } catch (error) {
+      logger.error('Fatal error:', error);
+      await performCleanup();
+      process.exit(1);
+    }
+  });
+
+program.parse();
