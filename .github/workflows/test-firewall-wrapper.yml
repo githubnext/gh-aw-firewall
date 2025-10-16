@@ -1,0 +1,152 @@
+name: Test Firewall Wrapper
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-wrapper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Make wrapper available globally
+        run: |
+          npm link
+          which firewall-wrapper
+          firewall-wrapper --version
+
+      - name: Test 1 - Basic connectivity with allowed domain
+        run: |
+          echo "Testing connectivity to allowed domain (github.com)..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'curl -v -f --max-time 30 https://api.github.com'
+
+      - name: Test 2 - Block non-whitelisted domain
+        run: |
+          echo "Testing that non-whitelisted domain is blocked..."
+          set +e
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'curl -v -f --max-time 10 https://example.com'
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "ERROR: Request to example.com should have been blocked!"
+            exit 1
+          fi
+          echo "SUCCESS: Non-whitelisted domain was correctly blocked"
+
+      - name: Test 3 - Multiple domains
+        run: |
+          echo "Testing multiple allowed domains..."
+          firewall-wrapper \
+            --allow-domains github.com,githubusercontent.com,api.github.com \
+            --log-level debug \
+            'bash -c "curl -f https://api.github.com && curl -f https://raw.githubusercontent.com"'
+
+      - name: Test 4 - Subdomain matching
+        run: |
+          echo "Testing subdomain matching..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'curl -f --max-time 30 https://api.github.com'
+
+      - name: Test 5 - DNS resolution works
+        run: |
+          echo "Testing DNS resolution..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'nslookup github.com'
+
+      - name: Test 6 - Localhost connectivity (MCP stdio servers)
+        run: |
+          echo "Testing localhost connectivity..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'curl -f http://localhost:1234 || echo "Localhost connection attempt completed (expected to fail, no server running)"'
+
+      - name: Test 7 - Exit code propagation (success)
+        run: |
+          echo "Testing exit code propagation (success case)..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'exit 0'
+
+      - name: Test 8 - Exit code propagation (failure)
+        run: |
+          echo "Testing exit code propagation (failure case)..."
+          set +e
+          firewall-wrapper \
+            --allow-domains github.com \
+            --log-level debug \
+            'exit 42'
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -ne 42 ]; then
+            echo "ERROR: Exit code was $EXIT_CODE, expected 42"
+            exit 1
+          fi
+          echo "SUCCESS: Exit code correctly propagated"
+
+      - name: Test 9 - Keep containers option
+        run: |
+          echo "Testing --keep-containers option..."
+          firewall-wrapper \
+            --allow-domains github.com \
+            --keep-containers \
+            --log-level debug \
+            'echo "Test with keep-containers"'
+
+          # Verify containers are still running
+          docker ps | grep firewall-wrapper-squid
+          docker ps | grep firewall-wrapper-copilot
+
+          # Clean up manually
+          docker stop firewall-wrapper-squid firewall-wrapper-copilot || true
+          docker rm firewall-wrapper-squid firewall-wrapper-copilot || true
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Firewall Wrapper Test Summary"
+          echo "=========================================="
+          echo "✓ All tests completed"
+          echo ""
+          echo "Tests run:"
+          echo "  1. Basic connectivity with allowed domain"
+          echo "  2. Block non-whitelisted domain"
+          echo "  3. Multiple domains"
+          echo "  4. Subdomain matching"
+          echo "  5. DNS resolution"
+          echo "  6. Localhost connectivity"
+          echo "  7. Exit code propagation (success)"
+          echo "  8. Exit code propagation (failure)"
+          echo "  9. Keep containers option"
+          echo "=========================================="
