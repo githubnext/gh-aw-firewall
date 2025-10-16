@@ -25,10 +25,15 @@ echo "[iptables] Allow localhost traffic..."
 iptables -t nat -A OUTPUT -o lo -j RETURN
 iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
 
-# Allow DNS queries
+# Allow DNS queries to any DNS server (including Docker's 127.0.0.11 and configured DNS servers)
 echo "[iptables] Allow DNS queries..."
 iptables -t nat -A OUTPUT -p udp --dport 53 -j RETURN
 iptables -t nat -A OUTPUT -p tcp --dport 53 -j RETURN
+
+# Explicitly allow DNS servers configured in the container (8.8.8.8, 8.8.4.4)
+echo "[iptables] Allow traffic to DNS servers..."
+iptables -t nat -A OUTPUT -d 8.8.8.8 -j RETURN
+iptables -t nat -A OUTPUT -d 8.8.4.4 -j RETURN
 
 # Allow traffic to Squid proxy itself
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."

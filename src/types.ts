@@ -39,6 +39,7 @@ export interface DockerService {
   container_name: string;
   networks: string[] | { [key: string]: { ipv4_address?: string } };
   dns?: string[];
+  dns_search?: string[];
   volumes?: string[];
   environment?: Record<string, string>;
   depends_on?: string[] | { [key: string]: { condition: string } };

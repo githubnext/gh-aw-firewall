@@ -55,6 +55,7 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
           },
         },
         dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
+        dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
         volumes: [
           // Mount host filesystem for copilot access
           '/:/host:rw',
