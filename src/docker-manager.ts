@@ -49,7 +49,11 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
           dockerfile: 'Dockerfile',
         },
         container_name: 'firewall-wrapper-copilot',
-        networks: ['firewall-network'],
+        networks: {
+          'firewall-network': {
+            ipv4_address: '172.30.0.20',
+          },
+        },
         volumes: [
           // Mount host filesystem for copilot access
           '/:/host:rw',
@@ -57,8 +61,8 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
           `${process.env.HOME}:${process.env.HOME}:rw`,
         ],
         environment: {
-          HTTP_PROXY: `http://squid-proxy:${SQUID_PORT}`,
-          HTTPS_PROXY: `http://squid-proxy:${SQUID_PORT}`,
+          HTTP_PROXY: `http://${SQUID_IP}:${SQUID_PORT}`,
+          HTTPS_PROXY: `http://${SQUID_IP}:${SQUID_PORT}`,
           SQUID_PROXY_HOST: 'squid-proxy',
           SQUID_PROXY_PORT: SQUID_PORT.toString(),
           // Preserve important env vars
