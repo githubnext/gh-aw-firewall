@@ -18,7 +18,7 @@ export interface SquidConfig {
 }
 
 export interface DockerComposeConfig {
-  version: string;
+  version?: string;
   services: {
     [key: string]: DockerService;
   };

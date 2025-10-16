@@ -17,7 +17,6 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
   const projectRoot = path.join(__dirname, '..');
 
   return {
-    version: '3.8',
     services: {
       'squid-proxy': {
         build: {
@@ -69,7 +68,8 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
           SQUID_PROXY_PORT: SQUID_PORT.toString(),
           // Preserve important env vars
           HOME: process.env.HOME || '/root',
-          PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+          // Use container's PATH, not host's PATH
+          PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
         },
         depends_on: {
           'squid-proxy': {

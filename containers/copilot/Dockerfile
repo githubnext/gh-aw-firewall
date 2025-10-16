@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
 
-# Install required packages
+# Install required packages and Node.js 22
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     iptables \
@@ -9,9 +9,10 @@ RUN apt-get update && \
     git \
     gnupg \
     dnsutils \
-    net-tools \
-    nodejs \
-    npm && \
+    net-tools && \
+    # Install Node.js 22 from NodeSource
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy iptables setup script
