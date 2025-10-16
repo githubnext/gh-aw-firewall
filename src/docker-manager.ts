@@ -70,6 +70,14 @@ export function generateDockerCompose(config: WrapperConfig): DockerComposeConfi
           HOME: process.env.HOME || '/root',
           // Use container's PATH, not host's PATH
           PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+          // Pass through GitHub authentication tokens
+          ...(process.env.GITHUB_TOKEN && { GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
+          ...(process.env.GH_TOKEN && { GH_TOKEN: process.env.GH_TOKEN }),
+          ...(process.env.GITHUB_PERSONAL_ACCESS_TOKEN && { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN }),
+          // Pass through other common environment variables
+          ...(process.env.USER && { USER: process.env.USER }),
+          ...(process.env.TERM && { TERM: process.env.TERM }),
+          ...(process.env.XDG_CONFIG_HOME && { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }),
         },
         depends_on: {
           'squid-proxy': {
