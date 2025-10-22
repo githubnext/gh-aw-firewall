@@ -101,10 +101,15 @@ Since `npm link` creates symlinks in the user's npm directory which isn't in roo
 npm run build
 
 # Create sudo wrapper script
+# Update the paths below to match your system:
+# - NODE_PATH: Find with `which node` (example shows nvm installation)
+# - PROJECT_PATH: Your cloned repository location
 sudo tee /usr/local/bin/awf > /dev/null <<'EOF'
 #!/bin/bash
-exec ~/.nvm/versions/node/v22.13.0/bin/node \
-     ~/developer/gh-aw-firewall/dist/cli.js "$@"
+NODE_PATH="$HOME/.nvm/versions/node/v22.13.0/bin/node"
+PROJECT_PATH="$HOME/developer/gh-aw-firewall"
+
+exec "$NODE_PATH" "$PROJECT_PATH/dist/cli.js" "$@"
 EOF
 
 sudo chmod +x /usr/local/bin/awf
