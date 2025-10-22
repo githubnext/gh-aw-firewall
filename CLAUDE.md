@@ -37,11 +37,8 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 # Download logs from a specific run ID
 ./scripts/download-latest-artifact.sh 1234567890
 
-# Download from everything-mcp workflow (latest run)
-./scripts/download-latest-artifact.sh "" ".github/workflows/test-copilot-everything-mcp.yml" "copilot-everything-mcp-logs"
-
-# Download from playwright-mcp workflow (specific run)
-./scripts/download-latest-artifact.sh 18607551799 ".github/workflows/test-copilot-playwright-mcp.yml" "copilot-playwright-mcp-logs"
+# Download from test-firewall-wrapper workflow (latest run)
+./scripts/download-latest-artifact.sh "" ".github/workflows/test-firewall-wrapper.yml" "firewall-test-logs"
 ```
 
 **Parameters:**
@@ -51,8 +48,7 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 
 **Common artifact names:**
 - `copilot-mcp-logs` - test-copilot-mcp.yml
-- `copilot-everything-mcp-logs` - test-copilot-everything-mcp.yml
-- `copilot-playwright-mcp-logs` - test-copilot-playwright-mcp.yml
+- `firewall-test-logs` - test-firewall-wrapper.yml
 
 This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Requires GitHub CLI (`gh`) authenticated with the repository.
 
