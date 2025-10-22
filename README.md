@@ -2,6 +2,9 @@
 
 A network firewall for agentic workflows with domain whitelisting. This tool provides L7 (HTTP/HTTPS) egress control using [Squid proxy](https://www.squid-cache.org/) and Docker containers, restricting network access to a whitelist of approved domains for AI agents and their MCP servers.
 
+> [!TIP]
+> This project is a part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). For more background, check out the [project page on the GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
+
 ## Features
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
@@ -85,7 +88,3 @@ Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guideli
 ## License
 
 [MIT](LICENSE)
-
-## Related Projects
-
-- [GitHub Agentic Workflows](https://github.com/githubnext/gh-aw)
