@@ -85,16 +85,16 @@ jobs:
           mkdir -p release
 
           # Create standalone executable for Linux
-          # pkg automatically names it awf-linux-x64 based on target
           pkg . \
             --targets node18-linux-x64 \
-            --output release/awf
+            --output release/awf-linux-x64
 
           # Verify the binary was created
           echo "=== Contents of release directory ==="
           ls -lh release/
-          echo "=== Checking if awf-linux-x64 exists ==="
-          test -f release/awf-linux-x64 && echo "✓ Binary exists!" || echo "✗ Binary NOT found!"
+          echo "=== Verifying binary ==="
+          test -f release/awf-linux-x64 && echo "✓ Binary exists at release/awf-linux-x64" || echo "✗ Binary NOT found!"
+          file release/awf-linux-x64
 
       - name: Create tarball for npm package
         run: |
