@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0, v0.1.0, etc.
+  workflow_dispatch:  # Allow manual triggers
+
+permissions:
+  contents: write   # Required for creating releases
+  packages: write   # Required for pushing to GHCR
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Extract version from tag
+        id: version_early
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=v$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION_NUMBER="${VERSION#v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION_NUMBER" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Squid image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/squid
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/squid:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Copilot image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/copilot
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/copilot:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/copilot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install pkg for binary creation
+        run: npm install -g pkg
+
+      - name: Create binaries
+        run: |
+          mkdir -p release
+
+          # Create standalone executable for Linux
+          pkg . \
+            --targets node18-linux-x64 \
+            --output release/awf
+
+          # Rename output to include platform
+          mv release/awf-linux release/awf-linux-x64
+
+      - name: Create tarball for npm package
+        run: |
+          npm pack
+          mv *.tgz release/awf.tgz
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## Installation
+
+          ### Binary Installation (Recommended)
+
+          **Linux (x64):**
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ steps.version_early.outputs.version }}/awf-linux-x64 -o awf
+          chmod +x awf
+          sudo mv awf /usr/local/bin/
+          ```
+
+          ### NPM Installation (Alternative)
+
+          ```bash
+          # Install from tarball
+          npm install -g https://github.com/${{ github.repository }}/releases/download/${{ steps.version_early.outputs.version }}/awf.tgz
+          ```
+
+          ### Requirements
+
+          - Docker and Docker Compose must be installed
+          - For iptables manipulation, run with sudo: `sudo awf ...`
+          - Container images will be pulled automatically from GHCR on first run
+
+          ## Verification
+
+          Verify checksums after download:
+          ```bash
+          sha256sum -c checksums.txt
+          ```
+
+          ## Usage
+
+          ```bash
+          sudo awf --allow-domains github.com,api.github.com 'curl https://api.github.com'
+          ```
+
+          See [README.md](https://github.com/${{ github.repository }}/blob/${{ steps.version_early.outputs.version }}/README.md) for full documentation.
+
+          ## Container Images
+
+          Published to GitHub Container Registry:
+          - `ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}`
+          - `ghcr.io/${{ github.repository }}/copilot:${{ steps.version_early.outputs.version_number }}`
+          - `ghcr.io/${{ github.repository }}/squid:latest`
+          - `ghcr.io/${{ github.repository }}/copilot:latest`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version_early.outputs.version }}
+          name: Release ${{ steps.version_early.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version_early.outputs.version, 'alpha') || contains(steps.version_early.outputs.version, 'beta') || contains(steps.version_early.outputs.version, 'rc') }}
+          files: |
+            release/awf-linux-x64
+            release/awf.tgz
+            release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts (for debugging)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-artifacts
+          path: release/
+          retention-days: 7

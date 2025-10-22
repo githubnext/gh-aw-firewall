@@ -8,6 +8,9 @@ export interface WrapperConfig {
   logLevel: LogLevel;
   keepContainers: boolean;
   workDir: string;
+  imageRegistry?: string;  // Default: 'ghcr.io/mossaka/gh-aw-firewall'
+  imageTag?: string;       // Default: 'latest'
+  buildLocal?: boolean;    // Default: false (use GHCR images)
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

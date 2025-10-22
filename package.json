@@ -49,5 +49,15 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": [
+      "node_modules/chalk/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64"
+    ],
+    "outputPath": "release"
   }
 }

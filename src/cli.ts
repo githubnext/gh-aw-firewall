@@ -60,6 +60,21 @@ program
     'Working directory for temporary files',
     path.join(os.tmpdir(), `awf-${Date.now()}`)
   )
+  .option(
+    '--build-local',
+    'Build containers locally instead of using GHCR images',
+    false
+  )
+  .option(
+    '--image-registry <registry>',
+    'Container image registry',
+    'ghcr.io/mossaka/gh-aw-firewall'
+  )
+  .option(
+    '--image-tag <tag>',
+    'Container image tag',
+    'latest'
+  )
   .argument('<command>', 'Copilot command to execute (wrap in quotes)')
   .action(async (copilotCommand: string, options) => {
     // Parse and validate options
@@ -87,6 +102,9 @@ program
       logLevel,
       keepContainers: options.keepContainers,
       workDir: options.workDir,
+      buildLocal: options.buildLocal,
+      imageRegistry: options.imageRegistry,
+      imageTag: options.imageTag,
     };
 
     // Log config with redacted secrets

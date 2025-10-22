@@ -114,6 +114,25 @@ sudo awf --help
 
 **Note:** After each `npm run build`, the wrapper automatically uses the latest compiled code. Update the paths in the wrapper script to match your node installation and project directory.
 
+## Container Image Strategy
+
+The firewall uses two Docker containers (Squid proxy and Copilot execution environment). By default, the CLI pulls pre-built images from GitHub Container Registry (GHCR) for faster startup and easier distribution.
+
+**Default behavior (GHCR images):**
+- Images are automatically pulled from `ghcr.io/mossaka/gh-aw-firewall/squid:latest` and `ghcr.io/mossaka/gh-aw-firewall/copilot:latest`
+- Published during releases via `.github/workflows/release.yml`
+- Users don't need to build containers locally
+
+**Local build option:**
+- Use `--build-local` flag to build containers from source
+- Useful for development or when GHCR is unavailable
+- Example: `sudo awf --build-local --allow-domains github.com 'curl https://github.com'`
+
+**Custom registry/tag:**
+- `--image-registry <registry>` - Use a different registry (default: `ghcr.io/mossaka/gh-aw-firewall`)
+- `--image-tag <tag>` - Use a specific version tag (default: `latest`)
+- Example: `sudo awf --image-tag v0.2.0 --allow-domains github.com 'curl https://github.com'`
+
 ## Architecture
 
 The codebase follows a modular architecture with clear separation of concerns:

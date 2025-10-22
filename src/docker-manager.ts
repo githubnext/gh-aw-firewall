@@ -117,95 +117,118 @@ export function generateDockerCompose(
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
 
+  // Default to GHCR images unless buildLocal is explicitly set
+  const useGHCR = !config.buildLocal;
+  const registry = config.imageRegistry || 'ghcr.io/mossaka/gh-aw-firewall';
+  const tag = config.imageTag || 'latest';
+
+  // Squid service configuration
+  const squidService: any = {
+    container_name: 'awf-squid',
+    networks: {
+      'awf-net': {
+        ipv4_address: networkConfig.squidIp,
+      },
+    },
+    volumes: [
+      `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
+      `${config.workDir}/squid-logs:/var/log/squid:rw`,
+    ],
+    healthcheck: {
+      test: ['CMD', 'nc', '-z', 'localhost', '3128'],
+      interval: '5s',
+      timeout: '3s',
+      retries: 5,
+      start_period: '10s',
+    },
+    ports: [`${SQUID_PORT}:${SQUID_PORT}`],
+  };
+
+  // Use GHCR image or build locally
+  if (useGHCR) {
+    squidService.image = `${registry}/squid:${tag}`;
+  } else {
+    squidService.build = {
+      context: path.join(projectRoot, 'containers/squid'),
+      dockerfile: 'Dockerfile',
+    };
+  }
+
+  // Copilot service configuration
+  const copilotService: any = {
+    container_name: 'awf-copilot',
+    networks: {
+      'awf-net': {
+        ipv4_address: networkConfig.copilotIp,
+      },
+    },
+    dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
+    dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
+    volumes: [
+      // Mount host filesystem for copilot access
+      '/:/host:rw',
+      '/tmp:/tmp:rw',
+      `${process.env.HOME}:${process.env.HOME}:rw`,
+      // Mount Docker socket for MCP servers that need to run containers
+      '/var/run/docker.sock:/var/run/docker.sock:rw',
+      // Mount clean Docker config to override host's context
+      `${config.workDir}/.docker:/workspace/.docker:rw`,
+      // Override host's .docker directory with clean config to prevent Docker CLI
+      // from reading host's context (e.g., desktop-linux pointing to wrong socket)
+      `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
+      // Mount copilot logs directory to workDir for persistence
+      `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
+    ],
+    environment: {
+      HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+      HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+      SQUID_PROXY_HOST: 'squid-proxy',
+      SQUID_PROXY_PORT: SQUID_PORT.toString(),
+      // Preserve important env vars
+      HOME: process.env.HOME || '/root',
+      // Use container's PATH, not host's PATH
+      PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      // Docker socket path - override host's DOCKER_HOST to use mounted socket
+      // Clean .docker config is mounted over $HOME/.docker to prevent reading host's context
+      DOCKER_HOST: 'unix:///var/run/docker.sock',
+      // Force default context to prevent Docker CLI from using host's context (e.g., desktop-linux)
+      // which may point to incorrect socket paths like ~/.docker/run/docker.sock
+      DOCKER_CONTEXT: 'default',
+      // Pass through GitHub authentication tokens
+      ...(process.env.GITHUB_TOKEN && { GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
+      ...(process.env.GH_TOKEN && { GH_TOKEN: process.env.GH_TOKEN }),
+      ...(process.env.GITHUB_PERSONAL_ACCESS_TOKEN && { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN }),
+      // Pass through other common environment variables
+      ...(process.env.USER && { USER: process.env.USER }),
+      ...(process.env.TERM && { TERM: process.env.TERM }),
+      ...(process.env.XDG_CONFIG_HOME && { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }),
+    },
+    depends_on: {
+      'squid-proxy': {
+        condition: 'service_healthy',
+      },
+    },
+    cap_add: ['NET_ADMIN'], // Required for iptables
+    stdin_open: true,
+    tty: false, // Disable TTY to prevent ANSI escape sequences in logs
+    // Escape $ with $$ for Docker Compose variable interpolation
+    command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
+  };
+
+  // Use GHCR image or build locally
+  if (useGHCR) {
+    copilotService.image = `${registry}/copilot:${tag}`;
+  } else {
+    copilotService.build = {
+      context: path.join(projectRoot, 'containers/copilot'),
+      dockerfile: 'Dockerfile',
+    };
+  }
+
   return {
     services: {
-      'squid-proxy': {
-        build: {
-          context: path.join(projectRoot, 'containers/squid'),
-          dockerfile: 'Dockerfile',
-        },
-        container_name: 'awf-squid',
-        networks: {
-          'awf-net': {
-            ipv4_address: networkConfig.squidIp,
-          },
-        },
-        volumes: [
-          `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
-          `${config.workDir}/squid-logs:/var/log/squid:rw`,
-        ],
-        healthcheck: {
-          test: ['CMD', 'nc', '-z', 'localhost', '3128'],
-          interval: '5s',
-          timeout: '3s',
-          retries: 5,
-          start_period: '10s',
-        },
-        ports: [`${SQUID_PORT}:${SQUID_PORT}`],
-      },
-      'copilot': {
-        build: {
-          context: path.join(projectRoot, 'containers/copilot'),
-          dockerfile: 'Dockerfile',
-        },
-        container_name: 'awf-copilot',
-        networks: {
-          'awf-net': {
-            ipv4_address: networkConfig.copilotIp,
-          },
-        },
-        dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
-        dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
-        volumes: [
-          // Mount host filesystem for copilot access
-          '/:/host:rw',
-          '/tmp:/tmp:rw',
-          `${process.env.HOME}:${process.env.HOME}:rw`,
-          // Mount Docker socket for MCP servers that need to run containers
-          '/var/run/docker.sock:/var/run/docker.sock:rw',
-          // Mount clean Docker config to override host's context
-          `${config.workDir}/.docker:/workspace/.docker:rw`,
-          // Override host's .docker directory with clean config to prevent Docker CLI
-          // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-          `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
-          // Mount copilot logs directory to workDir for persistence
-          `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
-        ],
-        environment: {
-          HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-          HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-          SQUID_PROXY_HOST: 'squid-proxy',
-          SQUID_PROXY_PORT: SQUID_PORT.toString(),
-          // Preserve important env vars
-          HOME: process.env.HOME || '/root',
-          // Use container's PATH, not host's PATH
-          PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-          // Docker socket path - override host's DOCKER_HOST to use mounted socket
-          // Clean .docker config is mounted over $HOME/.docker to prevent reading host's context
-          DOCKER_HOST: 'unix:///var/run/docker.sock',
-          // Force default context to prevent Docker CLI from using host's context (e.g., desktop-linux)
-          // which may point to incorrect socket paths like ~/.docker/run/docker.sock
-          DOCKER_CONTEXT: 'default',
-          // Pass through GitHub authentication tokens
-          ...(process.env.GITHUB_TOKEN && { GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
-          ...(process.env.GH_TOKEN && { GH_TOKEN: process.env.GH_TOKEN }),
-          ...(process.env.GITHUB_PERSONAL_ACCESS_TOKEN && { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN }),
-          // Pass through other common environment variables
-          ...(process.env.USER && { USER: process.env.USER }),
-          ...(process.env.TERM && { TERM: process.env.TERM }),
-          ...(process.env.XDG_CONFIG_HOME && { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }),
-        },
-        depends_on: {
-          'squid-proxy': {
-            condition: 'service_healthy',
-          },
-        },
-        cap_add: ['NET_ADMIN'], // Required for iptables
-        stdin_open: true,
-        tty: false, // Disable TTY to prevent ANSI escape sequences in logs
-        // Escape $ with $$ for Docker Compose variable interpolation
-        command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
-      },
+      'squid-proxy': squidService,
+      'copilot': copilotService,
     },
     networks: {
       'awf-net': {
