@@ -154,6 +154,57 @@ export function generateDockerCompose(
     };
   }
 
+  // Build environment variables for copilot container
+  // System variables that must be overridden or excluded (would break container operation)
+  const EXCLUDED_ENV_VARS = new Set([
+    'PATH',           // Must use container's PATH
+    'DOCKER_HOST',    // Must use container's socket path
+    'DOCKER_CONTEXT', // Must use default context
+    'DOCKER_CONFIG',  // Must use clean config
+    'PWD',            // Container's working directory
+    'OLDPWD',         // Not relevant in container
+    'SHLVL',          // Shell level not relevant
+    '_',              // Last command executed
+    'SUDO_COMMAND',   // Sudo metadata
+    'SUDO_USER',      // Sudo metadata
+    'SUDO_UID',       // Sudo metadata
+    'SUDO_GID',       // Sudo metadata
+  ]);
+
+  // Start with required/overridden environment variables
+  const environment: Record<string, string> = {
+    HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+    HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+    SQUID_PROXY_HOST: 'squid-proxy',
+    SQUID_PROXY_PORT: SQUID_PORT.toString(),
+    HOME: process.env.HOME || '/root',
+    PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+    DOCKER_HOST: 'unix:///var/run/docker.sock',
+    DOCKER_CONTEXT: 'default',
+  };
+
+  // If --env-all is specified, pass through all host environment variables (except excluded ones)
+  if (config.envAll) {
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined && !EXCLUDED_ENV_VARS.has(key) && !environment.hasOwnProperty(key)) {
+        environment[key] = value;
+      }
+    }
+  } else {
+    // Default behavior: selectively pass through specific variables
+    if (process.env.GITHUB_TOKEN) environment.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
+    if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+    if (process.env.USER) environment.USER = process.env.USER;
+    if (process.env.TERM) environment.TERM = process.env.TERM;
+    if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
+  }
+
+  // Additional environment variables from --env flags (these override everything)
+  if (config.additionalEnv) {
+    Object.assign(environment, config.additionalEnv);
+  }
+
   // Copilot service configuration
   const copilotService: any = {
     container_name: 'awf-copilot',
@@ -179,30 +230,7 @@ export function generateDockerCompose(
       // Mount copilot logs directory to workDir for persistence
       `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
     ],
-    environment: {
-      HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-      HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-      SQUID_PROXY_HOST: 'squid-proxy',
-      SQUID_PROXY_PORT: SQUID_PORT.toString(),
-      // Preserve important env vars
-      HOME: process.env.HOME || '/root',
-      // Use container's PATH, not host's PATH
-      PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-      // Docker socket path - override host's DOCKER_HOST to use mounted socket
-      // Clean .docker config is mounted over $HOME/.docker to prevent reading host's context
-      DOCKER_HOST: 'unix:///var/run/docker.sock',
-      // Force default context to prevent Docker CLI from using host's context (e.g., desktop-linux)
-      // which may point to incorrect socket paths like ~/.docker/run/docker.sock
-      DOCKER_CONTEXT: 'default',
-      // Pass through GitHub authentication tokens
-      ...(process.env.GITHUB_TOKEN && { GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
-      ...(process.env.GH_TOKEN && { GH_TOKEN: process.env.GH_TOKEN }),
-      ...(process.env.GITHUB_PERSONAL_ACCESS_TOKEN && { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN }),
-      // Pass through other common environment variables
-      ...(process.env.USER && { USER: process.env.USER }),
-      ...(process.env.TERM && { TERM: process.env.TERM }),
-      ...(process.env.XDG_CONFIG_HOME && { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }),
-    },
+    environment,
     depends_on: {
       'squid-proxy': {
         condition: 'service_healthy',

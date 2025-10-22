@@ -11,6 +11,8 @@ export interface WrapperConfig {
   imageRegistry?: string;  // Default: 'ghcr.io/mossaka/gh-aw-firewall'
   imageTag?: string;       // Default: 'latest'
   buildLocal?: boolean;    // Default: false (use GHCR images)
+  additionalEnv?: Record<string, string>; // Additional environment variables to pass to container
+  envAll?: boolean;        // Pass all host environment variables (excluding system vars)
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

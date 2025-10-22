@@ -75,6 +75,17 @@ program
     'Container image tag',
     'latest'
   )
+  .option(
+    '-e, --env <KEY=VALUE>',
+    'Additional environment variables to pass to container (can be specified multiple times)',
+    (value, previous: string[] = []) => [...previous, value],
+    []
+  )
+  .option(
+    '--env-all',
+    'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
+    false
+  )
   .argument('<command>', 'Copilot command to execute (wrap in quotes)')
   .action(async (copilotCommand: string, options) => {
     // Parse and validate options
@@ -96,6 +107,20 @@ program
       process.exit(1);
     }
 
+    // Parse additional environment variables from --env flags
+    const additionalEnv: Record<string, string> = {};
+    if (options.env && Array.isArray(options.env)) {
+      for (const envVar of options.env) {
+        const match = envVar.match(/^([^=]+)=(.*)$/);
+        if (!match) {
+          logger.error(`Invalid environment variable format: ${envVar} (expected KEY=VALUE)`);
+          process.exit(1);
+        }
+        const [, key, value] = match;
+        additionalEnv[key] = value;
+      }
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       copilotCommand,
@@ -105,7 +130,15 @@ program
       buildLocal: options.buildLocal,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
+      additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
+      envAll: options.envAll,
     };
+
+    // Warn if --env-all is used
+    if (config.envAll) {
+      logger.warn('⚠️  Using --env-all: All host environment variables will be passed to container');
+      logger.warn('   This may expose sensitive credentials if logs or configs are shared');
+    }
 
     // Log config with redacted secrets
     const redactedConfig = {
