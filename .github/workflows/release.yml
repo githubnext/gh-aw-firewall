@@ -91,7 +91,10 @@ jobs:
             --output release/awf
 
           # Verify the binary was created
+          echo "=== Contents of release directory ==="
           ls -lh release/
+          echo "=== Checking if awf-linux-x64 exists ==="
+          test -f release/awf-linux-x64 && echo "✓ Binary exists!" || echo "✗ Binary NOT found!"
 
       - name: Create tarball for npm package
         run: |
