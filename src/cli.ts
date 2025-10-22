@@ -68,7 +68,7 @@ program
   .option(
     '--image-registry <registry>',
     'Container image registry',
-    'ghcr.io/mossaka/gh-aw-firewall'
+    'ghcr.io/githubnext/gh-aw-firewall'
   )
   .option(
     '--image-tag <tag>',

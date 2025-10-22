@@ -87,7 +87,7 @@ Each release includes:
 - `checksums.txt` - SHA256 checksums for all files
 
 ### GitHub Container Registry (GHCR)
-Docker images are published to `ghcr.io/mossaka/gh-aw-firewall`:
+Docker images are published to `ghcr.io/githubnext/gh-aw-firewall`:
 - `squid:<version>` and `squid:latest` - Squid proxy container
 - `copilot:<version>` and `copilot:latest` - Copilot execution environment
 

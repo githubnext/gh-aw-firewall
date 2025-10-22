@@ -8,7 +8,7 @@ export interface WrapperConfig {
   logLevel: LogLevel;
   keepContainers: boolean;
   workDir: string;
-  imageRegistry?: string;  // Default: 'ghcr.io/mossaka/gh-aw-firewall'
+  imageRegistry?: string;  // Default: 'ghcr.io/githubnext/gh-aw-firewall'
   imageTag?: string;       // Default: 'latest'
   buildLocal?: boolean;    // Default: false (use GHCR images)
   additionalEnv?: Record<string, string>; // Additional environment variables to pass to container

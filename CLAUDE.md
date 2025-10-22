@@ -120,7 +120,7 @@ sudo awf --help
 The firewall uses two Docker containers (Squid proxy and Copilot execution environment). By default, the CLI pulls pre-built images from GitHub Container Registry (GHCR) for faster startup and easier distribution.
 
 **Default behavior (GHCR images):**
-- Images are automatically pulled from `ghcr.io/mossaka/gh-aw-firewall/squid:latest` and `ghcr.io/mossaka/gh-aw-firewall/copilot:latest`
+- Images are automatically pulled from `ghcr.io/githubnext/gh-aw-firewall/squid:latest` and `ghcr.io/githubnext/gh-aw-firewall/copilot:latest`
 - Published during releases via `.github/workflows/release.yml`
 - Users don't need to build containers locally
 
@@ -130,7 +130,7 @@ The firewall uses two Docker containers (Squid proxy and Copilot execution envir
 - Example: `sudo awf --build-local --allow-domains github.com 'curl https://github.com'`
 
 **Custom registry/tag:**
-- `--image-registry <registry>` - Use a different registry (default: `ghcr.io/mossaka/gh-aw-firewall`)
+- `--image-registry <registry>` - Use a different registry (default: `ghcr.io/githubnext/gh-aw-firewall`)
 - `--image-tag <tag>` - Use a specific version tag (default: `latest`)
 - Example: `sudo awf --image-tag v0.2.0 --allow-domains github.com 'curl https://github.com'`
 

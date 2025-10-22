@@ -119,7 +119,7 @@ export function generateDockerCompose(
 
   // Default to GHCR images unless buildLocal is explicitly set
   const useGHCR = !config.buildLocal;
-  const registry = config.imageRegistry || 'ghcr.io/mossaka/gh-aw-firewall';
+  const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
   const tag = config.imageTag || 'latest';
 
   // Squid service configuration
