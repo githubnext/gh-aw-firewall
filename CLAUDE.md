@@ -37,11 +37,8 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 # Download logs from a specific run ID
 ./scripts/download-latest-artifact.sh 1234567890
 
-# Download from everything-mcp workflow (latest run)
-./scripts/download-latest-artifact.sh "" ".github/workflows/test-copilot-everything-mcp.yml" "copilot-everything-mcp-logs"
-
-# Download from playwright-mcp workflow (specific run)
-./scripts/download-latest-artifact.sh 18607551799 ".github/workflows/test-copilot-playwright-mcp.yml" "copilot-playwright-mcp-logs"
+# Download from test-firewall-wrapper workflow (latest run)
+./scripts/download-latest-artifact.sh "" ".github/workflows/test-firewall-wrapper.yml" "firewall-test-logs"
 ```
 
 **Parameters:**
@@ -51,8 +48,7 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 
 **Common artifact names:**
 - `copilot-mcp-logs` - test-copilot-mcp.yml
-- `copilot-everything-mcp-logs` - test-copilot-everything-mcp.yml
-- `copilot-playwright-mcp-logs` - test-copilot-playwright-mcp.yml
+- `firewall-test-logs` - test-firewall-wrapper.yml
 
 This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Requires GitHub CLI (`gh`) authenticated with the repository.
 
@@ -101,10 +97,15 @@ Since `npm link` creates symlinks in the user's npm directory which isn't in roo
 npm run build
 
 # Create sudo wrapper script
+# Update the paths below to match your system:
+# - NODE_PATH: Find with `which node` (example shows nvm installation)
+# - PROJECT_PATH: Your cloned repository location
 sudo tee /usr/local/bin/awf > /dev/null <<'EOF'
 #!/bin/bash
-exec ~/.nvm/versions/node/v22.13.0/bin/node \
-     ~/developer/gh-aw-firewall/dist/cli.js "$@"
+NODE_PATH="$HOME/.nvm/versions/node/v22.13.0/bin/node"
+PROJECT_PATH="$HOME/developer/gh-aw-firewall"
+
+exec "$NODE_PATH" "$PROJECT_PATH/dist/cli.js" "$@"
 EOF
 
 sudo chmod +x /usr/local/bin/awf

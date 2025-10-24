@@ -88,7 +88,17 @@ export GITHUB_REPOSITORY="githubnext/gh-aw-firewall"
 - `/tmp/copilot-logs-test1/`: Test 1 Copilot debug logs
 - `/tmp/copilot-logs-test2/`: Test 2 Copilot debug logs
 
-### 4. `cleanup.sh`
+### 4. `test-firewall-robustness.sh`
+
+**Usage:**
+```bash
+./scripts/ci/test-firewall-robustness.sh [--quick]
+```
+
+**Arguments:**
+- `--quick` (optional): Skip slow tests (Docker build, IPv6, etc.)
+
+### 5. `cleanup.sh`
 
 Cleans up Docker containers, networks, and temporary files created by awf tests.
 
@@ -110,7 +120,9 @@ This script will:
 
 ## Testing Locally
 
-To run the full test suite locally:
+### Copilot CLI + MCP Tests
+
+To run the Copilot CLI and MCP test suite locally:
 
 ```bash
 # 1. Build the project
@@ -126,7 +138,7 @@ export GITHUB_PERSONAL_ACCESS_TOKEN="your_github_token"
 export XDG_CONFIG_HOME="$HOME"
 
 # 4. Run cleanup (optional, if previous runs left resources)
-./scripts/ci/cleanup.sh
+sudo ./scripts/ci/cleanup.sh
 
 # 5. Set up MCP config
 ./scripts/ci/setup-mcp-config.sh "$HOME/.config/copilot"
@@ -138,8 +150,9 @@ export XDG_CONFIG_HOME="$HOME"
 ./scripts/ci/test-copilot-mcp.sh
 
 # 8. Clean up
-./scripts/ci/cleanup.sh
+sudo ./scripts/ci/cleanup.sh
 ```
+
 
 ## Troubleshooting
 

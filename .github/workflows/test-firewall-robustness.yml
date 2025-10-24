@@ -1,0 +1,114 @@
+name: Test Firewall Robustness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Run daily at 2 AM UTC to catch any regressions
+    - cron: '0 2 * * *'
+
+jobs:
+  robustness-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run build
+
+      - name: Make wrapper available globally with sudo
+        run: |
+          # Create sudo wrapper script for iptables manipulation
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec $(which node) $GITHUB_WORKSPACE/dist/cli.js "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
+          which awf
+          awf --version
+
+      - name: Pull required Docker images
+        run: |
+          echo "Pulling images to avoid timeouts during tests..."
+          docker pull curlimages/curl:latest
+          docker pull alpine:latest
+          docker pull dannydirect/tinyproxy:latest
+
+      - name: Run robustness test suite
+        run: |
+          chmod +x scripts/ci/test-firewall-robustness.sh
+          sudo ./scripts/ci/test-firewall-robustness.sh
+
+      - name: Cleanup awf resources
+        if: always()
+        run: |
+          chmod +x scripts/ci/cleanup.sh
+          sudo ./scripts/ci/cleanup.sh || true
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: robustness-test-logs
+          path: |
+            /tmp/firewall-test-*.log
+            /tmp/firewall-obs-test.log
+            /tmp/copilot-logs-*
+            /tmp/squid-logs-*
+          if-no-files-found: warn
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Firewall Robustness Test Suite"
+          echo "=========================================="
+          echo ""
+          echo "This test validates comprehensive security scenarios:"
+          echo ""
+          echo "Test Categories:"
+          echo "  1. Happy-path basics (exact domains, subdomains, case insensitivity)"
+          echo "  2. Deny cases (IP literals, non-standard ports, SSH blocking)"
+          echo "  3. Redirect behavior (cross-domain vs same-domain)"
+          echo "  4. Protocol edges (HTTP/2, bypass attempts, DoH, metadata endpoints)"
+          echo "  5. IPv4/IPv6 parity"
+          echo "  6. Git operations (HTTPS allowed, SSH blocked)"
+          echo "  7. Security corner cases (SNI/Host mismatch, multicast)"
+          echo "  8. Docker container egress:"
+          echo "     - Basic egress control"
+          echo "     - Network modes (bridge, host, none)"
+          echo "     - DNS controls"
+          echo "     - Proxy pivot attempts"
+          echo "     - Container-to-container bounce"
+          echo "     - UDP, QUIC, multicast"
+          echo "     - Metadata protection"
+          echo "     - Privilege abuse (NET_ADMIN, privileged)"
+          echo "     - SNI/Host mismatch"
+          echo "     - Custom networks"
+          echo "     - Build-time egress"
+          echo "     - IPv6 from containers"
+          echo "  9. Observability (audit log validation)"
+          echo ""
+          echo "Key security validations:"
+          echo "  - L7 filtering for HTTP/HTTPS traffic"
+          echo "  - Host header spoofing protection"
+          echo "  - Container network isolation"
+          echo "  - Metadata endpoint blocking (AWS/GCP)"
+          echo "  - Privilege escalation prevention"
+          echo "  - Comprehensive audit logging"
+          echo ""
+          echo "Test logs uploaded as artifacts (if generated)"
+          echo "=========================================="
