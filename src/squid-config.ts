@@ -83,6 +83,10 @@ http_access deny all
 cache deny all
 
 # DNS settings
+# Use external DNS servers directly instead of Docker's embedded DNS (127.0.0.11)
+# The Squid container has unrestricted outbound access via host-level firewall rules,
+# so it can reach these DNS servers directly, avoiding issues with Squid's internal
+# DNS client and Docker's embedded DNS proxy
 dns_nameservers 8.8.8.8 8.8.4.4
 
 # Forwarded headers

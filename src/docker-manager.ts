@@ -130,6 +130,9 @@ export function generateDockerCompose(
         ipv4_address: networkConfig.squidIp,
       },
     },
+    dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS directly (bypasses Docker's embedded DNS)
+    dns_search: [], // Disable DNS search domains
+    security_opt: ['seccomp=unconfined'], // Disable seccomp to allow UDP DNS queries
     volumes: [
       `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
       `${config.workDir}/squid-logs:/var/log/squid:rw`,
