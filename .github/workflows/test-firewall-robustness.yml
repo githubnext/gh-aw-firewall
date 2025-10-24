@@ -43,6 +43,8 @@ jobs:
       - name: Pull required Docker images
         run: |
           echo "Pulling images to avoid timeouts during tests..."
+          docker pull ghcr.io/githubnext/gh-aw-firewall/squid:latest
+          docker pull ghcr.io/githubnext/gh-aw-firewall/copilot:latest
           docker pull curlimages/curl:latest
           docker pull alpine:latest
           docker pull dannydirect/tinyproxy:latest
