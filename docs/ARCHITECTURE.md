@@ -75,7 +75,7 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
 ### Copilot Container (`containers/copilot/`)
-- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
+- Based on `ghcr.io/actions/actions-runner:latest` (GitHub Actions Runner image) with additional packages: iptables, gnupg, dnsutils, net-tools, netcat, and Node.js 22
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
 - `NET_ADMIN` capability required for iptables manipulation

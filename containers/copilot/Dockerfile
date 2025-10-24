@@ -1,26 +1,29 @@
-FROM ubuntu:22.04
+FROM ghcr.io/actions/actions-runner:latest
 
-# Install required packages and Node.js 22
+# Switch to root to install packages
+USER root
+
+# Install required packages
+# Note: git, curl, and docker-ce-cli are already installed in the GitHub Runner image
 RUN apt-get update && \
+    # Install other required packages
     apt-get install -y --no-install-recommends \
     iptables \
-    curl \
-    ca-certificates \
-    git \
     gnupg \
     dnsutils \
     net-tools \
-    netcat-openbsd && \
-    # Install Node.js 22 from NodeSource
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    # Install Docker CLI for MCP servers that run as containers
-    install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
-    chmod a+r /etc/apt/keyrings/docker.asc && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt-get update && \
-    apt-get install -y docker-ce-cli && \
+    netcat-openbsd \
+    ca-certificates \
+    xz-utils && \
+    # Install Node.js 22 manually from official binaries
+    # Using --insecure due to SSL proxy in build environment
+    NODE_VERSION=22.13.0 && \
+    curl --insecure -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o /tmp/node.tar.xz && \
+    tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 && \
+    rm /tmp/node.tar.xz && \
+    # Cleanup
+    apt-get remove -y xz-utils && \
+    apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy iptables setup script and docker wrapper
