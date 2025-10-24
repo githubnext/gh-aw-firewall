@@ -132,7 +132,7 @@ export function generateDockerCompose(
     },
     dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS directly (bypasses Docker's embedded DNS)
     dns_search: [], // Disable DNS search domains
-    security_opt: ['seccomp=unconfined'], // Disable seccomp to allow UDP DNS queries
+    cap_add: ['NET_RAW'], // Add capability for raw socket operations (may be needed for DNS)
     volumes: [
       `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
       `${config.workDir}/squid-logs:/var/log/squid:rw`,
