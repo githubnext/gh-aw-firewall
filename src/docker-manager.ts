@@ -108,6 +108,68 @@ async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string
 }
 
 /**
+ * Escapes special characters in a command string for safe execution in bash -c
+ *
+ * This function addresses gh-aw PR #2493 where parentheses in tool names like
+ * `--allow-tool 'shell(cat)'` were being interpreted as subshell syntax by bash.
+ *
+ * The issue occurs because when gh-aw's workflow compiler passes commands to AWF,
+ * it wraps them in double quotes. When bash receives these via `bash -c "..."`,
+ * single quotes inside become literal characters (not delimiters), exposing
+ * parentheses to be interpreted as subshell syntax.
+ *
+ * Special characters that need escaping:
+ * - ( ) : Subshell/command grouping
+ * - $ : Variable expansion (also needs doubling for Docker Compose)
+ * - ` : Command substitution
+ * - ; : Command separator
+ * - & : Background execution
+ * - | : Pipe
+ * - < > : Redirection
+ * - \ : Escape character itself
+ *
+ * @param command - The command string to escape
+ * @returns The escaped command string safe for bash -c execution
+ */
+export function escapeBashCommand(command: string): string {
+  if (!command) {
+    return command;
+  }
+
+  let escaped = command;
+
+  // Escape backslashes first (must be done before other escaping)
+  escaped = escaped.replace(/\\/g, '\\\\');
+
+  // Escape parentheses (to prevent subshell interpretation)
+  escaped = escaped.replace(/\(/g, '\\(');
+  escaped = escaped.replace(/\)/g, '\\)');
+
+  // Escape backticks (to prevent command substitution)
+  escaped = escaped.replace(/`/g, '\\`');
+
+  // Escape semicolons (to prevent command chaining)
+  escaped = escaped.replace(/;/g, '\\;');
+
+  // Escape ampersands (to prevent backgrounding)
+  escaped = escaped.replace(/&/g, '\\&');
+
+  // Escape pipes (to prevent piping)
+  escaped = escaped.replace(/\|/g, '\\|');
+
+  // Escape redirections
+  escaped = escaped.replace(/</g, '\\<');
+  escaped = escaped.replace(/>/g, '\\>');
+
+  // Double dollar signs for Docker Compose variable interpolation
+  // Docker Compose requires $$ to represent a literal $
+  // This must be done after other escaping to avoid double-escaping
+  escaped = escaped.replace(/\$/g, '$$$$');
+
+  return escaped;
+}
+
+/**
  * Generates Docker Compose configuration
  * Note: Uses external network 'awf-net' created by host-iptables setup
  */
@@ -239,8 +301,8 @@ export function generateDockerCompose(
     cap_add: ['NET_ADMIN'], // Required for iptables
     stdin_open: true,
     tty: false, // Disable TTY to prevent ANSI escape sequences in logs
-    // Escape $ with $$ for Docker Compose variable interpolation
-    command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
+    // Escape special bash characters for safe execution (fixes gh-aw PR #2493)
+    command: ['/bin/bash', '-c', escapeBashCommand(config.copilotCommand)],
   };
 
   // Use GHCR image or build locally

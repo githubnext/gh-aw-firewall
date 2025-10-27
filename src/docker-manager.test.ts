@@ -1,4 +1,4 @@
-import { generateDockerCompose } from './docker-manager';
+import { generateDockerCompose, escapeBashCommand } from './docker-manager';
 import { WrapperConfig } from './types';
 
 describe('docker-manager', () => {
@@ -181,7 +181,8 @@ describe('docker-manager', () => {
       const copilot = result.services.copilot;
 
       // Docker compose requires $$ to represent a literal $
-      expect(copilot.command).toEqual(['/bin/bash', '-c', 'echo $$HOME && echo $${USER}']);
+      // Ampersands are also escaped to prevent unintended backgrounding
+      expect(copilot.command).toEqual(['/bin/bash', '-c', 'echo $$HOME \\&\\& echo $${USER}']);
     });
 
     it('should pass through GITHUB_TOKEN when present in environment', () => {
@@ -285,6 +286,158 @@ describe('docker-manager', () => {
           delete process.env.GITHUB_TOKEN;
         }
       }
+    });
+  });
+
+  describe('escapeBashCommand', () => {
+    describe('parentheses escaping (gh-aw PR #2493)', () => {
+      it('should escape parentheses in single shell tool name', () => {
+        const input = "npx @github/copilot --allow-tool 'shell(cat)' --prompt 'test'";
+        const escaped = escapeBashCommand(input);
+
+        // Parentheses should be escaped to prevent subshell interpretation
+        expect(escaped).toContain('shell\\(cat\\)');
+        // Single quotes should be preserved
+        expect(escaped).toContain("'");
+      });
+
+      it('should escape parentheses in multiple shell tool names', () => {
+        const input = "--allow-tool 'shell(cat)' --allow-tool 'shell(grep)' --allow-tool 'shell(date)'";
+        const escaped = escapeBashCommand(input);
+
+        // All parentheses should be escaped
+        expect(escaped).toContain('shell\\(cat\\)');
+        expect(escaped).toContain('shell\\(grep\\)');
+        expect(escaped).toContain('shell\\(date\\)');
+      });
+
+      it('should escape parentheses outside of quotes', () => {
+        const input = "echo (test) value";
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\(test\\)');
+      });
+    });
+
+    describe('dollar sign escaping (Docker Compose)', () => {
+      it('should double dollar signs for Docker Compose variable interpolation', () => {
+        const input = 'echo $HOME';
+        const escaped = escapeBashCommand(input);
+
+        // Single $ should become $$ for docker-compose
+        expect(escaped).toBe('echo $$HOME');
+      });
+
+      it('should handle multiple dollar signs', () => {
+        const input = 'echo $HOME $USER $PATH';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toBe('echo $$HOME $$USER $$PATH');
+      });
+
+      it('should handle dollar signs in complex commands', () => {
+        const input = "echo \"What's in $(pwd)?\"";
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('$$');
+      });
+    });
+
+    describe('other special characters', () => {
+      it('should escape backticks', () => {
+        const input = 'echo `date`';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\`');
+      });
+
+      it('should escape semicolons', () => {
+        const input = 'echo hello; echo world';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\;');
+      });
+
+      it('should escape ampersands', () => {
+        const input = 'echo hello & echo world';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\&');
+      });
+
+      it('should escape pipes', () => {
+        const input = 'echo hello | grep hello';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\|');
+      });
+
+      it('should escape redirects', () => {
+        const input = 'echo hello > file.txt';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toContain('\\>');
+      });
+    });
+
+    describe('real-world Copilot commands', () => {
+      it('should handle full Copilot CLI command from gh-aw PR #2493', () => {
+        const input = `npx @github/copilot@0.0.351 --allow-tool github --allow-tool safeoutputs --allow-tool 'shell(cat)' --allow-tool 'shell(date)' --allow-tool 'shell(echo)' --allow-tool 'shell(grep)' --prompt "test prompt"`;
+        const escaped = escapeBashCommand(input);
+
+        // Should escape parentheses
+        expect(escaped).toContain('\\(');
+        expect(escaped).toContain('\\)');
+
+        // Should preserve overall command structure
+        expect(escaped).toContain('npx');
+        expect(escaped).toContain('@github/copilot');
+        expect(escaped).toContain('--allow-tool');
+      });
+
+      it('should handle Copilot command with complex prompt', () => {
+        const input = `npx @github/copilot --allow-tool 'shell(cat)' --prompt "What's in $(pwd)?"`;
+        const escaped = escapeBashCommand(input);
+
+        // Should escape parentheses in tool name
+        expect(escaped).toContain('shell\\(cat\\)');
+        // Should escape dollar signs
+        expect(escaped).toContain('$$');
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle empty string', () => {
+        const input = '';
+        const escaped = escapeBashCommand(input);
+
+        expect(escaped).toBe('');
+      });
+
+      it('should handle command with no special characters', () => {
+        const input = 'echo hello world';
+        const escaped = escapeBashCommand(input);
+
+        // Should remain unchanged (no special chars to escape)
+        expect(escaped).toBe('echo hello world');
+      });
+
+      it('should handle nested quotes', () => {
+        const input = `echo "He said 'hello'"`;
+        const escaped = escapeBashCommand(input);
+
+        // Should preserve quote structure
+        expect(escaped).toContain('"');
+        expect(escaped).toContain("'");
+      });
+
+      it('should handle backslashes', () => {
+        const input = 'echo \\n newline';
+        const escaped = escapeBashCommand(input);
+
+        // Backslashes should be escaped to prevent interpretation
+        expect(escaped).toContain('\\\\');
+      });
     });
   });
 });
