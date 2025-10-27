@@ -20,20 +20,16 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 ### Installation
 
 ```bash
-npm install
-npm run build
-
-# Create sudo wrapper (required for iptables manipulation)
-sudo tee /usr/local/bin/awf > /dev/null <<'EOF'
-#!/bin/bash
-exec $(which node) $(pwd)/dist/cli.js "$@"
-EOF
-
-sudo chmod +x /usr/local/bin/awf
+# Download the latest release binary
+curl -L https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+chmod +x awf
+sudo mv awf /usr/local/bin/
 
 # Verify installation
 sudo awf --help
 ```
+
+**Note:** Verify checksums after download by downloading `checksums.txt` from the release page.
 
 ### Basic Usage
 
