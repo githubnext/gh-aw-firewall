@@ -207,7 +207,7 @@ describe('cli', () => {
   });
 
   describe('log level validation', () => {
-    const validLogLevels = ['debug', 'info', 'warn', 'error'];
+    const validLogLevels = ['trace', 'debug', 'info', 'warn', 'error'];
 
     it('should accept valid log levels', () => {
       validLogLevels.forEach(level => {
@@ -216,7 +216,7 @@ describe('cli', () => {
     });
 
     it('should reject invalid log levels', () => {
-      const invalidLevels = ['verbose', 'trace', 'silent', 'all', ''];
+      const invalidLevels = ['verbose', 'silent', 'all', ''];
 
       invalidLevels.forEach(level => {
         expect(validLogLevels.includes(level)).toBe(false);
@@ -236,7 +236,7 @@ describe('cli', () => {
           '--allow-domains <domains>',
           'Comma-separated list of allowed domains'
         )
-        .option('--log-level <level>', 'Log level: debug, info, warn, error', 'info')
+        .option('--log-level <level>', 'Log level: trace, debug, info, warn, error', 'info')
         .option('--keep-containers', 'Keep containers running after command exits', false)
         .argument('<command>', 'Copilot command to execute');
 

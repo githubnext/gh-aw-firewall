@@ -47,7 +47,7 @@ program
   )
   .option(
     '--log-level <level>',
-    'Log level: debug, info, warn, error',
+    'Log level: trace, debug, info, warn, error',
     'info'
   )
   .option(
@@ -90,7 +90,7 @@ program
   .action(async (copilotCommand: string, options) => {
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
-    if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
+    if (!['trace', 'debug', 'info', 'warn', 'error'].includes(logLevel)) {
       console.error(`Invalid log level: ${logLevel}`);
       process.exit(1);
     }
