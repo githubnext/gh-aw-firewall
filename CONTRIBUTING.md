@@ -151,7 +151,7 @@ This project follows the GitHub Community Guidelines. Please be respectful and i
 ## ❓ Getting Help
 
 - Check the [README.md](README.md) for usage instructions
-- Review the [Quick Start Guide](docs/QUICKSTART.md) for setup
+- Review the [Quick Start Guide](docs/quickstart.md) for setup
 - Explore [AGENTS.md](AGENTS.md) for detailed development guidance
 - Ask questions in GitHub issues
 - Look at existing code and tests for examples

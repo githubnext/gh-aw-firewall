@@ -11,7 +11,7 @@ This is a firewall for GitHub Copilot CLI (package name: `@github/awf`) that pro
 - **[README.md](README.md)** - Main project documentation and usage guide
 - **[ENVIRONMENT.md](ENVIRONMENT.md)** - Environment variable configuration and security best practices
 - **[LOGGING.md](LOGGING.md)** - Comprehensive logging documentation
-- **[docs/LOGGING_QUICKREF.md](docs/LOGGING_QUICKREF.md)** - Quick reference for log queries and monitoring
+- **[docs/logging_quickref.md](docs/logging_quickref.md)** - Quick reference for log queries and monitoring
 
 ## Development Workflow
 
