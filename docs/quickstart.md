@@ -252,14 +252,14 @@ docker run --rm --cap-add NET_ADMIN ubuntu iptables -L
 ## Next Steps
 
 1. **Read the full documentation**: [README.md](../README.md)
-2. **Review the architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+2. **Review the architecture**: [architecture.md](architecture.md)
 3. **Run the test suite**: `npm test`
 4. **Check GitHub Actions tests**: `.github/workflows/test-firewall-wrapper.yml` and `.github/workflows/test-copilot-mcp.yml`
 
 ## Getting Help
 
 - Check [README.md](../README.md) for detailed documentation
-- Review [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
+- Review [troubleshooting.md](troubleshooting.md) for common issues
 - Look at test examples in `.github/workflows/` directory
 - Enable `--log-level debug` for detailed diagnostics
 - Use `--keep-containers` to inspect container state

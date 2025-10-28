@@ -370,6 +370,6 @@ If you're still experiencing issues:
    - Container logs: `docker logs awf-copilot`
 
 4. **Check documentation:**
-   - [Architecture](ARCHITECTURE.md) - Understand how the system works
-   - [Usage Guide](USAGE.md) - Detailed usage examples
+   - [Architecture](architecture.md) - Understand how the system works
+   - [Usage Guide](usage.md) - Detailed usage examples
    - [Logging Documentation](../LOGGING.md) - Comprehensive logging guide
