@@ -153,9 +153,9 @@ describe('Basic Firewall Functionality', () => {
     const squidRunning = await docker.isRunning('awf-squid');
     expect(squidRunning).toBe(true);
 
-    // Verify copilot container still exists (may have exited)
-    const copilotInfo = await docker.inspect('awf-runner');
-    expect(copilotInfo).not.toBeNull();
+    // Verify runner container still exists (may have exited)
+    const runnerInfo = await docker.inspect('awf-runner');
+    expect(runnerInfo).not.toBeNull();
 
     // Clean up manually
     await docker.stop('awf-squid');

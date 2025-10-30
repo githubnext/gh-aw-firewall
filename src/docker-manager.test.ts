@@ -105,7 +105,7 @@ describe('docker-manager', () => {
       expect(squid.ports).toContain('3128:3128');
     });
 
-    it('should configure copilot container with proxy settings', () => {
+    it('should configure runner container with proxy settings', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const runner = result.services.runner;
       const env = runner.environment as Record<string, string>;
@@ -116,7 +116,7 @@ describe('docker-manager', () => {
       expect(env.SQUID_PROXY_PORT).toBe('3128');
     });
 
-    it('should mount required volumes in copilot container', () => {
+    it('should mount required volumes in runner container', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const runner = result.services.runner;
       const volumes = runner.volumes as string[];
@@ -127,7 +127,7 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('runner-logs'))).toBe(true);
     });
 
-    it('should set copilot to depend on healthy squid', () => {
+    it('should set runner to depend on healthy squid', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const runner = result.services.runner;
       const depends = runner.depends_on as { [key: string]: { condition: string } };
@@ -135,7 +135,7 @@ describe('docker-manager', () => {
       expect(depends['squid-proxy'].condition).toBe('service_healthy');
     });
 
-    it('should add NET_ADMIN capability to copilot', () => {
+    it('should add NET_ADMIN capability to runner', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const runner = result.services.runner;
 
