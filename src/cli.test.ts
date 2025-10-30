@@ -1,61 +1,37 @@
 import { Command } from 'commander';
 import { redactSecrets } from './redact-secrets';
+import { parseDomains } from './cli';
 
 describe('cli', () => {
   describe('domain parsing', () => {
     it('should split comma-separated domains correctly', () => {
-      const allowDomainsInput = 'github.com, api.github.com, npmjs.org';
+      const result = parseDomains('github.com, api.github.com, npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should handle domains without spaces', () => {
-      const allowDomainsInput = 'github.com,api.github.com,npmjs.org';
+      const result = parseDomains('github.com,api.github.com,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should filter out empty domains', () => {
-      const allowDomainsInput = 'github.com,,, api.github.com,  ,npmjs.org';
+      const result = parseDomains('github.com,,, api.github.com,  ,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should return empty array for whitespace-only input', () => {
-      const allowDomainsInput = '  ,  ,  ';
+      const result = parseDomains('  ,  ,  ');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual([]);
+      expect(result).toEqual([]);
     });
 
     it('should handle single domain', () => {
-      const allowDomainsInput = 'github.com';
+      const result = parseDomains('github.com');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com']);
+      expect(result).toEqual(['github.com']);
     });
   });
 
