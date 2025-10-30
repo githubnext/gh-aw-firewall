@@ -64,7 +64,7 @@ Once the workflow completes:
 3. Go to **Packages** page (in repository)
 4. Verify Docker images are published:
    - `squid:<version>` and `squid:latest`
-   - `copilot:<version>` and `copilot:latest`
+   - `agent:<version>` and `agent:latest`
 
 ## Manual Release
 
@@ -89,7 +89,7 @@ Each release includes:
 ### GitHub Container Registry (GHCR)
 Docker images are published to `ghcr.io/githubnext/gh-aw-firewall`:
 - `squid:<version>` and `squid:latest` - Squid proxy container
-- `copilot:<version>` and `copilot:latest` - Copilot execution environment
+- `agent:<version>` and `agent:latest` - Agent execution environment
 
 These images are automatically pulled by the CLI when running commands.
 
@@ -119,7 +119,7 @@ pkg . --targets node18-linux-x64 --output release/awf
 ```bash
 # Build images locally
 docker build -t awf-test/squid:local ./containers/squid
-docker build -t awf-test/copilot:local ./containers/copilot
+docker build -t awf-test/agent:local ./containers/agent
 
 # Test with local images
 sudo ./dist/cli.js \
@@ -161,7 +161,7 @@ If users report that Docker images can't be pulled:
 
 To make packages public:
 1. Go to repository **Packages** page
-2. Click on the package (squid or copilot)
+2. Click on the package (squid or agent)
 3. Go to **Package settings**
 4. Change visibility to **Public**
 
