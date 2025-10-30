@@ -33,7 +33,7 @@ jobs:
         run: npm run build
 
       - name: Run unit tests
-        run: npm test
+        run: npm test -- --verbose --no-coverage
 
   test-basic-firewall:
     name: Basic Firewall Tests
