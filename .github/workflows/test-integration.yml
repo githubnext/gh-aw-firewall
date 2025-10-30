@@ -86,7 +86,7 @@ jobs:
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
-            /tmp/copilot-logs-*/
+            /tmp/agent-logs-*/
             /tmp/squid-logs-*/
           retention-days: 7
 
@@ -141,7 +141,7 @@ jobs:
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
-            /tmp/copilot-logs-*/
+            /tmp/agent-logs-*/
             /tmp/squid-logs-*/
           retention-days: 7
 
@@ -196,6 +196,6 @@ jobs:
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
-            /tmp/copilot-logs-*/
+            /tmp/agent-logs-*/
             /tmp/squid-logs-*/
           retention-days: 7

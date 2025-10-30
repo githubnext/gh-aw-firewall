@@ -135,4 +135,4 @@ echo "Blocked: $(sudo grep -c "TCP_DENIED" /tmp/squid-logs-*/access.log)"
 - Use `$(ls -t /tmp/squid-logs-*/access.log | head -1)` to automatically target the latest log
 - Timestamps are Unix epoch seconds (use `date -d @<timestamp>` to convert)
 - Port `:443` indicates HTTPS traffic (most common)
-- Client IPs: `172.30.0.20` = copilot container, `172.30.0.2` = spawned containers
+- Client IPs: `172.30.0.20` = agent container, `172.30.0.2` = spawned containers

@@ -9,11 +9,33 @@ This is a firewall for GitHub Copilot CLI (package name: `@github/awf`) that pro
 ### Documentation Files
 
 - **[README.md](README.md)** - Main project documentation and usage guide
-- **[docs/environment.md](docs/environment.md)** - Environment variable configuration and security best practices
 - **[LOGGING.md](LOGGING.md)** - Comprehensive logging documentation
 - **[docs/logging_quickref.md](docs/logging_quickref.md)** - Quick reference for log queries and monitoring
 
 ## Development Workflow
+
+### GitHub Actions Best Practices
+
+**IMPORTANT:** When writing or modifying GitHub Actions workflows:
+
+1. **Use TypeScript for workflow scripts, not bash** - All scripts that run in GitHub Actions workflows should be written in TypeScript and executed with `npx tsx`. This ensures:
+   - Type safety and better IDE support
+   - Consistency with the rest of the codebase
+   - Easier testing and maintenance
+   - Better error handling
+
+2. **Inline script execution** - Run TypeScript scripts directly in workflow steps using `npx tsx path/to/script.ts`, rather than creating bash wrapper scripts. Example:
+   ```yaml
+   - name: Generate test summary
+     run: |
+       npx tsx scripts/ci/generate-test-summary.ts "test-file.ts" "Test Name" test-output.log
+   ```
+
+3. **Place scripts in `scripts/ci/`** - All CI/CD-related scripts should be in the `scripts/ci/` directory and written as TypeScript modules with proper type definitions.
+
+**Example:**
+- ❌ Bad: `scripts/ci/generate-summary.sh` (bash script)
+- ✅ Good: `scripts/ci/generate-test-summary.ts` (TypeScript script called with `npx tsx`)
 
 ### Debugging GitHub Actions Failures
 
@@ -96,15 +118,10 @@ Since `npm link` creates symlinks in the user's npm directory which isn't in roo
 npm run build
 
 # Create sudo wrapper script
-# Update the paths below to match your system:
-# - NODE_PATH: Find with `which node` (example shows nvm installation)
-# - PROJECT_PATH: Your cloned repository location
 sudo tee /usr/local/bin/awf > /dev/null <<'EOF'
 #!/bin/bash
-NODE_PATH="$HOME/.nvm/versions/node/v22.13.0/bin/node"
-PROJECT_PATH="$HOME/developer/gh-aw-firewall"
-
-exec "$NODE_PATH" "$PROJECT_PATH/dist/cli.js" "$@"
+exec ~/.nvm/versions/node/v22.13.0/bin/node \
+     ~/developer/gh-aw-firewall/dist/cli.js "$@"
 EOF
 
 sudo chmod +x /usr/local/bin/awf
@@ -114,25 +131,6 @@ sudo awf --help
 ```
 
 **Note:** After each `npm run build`, the wrapper automatically uses the latest compiled code. Update the paths in the wrapper script to match your node installation and project directory.
-
-## Container Image Strategy
-
-The firewall uses two Docker containers (Squid proxy and Copilot execution environment). By default, the CLI pulls pre-built images from GitHub Container Registry (GHCR) for faster startup and easier distribution.
-
-**Default behavior (GHCR images):**
-- Images are automatically pulled from `ghcr.io/githubnext/gh-aw-firewall/squid:latest` and `ghcr.io/githubnext/gh-aw-firewall/copilot:latest`
-- Published during releases via `.github/workflows/release.yml`
-- Users don't need to build containers locally
-
-**Local build option:**
-- Use `--build-local` flag to build containers from source
-- Useful for development or when GHCR is unavailable
-- Example: `sudo awf --build-local --allow-domains github.com 'curl https://github.com'`
-
-**Custom registry/tag:**
-- `--image-registry <registry>` - Use a different registry (default: `ghcr.io/githubnext/gh-aw-firewall`)
-- `--image-tag <tag>` - Use a specific version tag (default: `latest`)
-- Example: `sudo awf --image-tag v0.2.0 --allow-domains github.com 'curl https://github.com'`
 
 ## Architecture
 
@@ -144,7 +142,7 @@ The codebase follows a modular architecture with clear separation of concerns:
    - Uses `commander` for argument parsing
    - Orchestrates the entire workflow: config generation → container startup → command execution → cleanup
    - Handles signal interrupts (SIGINT/SIGTERM) for graceful shutdown
-   - Main flow: `writeConfigs()` → `startContainers()` → `runAgentCommand()` → `stopContainers()` → `cleanup()`
+   - Main flow: `writeConfigs()` → `startContainers()` → `runCopilotCommand()` → `stopContainers()` → `cleanup()`
 
 2. **Configuration Generation** (`src/squid-config.ts`, `src/docker-manager.ts`)
    - `generateSquidConfig()`: Creates Squid proxy configuration with domain ACL rules
@@ -153,8 +151,8 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 3. **Docker Management** (`src/docker-manager.ts`)
    - Manages container lifecycle using `execa` to run docker-compose commands
-   - Fixed network topology: `172.30.0.0/24` subnet, Squid at `172.30.0.10`, Agent at `172.30.0.20`
-   - Squid container uses healthcheck; Agent waits for Squid to be healthy before starting
+   - Fixed network topology: `172.30.0.0/24` subnet, Squid at `172.30.0.10`, Copilot at `172.30.0.20`
+   - Squid container uses healthcheck; Copilot waits for Squid to be healthy before starting
 
 4. **Type Definitions** (`src/types.ts`)
    - `WrapperConfig`: Main configuration interface
@@ -175,13 +173,13 @@ The codebase follows a modular architecture with clear separation of concerns:
 - **Network:** Connected to `awf-net` at `172.30.0.10`
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
-**Agent Container** (`containers/agent/`)
+**Copilot Container** (`containers/copilot/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
 - `NET_ADMIN` capability required for iptables manipulation
 - Two-stage entrypoint:
-  1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
+  1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (copilot container only)
   2. `entrypoint.sh`: Tests connectivity, then executes user command
 - **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
   - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
@@ -193,7 +191,7 @@ The codebase follows a modular architecture with clear separation of concerns:
   - Allow DNS queries
   - Allow traffic to Squid proxy itself
   - Redirect all HTTP (port 80) and HTTPS (port 443) to Squid via DNAT (NAT table)
-  - **Note:** These NAT rules only apply to the agent container itself, not spawned containers
+  - **Note:** These NAT rules only apply to the copilot container itself, not spawned containers
 
 ### Traffic Flow
 
@@ -225,8 +223,8 @@ Containers stopped, temporary files cleaned up
 
 ## Exit Code Handling
 
-The wrapper propagates the exit code from the agent container:
-1. Command runs in agent container
+The wrapper propagates the exit code from the copilot container:
+1. Command runs in copilot container
 2. Container exits with command's exit code
 3. Wrapper inspects container: `docker inspect --format={{.State.ExitCode}}`
 4. Wrapper exits with same code
@@ -261,7 +259,7 @@ The system uses a defense-in-depth cleanup strategy across four stages to preven
 
 ### Cleanup Script (`scripts/ci/cleanup.sh`)
 Removes all awf resources:
-- Containers by name (`awf-squid`, `awf-agent`)
+- Containers by name (`awf-squid`, `awf-copilot`)
 - All docker-compose services from work directories
 - Unused containers (`docker container prune -f`)
 - Unused networks (`docker network prune -f`) - **critical for subnet pool management**
@@ -274,7 +272,7 @@ Removes all awf resources:
 All temporary files are created in `workDir` (default: `/tmp/awf-<timestamp>`):
 - `squid.conf`: Generated Squid proxy configuration
 - `docker-compose.yml`: Generated Docker Compose configuration
-- `agent-logs/`: Directory for Copilot CLI logs (automatically preserved if logs are created)
+- `copilot-logs/`: Directory for Copilot CLI logs (automatically preserved if logs are created)
 - `squid-logs/`: Directory for Squid proxy logs (automatically preserved if logs are created)
 
 Use `--keep-containers` to preserve containers and files after execution for debugging.
@@ -283,7 +281,7 @@ Use `--keep-containers` to preserve containers and files after execution for deb
 
 ### Real-Time Log Streaming
 
-The wrapper streams container logs in real-time using `docker logs -f`, allowing you to see output as commands execute rather than waiting until completion. This is implemented in `src/docker-manager.ts:runAgentCommand()` which runs `docker logs -f` concurrently with `docker wait`.
+The wrapper streams container logs in real-time using `docker logs -f`, allowing you to see output as commands execute rather than waiting until completion. This is implemented in `src/docker-manager.ts:runCopilotCommand()` which runs `docker logs -f` concurrently with `docker wait`.
 
 **Note:** The container is configured with `tty: false` (line 202 in `src/docker-manager.ts`) to prevent ANSI escape sequences from appearing in log output. This provides cleaner, more readable streaming logs.
 
@@ -293,25 +291,25 @@ Copilot CLI logs are automatically preserved for debugging:
 
 **Directory Structure:**
 - Container writes logs to: `~/.copilot/logs/` (Copilot's default location)
-- Volume mount maps to: `${workDir}/agent-logs/`
-- After cleanup: Logs moved to `/tmp/agent-logs-<timestamp>` (if they exist)
+- Volume mount maps to: `${workDir}/copilot-logs/`
+- After cleanup: Logs moved to `/tmp/copilot-logs-<timestamp>` (if they exist)
 
 **Automatic Preservation:**
-- If Copilot creates logs, they're automatically moved to `/tmp/agent-logs-<timestamp>/` before workDir cleanup
+- If Copilot creates logs, they're automatically moved to `/tmp/copilot-logs-<timestamp>/` before workDir cleanup
 - Empty log directories are not preserved (avoids cluttering /tmp)
-- You'll see: `[INFO] Copilot logs preserved at: /tmp/agent-logs-<timestamp>` when logs exist
+- You'll see: `[INFO] Copilot logs preserved at: /tmp/copilot-logs-<timestamp>` when logs exist
 
 **With `--keep-containers`:**
-- Logs remain at: `${workDir}/agent-logs/`
+- Logs remain at: `${workDir}/copilot-logs/`
 - All config files and containers are preserved
-- You'll see: `[INFO] Copilot logs available at: /tmp/awf-<timestamp>/agent-logs/`
+- You'll see: `[INFO] Copilot logs available at: /tmp/awf-<timestamp>/copilot-logs/`
 
 **Usage Examples:**
 ```bash
 # Logs automatically preserved (if created)
 awf --allow-domains github.com \
   "npx @github/copilot@0.0.347 -p 'your prompt' --log-level debug --allow-all-tools"
-# Output: [INFO] Copilot logs preserved at: /tmp/agent-logs-1761073250147
+# Output: [INFO] Copilot logs preserved at: /tmp/copilot-logs-1761073250147
 
 # Increase log verbosity for debugging
 awf --allow-domains github.com \
@@ -405,7 +403,7 @@ To use a local, writable GitHub MCP server with Copilot CLI, you must:
 **Location:** The MCP configuration must be placed at:
 - `~/.copilot/mcp-config.json` (primary location)
 
-The agent container mounts the HOME directory, so this config file is automatically accessible to Copilot CLI running inside the container.
+The copilot container mounts the HOME directory, so this config file is automatically accessible to Copilot CLI running inside the container.
 
 **Format:**
 ```json
@@ -460,16 +458,16 @@ sudo -E awf \
 ```
 
 **Critical requirements:**
-- `sudo -E` - **REQUIRED** to pass environment variables through sudo to the agent container
+- `sudo -E` - **REQUIRED** to pass environment variables through sudo to the copilot container
 - `--disable-builtin-mcps` - Disables the built-in read-only GitHub MCP server
 - `--allow-tool github` - Grants permission to use all tools from the `github` MCP server (must match server name in config)
-- MCP config at `~/.copilot/mcp-config.json` - Automatically accessible since agent container mounts HOME directory
+- MCP config at `~/.copilot/mcp-config.json` - Automatically accessible since copilot container mounts HOME directory
 
 **Why `sudo -E` is required:**
 1. `awf` needs sudo for iptables manipulation
 2. `-E` preserves GITHUB_TOKEN and GITHUB_PERSONAL_ACCESS_TOKEN
-3. These variables are passed into the agent container via the HOME directory mount
-4. The GitHub MCP server Docker container inherits them from the agent container's environment
+3. These variables are passed into the copilot container via the HOME directory mount
+4. The GitHub MCP server Docker container inherits them from the copilot container's environment
 
 ### Troubleshooting
 
@@ -548,7 +546,7 @@ The firewall implements comprehensive logging at two levels:
 ### Key Files
 
 - `src/squid-config.ts` - Generates Squid config with custom `firewall_detailed` logformat
-- `containers/agent/setup-iptables.sh` - Configures iptables LOG rules for rejected traffic
+- `containers/copilot/setup-iptables.sh` - Configures iptables LOG rules for rejected traffic
 - `src/squid-config.test.ts` - Tests for logging configuration
 
 ### Squid Log Format
