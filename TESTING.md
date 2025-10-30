@@ -53,6 +53,24 @@ After running `npm run test:coverage`, coverage reports are available in the `co
 - **LCOV**: `coverage/lcov.info` for integration with CI/CD tools
 - **JSON**: `coverage/coverage-summary.json` for programmatic access
 
+### CI/CD Coverage Reporting
+
+The project includes automated test coverage reporting via GitHub Actions (`.github/workflows/test-coverage.yml`):
+
+- **Automatic PR Comments**: Coverage reports are automatically posted as comments on pull requests
+- **GitHub Actions Summary**: Each workflow run includes a coverage summary in the job output
+- **Coverage Artifacts**: Full coverage reports are uploaded as artifacts for 30 days
+- **Update Strategy**: Existing coverage comments are updated on subsequent pushes to avoid comment spam
+
+The coverage workflow runs on:
+- All pull requests to `main`
+- All pushes to `main`
+
+Required permissions:
+- `contents: read` - To checkout the repository
+- `pull-requests: write` - To post/update PR comments
+- `checks: write` - To update check status
+
 ### Coverage Thresholds
 
 The project maintains the following minimum coverage thresholds (configured in `jest.config.js`):
