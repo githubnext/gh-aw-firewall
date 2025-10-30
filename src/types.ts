@@ -4,7 +4,7 @@
 
 export interface WrapperConfig {
   allowedDomains: string[];
-  copilotCommand: string;
+  agentCommand: string;
   logLevel: LogLevel;
   keepContainers: boolean;
   workDir: string;
