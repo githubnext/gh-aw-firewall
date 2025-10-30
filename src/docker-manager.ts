@@ -46,7 +46,7 @@ async function getExistingDockerSubnets(): Promise<string[]> {
  * Checks if two subnets overlap
  * Returns true if the new subnet conflicts with an existing subnet
  */
-function subnetsOverlap(subnet1: string, subnet2: string): boolean {
+export function subnetsOverlap(subnet1: string, subnet2: string): boolean {
   // Parse CIDR notation: "172.17.0.0/16" -> ["172.17.0.0", "16"]
   const [ip1, cidr1] = subnet1.split('/');
   const [ip2, cidr2] = subnet2.split('/');
