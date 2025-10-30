@@ -3,7 +3,7 @@ import { WrapperConfig } from './types';
 
 const baseConfig: WrapperConfig = {
   allowedDomains: ['github.com'],
-  copilotCommand: 'echo "hello"',
+  runnerCommand: 'echo "hello"',
   logLevel: 'info',
   keepContainers: false,
   workDir: '/tmp/awf-test',
@@ -35,8 +35,8 @@ describe('runMainWorkflow', () => {
       startContainers: jest.fn().mockImplementation(async () => {
         callOrder.push('startContainers');
       }),
-      runCopilotCommand: jest.fn().mockImplementation(async () => {
-        callOrder.push('runCopilotCommand');
+      runRunnerCommand: jest.fn().mockImplementation(async () => {
+        callOrder.push('runRunnerCommand');
         return { exitCode: 0 };
       }),
     };
@@ -55,7 +55,7 @@ describe('runMainWorkflow', () => {
       'setupHostIptables',
       'writeConfigs',
       'startContainers',
-      'runCopilotCommand',
+      'runRunnerCommand',
       'performCleanup',
     ]);
     expect(exitCode).toBe(0);
@@ -79,8 +79,8 @@ describe('runMainWorkflow', () => {
       startContainers: jest.fn().mockImplementation(async () => {
         callOrder.push('startContainers');
       }),
-      runCopilotCommand: jest.fn().mockImplementation(async () => {
-        callOrder.push('runCopilotCommand');
+      runRunnerCommand: jest.fn().mockImplementation(async () => {
+        callOrder.push('runRunnerCommand');
         return { exitCode: 42 };
       }),
     };
@@ -100,7 +100,7 @@ describe('runMainWorkflow', () => {
       'setupHostIptables',
       'writeConfigs',
       'startContainers',
-      'runCopilotCommand',
+      'runRunnerCommand',
       'performCleanup',
     ]);
     expect(logger.warn).toHaveBeenCalledWith('Command completed with exit code: 42');

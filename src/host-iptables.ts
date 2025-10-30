@@ -26,12 +26,12 @@ async function getNetworkBridgeName(): Promise<string | null> {
 
 /**
  * Creates the dedicated firewall network if it doesn't exist
- * Returns the Squid and Copilot IPs
+ * Returns the Squid and Runner IPs
  */
 export async function ensureFirewallNetwork(): Promise<{
   subnet: string;
   squidIp: string;
-  copilotIp: string;
+  runnerIp: string;
 }> {
   logger.debug(`Ensuring firewall network '${NETWORK_NAME}' exists...`);
 
@@ -63,7 +63,7 @@ export async function ensureFirewallNetwork(): Promise<{
   return {
     subnet: NETWORK_SUBNET,
     squidIp: '172.30.0.10',
-    copilotIp: '172.30.0.20',
+    runnerIp: '172.30.0.20',
   };
 }
 

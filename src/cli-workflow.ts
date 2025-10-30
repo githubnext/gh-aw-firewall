@@ -5,7 +5,7 @@ export interface WorkflowDependencies {
   setupHostIptables: (squidIp: string, port: number) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
   startContainers: (workDir: string, allowedDomains: string[]) => Promise<void>;
-  runCopilotCommand: (
+  runRunnerCommand: (
     workDir: string,
     allowedDomains: string[]
   ) => Promise<{ exitCode: number }>;
@@ -52,8 +52,8 @@ export async function runMainWorkflow(
   await dependencies.startContainers(config.workDir, config.allowedDomains);
   onContainersStarted?.();
 
-  // Step 3: Wait for copilot to complete
-  const result = await dependencies.runCopilotCommand(config.workDir, config.allowedDomains);
+  // Step 3: Wait for runner to complete
+  const result = await dependencies.runRunnerCommand(config.workDir, config.allowedDomains);
 
   // Step 4: Cleanup (logs will be preserved automatically if they exist)
   await performCleanup();

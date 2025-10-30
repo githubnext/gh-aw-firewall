@@ -77,7 +77,7 @@ export function subnetsOverlap(subnet1: string, subnet2: string): boolean {
  * Generates a random subnet in Docker's private IP range that doesn't conflict with existing networks
  * Uses 172.16-31.x.0/24 range (Docker's default bridge network range)
  */
-async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; copilotIp: string }> {
+async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; runnerIp: string }> {
   const existingSubnets = await getExistingDockerSubnets();
   const MAX_RETRIES = 50;
 
@@ -94,8 +94,8 @@ async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string
 
     if (!hasConflict) {
       const squidIp = `172.${secondOctet}.${thirdOctet}.10`;
-      const copilotIp = `172.${secondOctet}.${thirdOctet}.20`;
-      return { subnet, squidIp, copilotIp };
+      const runnerIp = `172.${secondOctet}.${thirdOctet}.20`;
+      return { subnet, squidIp, runnerIp };
     }
 
     logger.debug(`Subnet ${subnet} conflicts with existing network, retrying... (attempt ${attempt + 1}/${MAX_RETRIES})`);
@@ -113,7 +113,7 @@ async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; copilotIp: string }
+  networkConfig: { subnet: string; squidIp: string; runnerIp: string }
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
 
@@ -154,7 +154,7 @@ export function generateDockerCompose(
     };
   }
 
-  // Build environment variables for copilot container
+  // Build environment variables for runner container
   // System variables that must be overridden or excluded (would break container operation)
   const EXCLUDED_ENV_VARS = new Set([
     'PATH',           // Must use container's PATH
@@ -205,18 +205,18 @@ export function generateDockerCompose(
     Object.assign(environment, config.additionalEnv);
   }
 
-  // Copilot service configuration
-  const copilotService: any = {
-    container_name: 'awf-copilot',
+  // Runner service configuration
+  const runnerService: any = {
+    container_name: 'awf-runner',
     networks: {
       'awf-net': {
-        ipv4_address: networkConfig.copilotIp,
+        ipv4_address: networkConfig.runnerIp,
       },
     },
     dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
     volumes: [
-      // Mount host filesystem for copilot access
+      // Mount host filesystem for runner access
       '/:/host:rw',
       '/tmp:/tmp:rw',
       `${process.env.HOME}:${process.env.HOME}:rw`,
@@ -227,8 +227,8 @@ export function generateDockerCompose(
       // Override host's .docker directory with clean config to prevent Docker CLI
       // from reading host's context (e.g., desktop-linux pointing to wrong socket)
       `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
-      // Mount copilot logs directory to workDir for persistence
-      `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
+      // Mount runner logs directory to workDir for persistence
+      `${config.workDir}/runner-logs:${process.env.HOME}/.copilot/logs:rw`,
     ],
     environment,
     depends_on: {
@@ -240,15 +240,15 @@ export function generateDockerCompose(
     stdin_open: true,
     tty: false, // Disable TTY to prevent ANSI escape sequences in logs
     // Escape $ with $$ for Docker Compose variable interpolation
-    command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
+    command: ['/bin/bash', '-c', config.runnerCommand.replace(/\$/g, '$$$$')],
   };
 
   // Use GHCR image or build locally
   if (useGHCR) {
-    copilotService.image = `${registry}/copilot:${tag}`;
+    runnerService.image = `${registry}/runner:${tag}`;
   } else {
-    copilotService.build = {
-      context: path.join(projectRoot, 'containers/copilot'),
+    runnerService.build = {
+      context: path.join(projectRoot, 'containers/runner'),
       dockerfile: 'Dockerfile',
     };
   }
@@ -256,7 +256,7 @@ export function generateDockerCompose(
   return {
     services: {
       'squid-proxy': squidService,
-      'copilot': copilotService,
+      'runner': runnerService,
     },
     networks: {
       'awf-net': {
@@ -295,12 +295,12 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   );
   logger.debug(`Docker config written to: ${dockerConfigDir}/config.json`);
 
-  // Create copilot logs directory for persistence
-  const copilotLogsDir = path.join(config.workDir, 'copilot-logs');
-  if (!fs.existsSync(copilotLogsDir)) {
-    fs.mkdirSync(copilotLogsDir, { recursive: true });
+  // Create runner logs directory for persistence
+  const runnerLogsDir = path.join(config.workDir, 'runner-logs');
+  if (!fs.existsSync(runnerLogsDir)) {
+    fs.mkdirSync(runnerLogsDir, { recursive: true });
   }
-  logger.debug(`Copilot logs directory created at: ${copilotLogsDir}`);
+  logger.debug(`Runner logs directory created at: ${runnerLogsDir}`);
 
   // Create squid logs directory for persistence
   // Note: Squid runs as user 'proxy' (UID 13, GID 13 in ubuntu/squid image)
@@ -315,9 +315,9 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const networkConfig = {
     subnet: '172.30.0.0/24',
     squidIp: '172.30.0.10',
-    copilotIp: '172.30.0.20',
+    runnerIp: '172.30.0.20',
   };
-  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, copilot: ${networkConfig.copilotIp})`);
+  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, runner: ${networkConfig.runnerIp})`);
 
   // Write Squid config
   const squidConfig = generateSquidConfig({
@@ -408,7 +408,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
   // This handles orphaned containers from failed/interrupted previous runs
   logger.debug('Removing any existing containers with conflicting names...');
   try {
-    await execa('docker', ['rm', '-f', 'awf-squid', 'awf-copilot'], {
+    await execa('docker', ['rm', '-f', 'awf-squid', 'awf-runner'], {
       reject: false,
     });
   } catch (error) {
@@ -481,15 +481,15 @@ export async function startContainers(workDir: string, allowedDomains: string[])
 }
 
 /**
- * Runs the copilot command in the container and reports any blocked domains
+ * Runs the runner command in the container and reports any blocked domains
  */
-export async function runCopilotCommand(workDir: string, allowedDomains: string[]): Promise<{ exitCode: number; blockedDomains: string[] }> {
-  logger.info('Executing copilot command...');
+export async function runRunnerCommand(workDir: string, allowedDomains: string[]): Promise<{ exitCode: number; blockedDomains: string[] }> {
+  logger.info('Executing runner command...');
 
   try {
     // Stream logs in real-time using docker logs -f (follow mode)
     // Run this in the background and wait for the container to exit separately
-    const logsProcess = execa('docker', ['logs', '-f', 'awf-copilot'], {
+    const logsProcess = execa('docker', ['logs', '-f', 'awf-runner'], {
       stdio: 'inherit',
       reject: false,
     });
@@ -497,7 +497,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
     // Wait for the container to exit (this will run concurrently with log streaming)
     const { stdout: exitCodeStr } = await execa('docker', [
       'wait',
-      'awf-copilot',
+      'awf-runner',
     ]);
 
     const exitCode = parseInt(exitCodeStr.trim(), 10);
@@ -505,7 +505,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
     // Wait for the logs process to finish (it should exit automatically when container stops)
     await logsProcess;
 
-    logger.debug(`Copilot exit code: ${exitCode}`);
+    logger.debug(`Runner exit code: ${exitCode}`);
 
     // Small delay to ensure Squid logs are flushed to disk
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -554,7 +554,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
 
     return { exitCode, blockedDomains: blockedTargets.map(b => b.domain) };
   } catch (error) {
-    logger.error('Failed to run copilot command:', error);
+    logger.error('Failed to run runner command:', error);
     throw error;
   }
 }
@@ -584,7 +584,7 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
 
 /**
  * Cleans up temporary files
- * Preserves copilot logs by moving them to a persistent location before cleanup
+ * Preserves runner logs by moving them to a persistent location before cleanup
  */
 export async function cleanup(workDir: string, keepFiles: boolean): Promise<void> {
   if (keepFiles) {
@@ -597,15 +597,15 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
     if (fs.existsSync(workDir)) {
       const timestamp = path.basename(workDir).replace('awf-', '');
 
-      // Preserve copilot logs before cleanup by moving them to /tmp
-      const copilotLogsDir = path.join(workDir, 'copilot-logs');
-      if (fs.existsSync(copilotLogsDir) && fs.readdirSync(copilotLogsDir).length > 0) {
-        const preservedLogsDir = path.join(os.tmpdir(), `copilot-logs-${timestamp}`);
+      // Preserve runner logs before cleanup by moving them to /tmp
+      const runnerLogsDir = path.join(workDir, 'runner-logs');
+      if (fs.existsSync(runnerLogsDir) && fs.readdirSync(runnerLogsDir).length > 0) {
+        const preservedLogsDir = path.join(os.tmpdir(), `runner-logs-${timestamp}`);
         try {
-          fs.renameSync(copilotLogsDir, preservedLogsDir);
-          logger.info(`Copilot logs preserved at: ${preservedLogsDir}`);
+          fs.renameSync(runnerLogsDir, preservedLogsDir);
+          logger.info(`Runner logs preserved at: ${preservedLogsDir}`);
         } catch (error) {
-          logger.debug('Could not preserve copilot logs:', error);
+          logger.debug('Could not preserve runner logs:', error);
         }
       }
 

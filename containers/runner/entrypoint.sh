@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "[entrypoint] Agentic Workflow Firewall - Copilot Container"
+echo "[entrypoint] Agentic Workflow Firewall - Runner Container"
 echo "[entrypoint] =================================="
 
 # Fix DNS configuration - ensure external DNS works alongside Docker's embedded DNS
