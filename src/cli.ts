@@ -19,21 +19,7 @@ import {
   cleanupHostIptables,
   cleanupFirewallNetwork,
 } from './host-iptables';
-
-/**
- * Redacts sensitive information from command strings
- */
-function redactSecrets(command: string): string {
-  return command
-    // Redact Authorization: Bearer <token>
-    .replace(/(Authorization:\s*Bearer\s+)(\S+)/gi, '$1***REDACTED***')
-    // Redact Authorization: <token> (non-Bearer)
-    .replace(/(Authorization:\s+(?!Bearer\s))(\S+)/gi, '$1***REDACTED***')
-    // Redact tokens in environment variables (TOKEN, SECRET, PASSWORD, KEY, API_KEY, etc)
-    .replace(/(\w*(?:TOKEN|SECRET|PASSWORD|KEY|AUTH)\w*)=(\S+)/gi, '$1=***REDACTED***')
-    // Redact GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
-    .replace(/\b(gh[pousr]_[a-zA-Z0-9]{36,255})/g, '***REDACTED***');
-}
+import { redactSecrets } from './redact-secrets';
 
 const program = new Command();
 
