@@ -58,7 +58,7 @@ jobs:
           BRANCHES_TOTAL=$(echo "$COVERAGE_JSON" | jq -r '.total.branches.total')
           
           # Create summary for GitHub Actions Summary
-          echo "## Test Coverage Report 📊" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Coverage | Covered/Total |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|----------|---------------|" >> $GITHUB_STEP_SUMMARY
@@ -68,17 +68,8 @@ jobs:
           echo "| **Branches** | ${BRANCHES_PCT}% | ${BRANCHES_COVERED}/${BRANCHES_TOTAL} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Determine coverage status emoji
-          if (( $(echo "$LINES_PCT >= 80" | bc -l) )); then
-            EMOJI="✅"
-          elif (( $(echo "$LINES_PCT >= 60" | bc -l) )); then
-            EMOJI="⚠️"
-          else
-            EMOJI="❌"
-          fi
-          
           # Create PR comment body
-          COMMENT_BODY="## Test Coverage Report ${EMOJI}
+          COMMENT_BODY="## Test Coverage Report
 
           | Metric | Coverage | Covered/Total |
           |--------|----------|---------------|
