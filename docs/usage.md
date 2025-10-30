@@ -8,7 +8,7 @@ sudo awf [options] <command>
 Options:
   --allow-domains <domains>  Comma-separated list of allowed domains (required)
                              Example: github.com,api.github.com,arxiv.org
-  --log-level <level>        Log level: debug, info, warn, error (default: info)
+  --log-level <level>        Log level: trace, debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
   -V, --version              Output the version number

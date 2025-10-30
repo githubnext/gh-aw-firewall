@@ -136,7 +136,7 @@ The codebase follows a modular architecture with clear separation of concerns:
    - `SquidConfig`, `DockerComposeConfig`: Typed configuration objects
 
 5. **Logging** (`src/logger.ts`)
-   - Singleton logger with configurable log levels (debug, info, warn, error)
+   - Singleton logger with configurable log levels (trace, debug, info, warn, error)
    - Uses `chalk` for colored output
    - All logs go to stderr (console.error) to avoid interfering with command stdout
 
@@ -362,7 +362,7 @@ sudo cat /tmp/squid-logs-<timestamp>/access.log
 
 - Tests use Jest (`npm test`)
 - Currently no test files exist (tsconfig excludes `**/*.test.ts`)
-- Integration testing: Run commands with `--log-level debug` and `--keep-containers` to inspect generated configs and container logs
+- Integration testing: Run commands with `--log-level debug` or `--log-level trace` and `--keep-containers` to inspect generated configs and container logs
 
 ## MCP Server Configuration for Copilot CLI
 

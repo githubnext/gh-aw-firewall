@@ -60,7 +60,7 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 - `SquidConfig`, `DockerComposeConfig`: Typed configuration objects
 
 ### 5. Logging (`src/logger.ts`)
-- Singleton logger with configurable log levels (debug, info, warn, error)
+- Singleton logger with configurable log levels (trace, debug, info, warn, error)
 - Uses `chalk` for colored output
 - All logs go to stderr (console.error) to avoid interfering with command stdout
 
