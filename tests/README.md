@@ -14,27 +14,33 @@ This directory contains comprehensive integration tests that verify firewall beh
   - Localhost connectivity
   - Container lifecycle management
 
-- **Robustness Tests** (`integration/robustness.test.ts`) - ~40 tests
-  - Happy-path basics (exact domains, subdomains, case insensitivity)
-  - Deny cases (IP literals, non-standard ports)
-  - Redirect behavior (cross-domain vs same-domain)
-  - Protocol & transport edges (HTTP/2, DoH, bypass attempts)
-  - IPv4/IPv6 parity
-  - Git operations
-  - Security corner cases
-  - Observability (audit log validation)
+- **Robustness Tests** - 20 tests split across 3 files for parallel execution:
+  - `integration/robustness-basics.test.ts` (9 tests)
+    - Happy-path basics (exact domains, subdomains, case insensitivity)
+    - Deny cases (IP literals, non-standard ports)
+    - Redirect behavior (cross-domain vs same-domain)
+  - `integration/robustness-protocol.test.ts` (7 tests)
+    - Protocol & transport edges (HTTP/2, DoH, bypass attempts)
+    - Security corner cases
+  - `integration/robustness-advanced.test.ts` (4 tests)
+    - IPv4/IPv6 parity
+    - Git operations
+    - Observability (audit log validation)
 
-- **Docker Egress Tests** (`integration/docker-egress.test.ts`) - ~20 tests
-  - Basic container egress (allow/block)
-  - Network modes (bridge, host, none, custom)
-  - DNS controls from containers
-  - Proxy pivot attempts
-  - Container-to-container bounce
-  - UDP, QUIC, multicast from containers
-  - Metadata & link-local protection
-  - Privilege & capability abuse
-  - Direct IP and SNI/Host mismatch
-  - IPv6 from containers
+- **Docker Egress Tests** - 19 tests split across 3 files for parallel execution:
+  - `integration/docker-egress-basic.test.ts` (6 tests)
+    - Basic container egress (allow/block)
+    - Network modes (bridge, host, none, custom)
+  - `integration/docker-egress-intermediate.test.ts` (6 tests)
+    - DNS controls from containers
+    - Proxy pivot attempts
+    - Container-to-container bounce
+    - UDP, QUIC, multicast from containers
+  - `integration/docker-egress-advanced.test.ts` (7 tests)
+    - Metadata & link-local protection
+    - Privilege & capability abuse
+    - Direct IP and SNI/Host mismatch
+    - IPv6 from containers
 
 ## Test Structure
 
@@ -42,8 +48,12 @@ This directory contains comprehensive integration tests that verify firewall beh
 tests/
 ├── integration/          # Integration test suites
 │   ├── basic-firewall.test.ts
-│   ├── robustness.test.ts
-│   └── docker-egress.test.ts
+│   ├── robustness-basics.test.ts
+│   ├── robustness-protocol.test.ts
+│   ├── robustness-advanced.test.ts
+│   ├── docker-egress-basic.test.ts
+│   ├── docker-egress-intermediate.test.ts
+│   └── docker-egress-advanced.test.ts
 ├── fixtures/             # Reusable test utilities
 │   ├── cleanup.ts        # Docker resource cleanup
 │   ├── awf-runner.ts     # Execute awf commands
@@ -102,11 +112,16 @@ npm run test:integration
 # Run basic firewall tests
 npm run test:integration -- basic-firewall
 
-# Run Docker egress tests
+# Run all Docker egress tests
 npm run test:integration -- docker-egress
 
-# Run robustness tests
+# Run all robustness tests
 npm run test:integration -- robustness
+
+# Run specific split test suites
+npm run test:integration -- robustness-basics
+npm run test:integration -- robustness-protocol
+npm run test:integration -- docker-egress-basic
 ```
 
 ### Run Single Test
@@ -276,11 +291,16 @@ The project uses TypeScript-based integration tests that run in CI via `.github/
 
 **Integration test suites:**
 - `tests/integration/basic-firewall.test.ts` - Core firewall functionality (9 tests)
-- `tests/integration/robustness.test.ts` - Edge cases and error handling (20 tests)
-- `tests/integration/docker-egress.test.ts` - Docker-in-docker egress control (19 tests)
+- `tests/integration/robustness-basics.test.ts` - Happy path & deny cases (9 tests)
+- `tests/integration/robustness-protocol.test.ts` - Protocol edges & security (7 tests)
+- `tests/integration/robustness-advanced.test.ts` - IPv6, Git, observability (4 tests)
+- `tests/integration/docker-egress-basic.test.ts` - Basic container egress (6 tests)
+- `tests/integration/docker-egress-intermediate.test.ts` - DNS, proxy, bounce (6 tests)
+- `tests/integration/docker-egress-advanced.test.ts` - Security, IPv6 (7 tests)
 
 **CI workflow:**
+- Tests run in 7 parallel jobs for faster feedback
 - All tests run with `sudo -E` for iptables manipulation
-- Tests run serially to avoid Docker resource conflicts
+- Tests run serially within each job to avoid Docker resource conflicts
 - Automatic cleanup before and after test runs
 - Test logs uploaded as artifacts on failure

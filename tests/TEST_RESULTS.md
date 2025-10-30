@@ -4,7 +4,7 @@
 
 **Date**: 2025-10-30
 **Status**: ✅ ALL TESTS PASSING
-**Total Tests**: 48 tests across 3 suites
+**Total Tests**: 48 tests across 7 suites (split for parallel execution)
 **Success Rate**: 100%
 
 ## Test Suite Results
@@ -21,35 +21,59 @@
   - Localhost connectivity
   - Container lifecycle management
 
-### 2. Robustness Tests (`robustness.test.ts`)
+### 2. Robustness Tests - Split for Parallelization
+**Total**: 20 tests split across 3 files
+
+#### 2a. Robustness Basics (`robustness-basics.test.ts`)
 - **Status**: ✅ PASSED
-- **Tests**: 20/20 passed (after fixes)
-- **Duration**: ~348 seconds (~17s per test)
+- **Tests**: 9/9 passed
 - **Coverage**:
   - Happy-path basics (exact domains, subdomains, case insensitivity)
   - Deny cases (IP literals, non-standard ports)
   - Redirect behavior
+
+#### 2b. Robustness Protocol (`robustness-protocol.test.ts`)
+- **Status**: ✅ PASSED
+- **Tests**: 7/7 passed
+- **Coverage**:
   - Protocol & transport edges (HTTP/2, DoH, bypass attempts)
+  - Security corner cases
+
+#### 2c. Robustness Advanced (`robustness-advanced.test.ts`)
+- **Status**: ✅ PASSED
+- **Tests**: 4/4 passed
+- **Coverage**:
   - IPv4/IPv6 parity
   - Git operations
-  - Security corner cases
   - Observability (audit log validation)
 
 **Fixes Applied**:
 1. **HTTP redirect test** - Changed expectation to match documented behavior (HTTP→HTTPS redirects are a known limitation)
 2. **mDNS test** - Fixed to reflect that UDP traffic is NOT blocked by the L7 HTTP/HTTPS firewall
 
-### 3. Docker Egress Tests (`docker-egress.test.ts`)
+### 3. Docker Egress Tests - Split for Parallelization
+**Total**: 19 tests split across 3 files
+
+#### 3a. Docker Egress Basic (`docker-egress-basic.test.ts`)
 - **Status**: ✅ PASSED
-- **Tests**: 19/19 passed
-- **Duration**: ~370 seconds (~19s per test)
+- **Tests**: 6/6 passed
 - **Coverage**:
   - Basic container egress (allow/block)
   - Network modes (bridge, host, none, custom)
+
+#### 3b. Docker Egress Intermediate (`docker-egress-intermediate.test.ts`)
+- **Status**: ✅ PASSED
+- **Tests**: 6/6 passed
+- **Coverage**:
   - DNS controls from containers
   - Proxy pivot attempts
   - Container-to-container bounce
   - UDP, QUIC, multicast from containers
+
+#### 3c. Docker Egress Advanced (`docker-egress-advanced.test.ts`)
+- **Status**: ✅ PASSED
+- **Tests**: 7/7 passed
+- **Coverage**:
   - Metadata & link-local protection
   - Privilege & capability abuse
   - Direct IP and SNI/Host mismatch
@@ -73,12 +97,29 @@
 
 ## Performance Metrics
 
+### Sequential Execution (Original)
 | Test Suite | Tests | Duration | Avg per Test |
 |------------|-------|----------|--------------|
 | basic-firewall | 9 | 161s | 18s |
 | robustness | 20 | 348s | 17s |
 | docker-egress | 19 | 370s | 19s |
 | **TOTAL** | **48** | **879s** | **18s** |
+
+### Parallel Execution (Split)
+Tests are now split into 7 parallel jobs for faster CI/CD feedback:
+
+| Job | Tests | Est. Duration | Speedup |
+|-----|-------|---------------|---------|
+| basic-firewall | 9 | ~161s | Same |
+| robustness-basics | 9 | ~153s | ✅ 2.3x |
+| robustness-protocol | 7 | ~119s | ✅ 2.9x |
+| robustness-advanced | 4 | ~68s | ✅ 5.1x |
+| docker-egress-basic | 6 | ~114s | ✅ 3.2x |
+| docker-egress-intermediate | 6 | ~114s | ✅ 3.2x |
+| docker-egress-advanced | 7 | ~133s | ✅ 2.8x |
+
+**Total pipeline time**: ~161s (longest job) vs ~879s (sequential)
+**Overall speedup**: ~5.5x faster
 
 ## Comparison with Bash Tests
 
@@ -87,7 +128,7 @@ The TypeScript tests provide equivalent coverage to the original bash scripts:
 | Bash Script | TypeScript Equivalent | Status |
 |-------------|----------------------|---------|
 | `test-firewall-wrapper.yml` (9 tests) | `basic-firewall.test.ts` (9 tests) | ✅ Equivalent |
-| `test-firewall-robustness.sh` (~65 tests) | `robustness.test.ts` (20 tests) + `docker-egress.test.ts` (19 tests) | ✅ Core coverage |
+| `test-firewall-robustness.sh` (~65 tests) | `robustness-*.test.ts` (20 tests) + `docker-egress-*.test.ts` (19 tests) | ✅ Core coverage |
 | `test-copilot-mcp.sh` | Not yet migrated | ⏸️ Deferred |
 
 **Note**: The TypeScript tests focus on core firewall functionality. Some edge cases from the bash robustness script were intentionally excluded to keep test runtime reasonable (~15 minutes vs ~60 minutes for full bash suite).
@@ -135,8 +176,14 @@ npm run test:integration
 
 # Specific suite
 npm run test:integration -- basic-firewall
+
+# Run all tests matching pattern (e.g., all robustness or docker-egress tests)
 npm run test:integration -- robustness
 npm run test:integration -- docker-egress
+
+# Run specific split suite
+npm run test:integration -- robustness-basics
+npm run test:integration -- docker-egress-intermediate
 
 # Single test
 npm run test:integration -- -t "Test 1: Basic connectivity"
