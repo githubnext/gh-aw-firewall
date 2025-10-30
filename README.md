@@ -59,6 +59,39 @@ Domains automatically match all subdomains:
 sudo awf --allow-domains github.com "curl https://api.github.com"  # ✓ works
 ```
 
+### Using a Domains File
+
+For longer domain lists, use a file (one domain per line):
+
+```bash
+# Create a domains file
+cat > allowed-domains.txt << EOF
+# GitHub domains
+github.com
+api.github.com
+githubusercontent.com
+
+# Other services
+googleapis.com
+arxiv.org
+EOF
+
+# Use the file
+sudo awf --allow-domains-file allowed-domains.txt "curl https://api.github.com"
+
+# Combine both methods
+sudo awf \
+  --allow-domains example.com \
+  --allow-domains-file allowed-domains.txt \
+  "curl https://api.github.com"
+```
+
+**File Format:**
+- One domain per line
+- Lines starting with `#` are treated as comments
+- Empty lines are ignored
+- Whitespace is trimmed from each line
+
 Common domain lists:
 
 ```bash
