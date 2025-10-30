@@ -1,137 +1,111 @@
 import { Command } from 'commander';
+import { parseEnvironmentVariables } from './cli';
+import { redactSecrets } from './redact-secrets';
+import { parseDomains } from './cli';
 
 describe('cli', () => {
   describe('domain parsing', () => {
     it('should split comma-separated domains correctly', () => {
-      const allowDomainsInput = 'github.com, api.github.com, npmjs.org';
+      const result = parseDomains('github.com, api.github.com, npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should handle domains without spaces', () => {
-      const allowDomainsInput = 'github.com,api.github.com,npmjs.org';
+      const result = parseDomains('github.com,api.github.com,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should filter out empty domains', () => {
-      const allowDomainsInput = 'github.com,,, api.github.com,  ,npmjs.org';
+      const result = parseDomains('github.com,,, api.github.com,  ,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should return empty array for whitespace-only input', () => {
-      const allowDomainsInput = '  ,  ,  ';
+      const result = parseDomains('  ,  ,  ');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual([]);
+      expect(result).toEqual([]);
     });
 
     it('should handle single domain', () => {
-      const allowDomainsInput = 'github.com';
+      const result = parseDomains('github.com');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com']);
+      expect(result).toEqual(['github.com']);
     });
   });
 
   describe('environment variable parsing', () => {
     it('should parse KEY=VALUE format correctly', () => {
       const envVars = ['GITHUB_TOKEN=abc123', 'API_KEY=xyz789'];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          GITHUB_TOKEN: 'abc123',
+          API_KEY: 'xyz789',
+        });
       }
-
-      expect(result).toEqual({
-        GITHUB_TOKEN: 'abc123',
-        API_KEY: 'xyz789',
-      });
     });
 
     it('should handle empty values', () => {
       const envVars = ['EMPTY_VAR='];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          EMPTY_VAR: '',
+        });
       }
-
-      expect(result).toEqual({
-        EMPTY_VAR: '',
-      });
     });
 
     it('should handle values with equals signs', () => {
       const envVars = ['BASE64_VAR=abc=def=ghi'];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          BASE64_VAR: 'abc=def=ghi',
+        });
       }
-
-      expect(result).toEqual({
-        BASE64_VAR: 'abc=def=ghi',
-      });
     });
 
     it('should reject invalid format (no equals sign)', () => {
-      const envVar = 'INVALID_VAR';
-      const match = envVar.match(/^([^=]+)=(.*)$/);
+      const envVars = ['INVALID_VAR'];
+      const result = parseEnvironmentVariables(envVars);
 
-      expect(match).toBeNull();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidVar).toBe('INVALID_VAR');
+      }
+    });
+
+    it('should handle empty array', () => {
+      const envVars: string[] = [];
+      const result = parseEnvironmentVariables(envVars);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({});
+      }
+    });
+
+    it('should return error on first invalid entry', () => {
+      const envVars = ['VALID_VAR=value', 'INVALID_VAR', 'ANOTHER_VALID=value2'];
+      const result = parseEnvironmentVariables(envVars);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidVar).toBe('INVALID_VAR');
+      }
     });
   });
 
   describe('secret redaction', () => {
-    const redactSecrets = (command: string): string => {
-      return command
-        // Redact Authorization: Bearer <token>
-        .replace(/(Authorization:\s*Bearer\s+)(\S+)/gi, '$1***REDACTED***')
-        // Redact Authorization: <token> (non-Bearer)
-        .replace(/(Authorization:\s+(?!Bearer\s))(\S+)/gi, '$1***REDACTED***')
-        // Redact tokens in environment variables
-        .replace(/(\w*(?:TOKEN|SECRET|PASSWORD|KEY|AUTH)\w*)=(\S+)/gi, '$1=***REDACTED***')
-        // Redact GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
-        .replace(/\b(gh[pousr]_[a-zA-Z0-9]{36,255})/g, '***REDACTED***');
-    };
-
     it('should redact Bearer tokens', () => {
       const command = 'curl -H "Authorization: Bearer ghp_1234567890abcdef" https://api.github.com';
       const result = redactSecrets(command);

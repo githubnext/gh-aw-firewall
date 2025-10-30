@@ -1,31 +1,8 @@
-import { generateDockerCompose } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap } from './docker-manager';
 import { WrapperConfig } from './types';
 
 describe('docker-manager', () => {
   describe('subnetsOverlap', () => {
-    // Import private function for testing by extracting logic
-    const subnetsOverlap = (subnet1: string, subnet2: string): boolean => {
-      const [ip1, cidr1] = subnet1.split('/');
-      const [ip2, cidr2] = subnet2.split('/');
-
-      const ipToNumber = (ip: string): number => {
-        return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-      };
-
-      const getNetworkRange = (ip: string, cidr: string): [number, number] => {
-        const ipNum = ipToNumber(ip);
-        const maskBits = parseInt(cidr, 10);
-        const mask = (0xffffffff << (32 - maskBits)) >>> 0;
-        const networkAddr = (ipNum & mask) >>> 0;
-        const broadcastAddr = (networkAddr | ~mask) >>> 0;
-        return [networkAddr, broadcastAddr];
-      };
-
-      const [start1, end1] = getNetworkRange(ip1, cidr1);
-      const [start2, end2] = getNetworkRange(ip2, cidr2);
-
-      return (start1 <= end2 && end1 >= start2);
-    };
 
     it('should detect overlapping subnets with same CIDR', () => {
       expect(subnetsOverlap('172.30.0.0/24', '172.30.0.0/24')).toBe(true);

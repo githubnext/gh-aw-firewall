@@ -253,8 +253,8 @@ docker run --rm --cap-add NET_ADMIN ubuntu iptables -L
 
 1. **Read the full documentation**: [README.md](../README.md)
 2. **Review the architecture**: [architecture.md](architecture.md)
-3. **Run the test suite**: `npm test`
-4. **Check GitHub Actions tests**: `.github/workflows/test-firewall-wrapper.yml` and `.github/workflows/test-copilot-mcp.yml`
+3. **Run the test suite**: `npm test` (unit tests) or `sudo npm run test:integration` (integration tests)
+4. **Check GitHub Actions tests**: `.github/workflows/test-integration.yml`
 
 ## Getting Help
 

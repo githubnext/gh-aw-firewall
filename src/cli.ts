@@ -3,7 +3,6 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
-import * as fs from 'fs';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
@@ -19,20 +18,51 @@ import {
   cleanupHostIptables,
 } from './host-iptables';
 import { runMainWorkflow } from './cli-workflow';
+import { redactSecrets } from './redact-secrets';
 
 /**
- * Redacts sensitive information from command strings
+ * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
+ * @param input - Comma-separated domain string (e.g., "github.com, api.github.com, npmjs.org")
+ * @returns Array of trimmed domain strings with empty entries filtered out
  */
-function redactSecrets(command: string): string {
-  return command
-    // Redact Authorization: Bearer <token>
-    .replace(/(Authorization:\s*Bearer\s+)(\S+)/gi, '$1***REDACTED***')
-    // Redact Authorization: <token> (non-Bearer)
-    .replace(/(Authorization:\s+(?!Bearer\s))(\S+)/gi, '$1***REDACTED***')
-    // Redact tokens in environment variables (TOKEN, SECRET, PASSWORD, KEY, API_KEY, etc)
-    .replace(/(\w*(?:TOKEN|SECRET|PASSWORD|KEY|AUTH)\w*)=(\S+)/gi, '$1=***REDACTED***')
-    // Redact GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
-    .replace(/\b(gh[pousr]_[a-zA-Z0-9]{36,255})/g, '***REDACTED***');
+export function parseDomains(input: string): string[] {
+  return input
+    .split(',')
+    .map(d => d.trim())
+    .filter(d => d.length > 0);
+}
+
+/**
+ * Result of parsing environment variables
+ */
+export interface ParseEnvResult {
+  success: true;
+  env: Record<string, string>;
+}
+
+export interface ParseEnvError {
+  success: false;
+  invalidVar: string;
+}
+
+/**
+ * Parses environment variables from an array of KEY=VALUE strings
+ * @param envVars Array of environment variable strings in KEY=VALUE format
+ * @returns ParseEnvResult with parsed key-value pairs on success, or ParseEnvError with the invalid variable on failure
+ */
+export function parseEnvironmentVariables(envVars: string[]): ParseEnvResult | ParseEnvError {
+  const result: Record<string, string> = {};
+  
+  for (const envVar of envVars) {
+    const match = envVar.match(/^([^=]+)=(.*)$/);
+    if (!match) {
+      return { success: false, invalidVar: envVar };
+    }
+    const [, key, value] = match;
+    result[key] = value;
+  }
+  
+  return { success: true, env: result };
 }
 
 const program = new Command();
@@ -97,10 +127,7 @@ program
 
     logger.setLevel(logLevel);
 
-    const allowedDomains = options.allowDomains
-      .split(',')
-      .map((d: string) => d.trim())
-      .filter((d: string) => d.length > 0);
+    const allowedDomains = parseDomains(options.allowDomains);
 
     if (allowedDomains.length === 0) {
       logger.error('At least one domain must be specified with --allow-domains');
@@ -108,17 +135,14 @@ program
     }
 
     // Parse additional environment variables from --env flags
-    const additionalEnv: Record<string, string> = {};
+    let additionalEnv: Record<string, string> = {};
     if (options.env && Array.isArray(options.env)) {
-      for (const envVar of options.env) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (!match) {
-          logger.error(`Invalid environment variable format: ${envVar} (expected KEY=VALUE)`);
-          process.exit(1);
-        }
-        const [, key, value] = match;
-        additionalEnv[key] = value;
+      const parsed = parseEnvironmentVariables(options.env);
+      if (!parsed.success) {
+        logger.error(`Invalid environment variable format: ${parsed.invalidVar} (expected KEY=VALUE)`);
+        process.exit(1);
       }
+      additionalEnv = parsed.env;
     }
 
     const config: WrapperConfig = {
@@ -219,4 +243,7 @@ program
     }
   });
 
-program.parse();
+// Only parse arguments if this file is run directly (not imported as a module)
+if (require.main === module) {
+  program.parse();
+}
