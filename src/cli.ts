@@ -9,7 +9,7 @@ import { logger } from './logger';
 import {
   writeConfigs,
   startContainers,
-  runCopilotCommand,
+  runAgentCommand,
   stopContainers,
   cleanup,
 } from './docker-manager';
@@ -117,8 +117,8 @@ program
     'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
     false
   )
-  .argument('<command>', 'Copilot command to execute (wrap in quotes)')
-  .action(async (copilotCommand: string, options) => {
+  .argument('<command>', 'Agent command to execute (wrap in quotes)')
+  .action(async (agentCommand: string, options) => {
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
@@ -148,7 +148,7 @@ program
 
     const config: WrapperConfig = {
       allowedDomains,
-      copilotCommand,
+      agentCommand,
       logLevel,
       keepContainers: options.keepContainers,
       workDir: options.workDir,
@@ -168,7 +168,7 @@ program
     // Log config with redacted secrets
     const redactedConfig = {
       ...config,
-      copilotCommand: redactSecrets(config.copilotCommand),
+      agentCommand: redactSecrets(config.agentCommand),
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
@@ -197,7 +197,7 @@ program
         // across multiple runs. Cleanup script will handle removal if needed.
       } else {
         logger.info(`Configuration files preserved at: ${config.workDir}`);
-        logger.info(`Copilot logs available at: ${config.workDir}/copilot-logs/`);
+        logger.info(`Agent logs available at: ${config.workDir}/agent-logs/`);
         logger.info(`Squid logs available at: ${config.workDir}/squid-logs/`);
         logger.info(`Host iptables rules preserved (--keep-containers enabled)`);
       }
@@ -222,7 +222,7 @@ program
           setupHostIptables,
           writeConfigs,
           startContainers,
-          runCopilotCommand,
+          runAgentCommand,
         },
         {
           logger,
