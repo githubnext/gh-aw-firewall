@@ -28,7 +28,6 @@
     "domain-whitelisting",
     "proxy",
     "squid",
-    "copilot",
     "mcp",
     "egress-control"
   ],
