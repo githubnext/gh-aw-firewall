@@ -69,11 +69,11 @@ jobs:
       - name: Build and push Copilot image
         uses: docker/build-push-action@v5
         with:
-          context: ./containers/copilot
+          context: ./containers/agent
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/copilot:${{ steps.version_early.outputs.version_number }}
-            ghcr.io/${{ github.repository }}/copilot:latest
+            ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/agent:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -153,9 +153,9 @@ jobs:
 
           Published to GitHub Container Registry:
           - `ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}`
-          - `ghcr.io/${{ github.repository }}/copilot:${{ steps.version_early.outputs.version_number }}`
+          - `ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}`
           - `ghcr.io/${{ github.repository }}/squid:latest`
-          - `ghcr.io/${{ github.repository }}/copilot:latest`
+          - `ghcr.io/${{ github.repository }}/agent:latest`
           EOF
 
       - name: Create GitHub Release

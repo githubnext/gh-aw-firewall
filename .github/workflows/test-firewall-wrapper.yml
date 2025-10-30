@@ -134,12 +134,12 @@ jobs:
           # Verify squid container is still running
           docker ps | grep awf-squid
 
-          # Verify copilot container still exists (it will have exited after running the command)
-          docker ps -a | grep awf-copilot
+          # Verify agent container still exists (it will have exited after running the command)
+          docker ps -a | grep awf-agent
 
           # Clean up manually
           docker stop awf-squid || true
-          docker rm awf-squid awf-copilot || true
+          docker rm awf-squid awf-agent || true
 
       - name: Test Summary
         if: always()

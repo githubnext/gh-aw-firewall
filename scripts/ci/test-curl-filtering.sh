@@ -70,7 +70,7 @@ test_allowed_domain() {
     # Look for lines that are just 3 digits (HTTP codes) after the curl command
     local http_code
     # Try docker compose logs format first (with container name prefix)
-    http_code=$(grep "awf-copilot.*|" "$log_file" | grep -oE '\|\s*[0-9]{3}\s*$' | grep -oE '[0-9]{3}' | tail -1 || echo "")
+    http_code=$(grep "awf-agent.*|" "$log_file" | grep -oE '\|\s*[0-9]{3}\s*$' | grep -oE '[0-9]{3}' | tail -1 || echo "")
     # If not found, try docker logs format (no prefix, just look for standalone 3-digit lines after Executing command)
     if [ -z "$http_code" ]; then
       http_code=$(grep -A 2 "Executing command:" "$log_file" | grep -oE '^\s*[0-9]{3}\s*$' | grep -oE '[0-9]{3}' | tail -1 || echo "000")
