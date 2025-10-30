@@ -3,7 +3,6 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
-import * as fs from 'fs';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
