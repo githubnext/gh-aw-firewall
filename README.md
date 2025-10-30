@@ -77,6 +77,48 @@ Common domain lists:
 - Data exfiltration via HTTP/HTTPS
 - MCP servers accessing unexpected endpoints
 
+## Development & Testing
+
+### Running Tests
+
+```bash
+# Install dependencies
+npm install
+
+# Run all tests
+npm test
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### Test Coverage
+
+The project maintains comprehensive test coverage. Current coverage status:
+
+- **Logger**: 100% coverage
+- **Squid Config**: 100% coverage
+- **CLI Workflow**: 100% coverage
+- **Overall**: 38%+ statement coverage with established thresholds
+
+For detailed testing information, see [TESTING.md](TESTING.md).
+
+### Building
+
+```bash
+# Build TypeScript
+npm run build
+
+# Run linter
+npm run lint
+
+# Clean build artifacts
+npm run clean
+```
+
 ## Contributing
 
 Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
