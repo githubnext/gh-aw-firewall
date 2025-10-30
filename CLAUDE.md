@@ -31,24 +31,23 @@ This approach prevents trial-and-error debugging in CI (which wastes runner time
 Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions runs:
 
 ```bash
-# Download logs from the latest test-copilot-mcp workflow run (default)
+# Download logs from the latest integration test workflow run (default)
 ./scripts/download-latest-artifact.sh
 
 # Download logs from a specific run ID
 ./scripts/download-latest-artifact.sh 1234567890
 
-# Download from test-firewall-wrapper workflow (latest run)
-./scripts/download-latest-artifact.sh "" ".github/workflows/test-firewall-wrapper.yml" "firewall-test-logs"
+# Download from test-integration workflow (latest run)
+./scripts/download-latest-artifact.sh "" ".github/workflows/test-integration.yml" "integration-test-logs"
 ```
 
 **Parameters:**
 - `RUN_ID` (optional): Specific workflow run ID, or empty string for latest run
-- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-copilot-mcp.yml`)
-- `ARTIFACT_NAME` (optional): Artifact name (default: `copilot-mcp-logs`)
+- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-integration.yml`)
+- `ARTIFACT_NAME` (optional): Artifact name (default: `integration-test-logs`)
 
-**Common artifact names:**
-- `copilot-mcp-logs` - test-copilot-mcp.yml
-- `firewall-test-logs` - test-firewall-wrapper.yml
+**Artifact name:**
+- `integration-test-logs` - test-integration.yml
 
 This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Requires GitHub CLI (`gh`) authenticated with the repository.
 
