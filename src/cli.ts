@@ -19,6 +19,7 @@ import {
   cleanupHostIptables,
   cleanupFirewallNetwork,
 } from './host-iptables';
+import { redactSecrets } from './redact-secrets';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
