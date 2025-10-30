@@ -18,8 +18,8 @@
 | File | Statements | Branches | Functions | Lines | Tests |
 |------|------------|----------|-----------|-------|-------|
 | `logger.ts` | 100% (16/16) | 100% (6/6) | 100% (8/8) | 100% (16/16) | 33 |
-| `squid-config.ts` | 100% (13/13) | 100% (5/5) | 100% (5/5) | 100% (12/12) | 495 |
-| `cli-workflow.ts` | 100% (16/16) | 100% (2/2) | 100% (1/1) | 100% (16/16) | 109 |
+| `squid-config.ts` | 100% (13/13) | 100% (5/5) | 100% (5/5) | 100% (12/12) | 41 |
+| `cli-workflow.ts` | 100% (16/16) | 100% (2/2) | 100% (1/1) | 100% (16/16) | 2 |
 
 ### ⚠️ Good Coverage (50-80%)
 
@@ -59,11 +59,11 @@
 ### Test Files
 
 1. `logger.test.ts` - 33 tests (NEW)
-2. `squid-config.test.ts` - Comprehensive
-3. `cli-workflow.test.ts` - Complete coverage
-4. `host-iptables.test.ts` - 428 lines
-5. `docker-manager.test.ts` - 290 lines
-6. `cli.test.ts` - 288 lines
+2. `squid-config.test.ts` - 41 tests
+3. `cli-workflow.test.ts` - 2 tests (100% coverage)
+4. `host-iptables.test.ts` - 12 tests
+5. `docker-manager.test.ts` - 23 tests
+6. `cli.test.ts` - 24 tests
 
 ## Coverage Reports
 
