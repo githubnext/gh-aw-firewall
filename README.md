@@ -44,6 +44,11 @@ sudo -E awf \
   --allow-domains github.com,api.github.com,googleapis.com \
   'copilot --prompt "List my repositories"'
 
+# With Claude Code (Anthropic)
+sudo -E awf \
+  --allow-domains anthropic.com \
+  'node claude-script.js'
+
 # Docker-in-Docker (spawned containers inherit firewall)
 sudo awf \
   --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
@@ -65,9 +70,22 @@ Common domain lists:
 # For GitHub Copilot with GitHub API
 --allow-domains github.com,api.github.com,githubusercontent.com,googleapis.com
 
+# For Claude Code (Anthropic)
+--allow-domains anthropic.com
+
 # For MCP servers
 --allow-domains github.com,arxiv.org,example.com
 ```
+
+## Documentation
+
+- **[Quick Start Guide](docs/quickstart.md)** - Get started quickly
+- **[Usage Guide](docs/usage.md)** - Detailed usage instructions
+- **[Claude Code Integration](docs/claude_code.md)** - Using with Anthropic's Claude API
+- **[GitHub Actions Integration](docs/github_actions.md)** - CI/CD setup
+- **[Architecture](docs/architecture.md)** - System design and components
+- **[Security](docs/security.md)** - Security considerations
+- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 
 
 ## Security Considerations
