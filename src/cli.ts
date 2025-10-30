@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
@@ -30,6 +31,20 @@ export function parseDomains(input: string): string[] {
     .split(',')
     .map(d => d.trim())
     .filter(d => d.length > 0);
+}
+
+/**
+ * Parses domains from a file, one domain per line
+ * @param filePath - Path to the file containing domains
+ * @returns Array of trimmed domain strings with empty lines and comments filtered out
+ * @throws Error if file cannot be read
+ */
+export function parseDomainsFromFile(filePath: string): string[] {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !line.startsWith('#'));
 }
 
 /**
@@ -71,9 +86,13 @@ program
   .name('awf')
   .description('Network firewall for agentic workflows with domain whitelisting')
   .version('0.1.0')
-  .requiredOption(
+  .option(
     '--allow-domains <domains>',
     'Comma-separated list of allowed domains (e.g., github.com,api.github.com)'
+  )
+  .option(
+    '--allow-domains-file <path>',
+    'Path to file containing allowed domains (one per line)'
   )
   .option(
     '--log-level <level>',
@@ -127,10 +146,31 @@ program
 
     logger.setLevel(logLevel);
 
-    const allowedDomains = parseDomains(options.allowDomains);
+    // Parse domains from both sources
+    let allowedDomains: string[] = [];
+    
+    // Parse from --allow-domains flag if provided
+    if (options.allowDomains) {
+      allowedDomains = parseDomains(options.allowDomains);
+    }
+    
+    // Parse from --allow-domains-file if provided
+    if (options.allowDomainsFile) {
+      try {
+        const domainsFromFile = parseDomainsFromFile(options.allowDomainsFile);
+        allowedDomains = [...allowedDomains, ...domainsFromFile];
+      } catch (error) {
+        logger.error(`Failed to read domains file: ${options.allowDomainsFile}`);
+        logger.error(String(error));
+        process.exit(1);
+      }
+    }
+
+    // Remove duplicates
+    allowedDomains = [...new Set(allowedDomains)];
 
     if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains');
+      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
       process.exit(1);
     }
 
