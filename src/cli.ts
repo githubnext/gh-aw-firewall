@@ -17,8 +17,21 @@ import {
   ensureFirewallNetwork,
   setupHostIptables,
   cleanupHostIptables,
-  cleanupFirewallNetwork,
 } from './host-iptables';
+import { runMainWorkflow } from './cli-workflow';
+import { redactSecrets } from './redact-secrets';
+
+/**
+ * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
+ * @param input - Comma-separated domain string (e.g., "github.com, api.github.com, npmjs.org")
+ * @returns Array of trimmed domain strings with empty entries filtered out
+ */
+export function parseDomains(input: string): string[] {
+  return input
+    .split(',')
+    .map(d => d.trim())
+    .filter(d => d.length > 0);
+}
 
 /**
  * Redacts sensitive information from command strings
@@ -130,10 +143,7 @@ program
 
     logger.setLevel(logLevel);
 
-    const allowedDomains = options.allowDomains
-      .split(',')
-      .map((d: string) => d.trim())
-      .filter((d: string) => d.length > 0);
+    const allowedDomains = parseDomains(options.allowDomains);
 
     if (allowedDomains.length === 0) {
       logger.error('At least one domain must be specified with --allow-domains');
@@ -220,32 +230,27 @@ program
     });
 
     try {
-      // Step 0: Setup host-level network and iptables
-      logger.info('Setting up host-level firewall network and iptables rules...');
-      const networkConfig = await ensureFirewallNetwork();
-      await setupHostIptables(networkConfig.squidIp, 3128);
-      hostIptablesSetup = true;
+      exitCode = await runMainWorkflow(
+        config,
+        {
+          ensureFirewallNetwork,
+          setupHostIptables,
+          writeConfigs,
+          startContainers,
+          runCopilotCommand,
+        },
+        {
+          logger,
+          performCleanup,
+          onHostIptablesSetup: () => {
+            hostIptablesSetup = true;
+          },
+          onContainersStarted: () => {
+            containersStarted = true;
+          },
+        }
+      );
 
-      // Step 1: Write configuration files
-      logger.info('Generating configuration files...');
-      await writeConfigs(config);
-
-      // Step 2: Start containers
-      await startContainers(config.workDir, config.allowedDomains);
-      containersStarted = true;
-
-      // Step 3: Wait for copilot to complete
-      const result = await runCopilotCommand(config.workDir, config.allowedDomains);
-      exitCode = result.exitCode;
-
-      // Step 4: Cleanup (logs will be preserved automatically if they exist)
-      await performCleanup();
-
-      if (exitCode === 0) {
-        logger.success(`Command completed successfully`);
-      } else {
-        logger.warn(`Command completed with exit code: ${exitCode}`);
-      }
       process.exit(exitCode);
     } catch (error) {
       logger.error('Fatal error:', error);

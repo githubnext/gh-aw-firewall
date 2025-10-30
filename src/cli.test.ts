@@ -1,61 +1,38 @@
 import { Command } from 'commander';
 import { parseEnvironmentVariables } from './cli';
+import { redactSecrets } from './redact-secrets';
+import { parseDomains } from './cli';
 
 describe('cli', () => {
   describe('domain parsing', () => {
     it('should split comma-separated domains correctly', () => {
-      const allowDomainsInput = 'github.com, api.github.com, npmjs.org';
+      const result = parseDomains('github.com, api.github.com, npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should handle domains without spaces', () => {
-      const allowDomainsInput = 'github.com,api.github.com,npmjs.org';
+      const result = parseDomains('github.com,api.github.com,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should filter out empty domains', () => {
-      const allowDomainsInput = 'github.com,,, api.github.com,  ,npmjs.org';
+      const result = parseDomains('github.com,,, api.github.com,  ,npmjs.org');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
 
     it('should return empty array for whitespace-only input', () => {
-      const allowDomainsInput = '  ,  ,  ';
+      const result = parseDomains('  ,  ,  ');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual([]);
+      expect(result).toEqual([]);
     });
 
     it('should handle single domain', () => {
-      const allowDomainsInput = 'github.com';
+      const result = parseDomains('github.com');
 
-      const domains = allowDomainsInput
-        .split(',')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
-
-      expect(domains).toEqual(['github.com']);
+      expect(result).toEqual(['github.com']);
     });
   });
 
@@ -129,18 +106,6 @@ describe('cli', () => {
   });
 
   describe('secret redaction', () => {
-    const redactSecrets = (command: string): string => {
-      return command
-        // Redact Authorization: Bearer <token>
-        .replace(/(Authorization:\s*Bearer\s+)(\S+)/gi, '$1***REDACTED***')
-        // Redact Authorization: <token> (non-Bearer)
-        .replace(/(Authorization:\s+(?!Bearer\s))(\S+)/gi, '$1***REDACTED***')
-        // Redact tokens in environment variables
-        .replace(/(\w*(?:TOKEN|SECRET|PASSWORD|KEY|AUTH)\w*)=(\S+)/gi, '$1=***REDACTED***')
-        // Redact GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
-        .replace(/\b(gh[pousr]_[a-zA-Z0-9]{36,255})/g, '***REDACTED***');
-    };
-
     it('should redact Bearer tokens', () => {
       const command = 'curl -H "Authorization: Bearer ghp_1234567890abcdef" https://api.github.com';
       const result = redactSecrets(command);
