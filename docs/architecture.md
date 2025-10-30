@@ -27,7 +27,7 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 │  │  └────────────────────────────┘  │   │
 │  │           ▲                       │   │
 │  │  ┌────────┼───────────────────┐  │   │
-│  │  │ Copilot Container          │  │   │
+│  │  │ Runner Container          │  │   │
 │  │  │ - Full filesystem access   │  │   │
 │  │  │ - iptables redirect        │  │   │
 │  │  │ - Spawns MCP servers       │  │   │
@@ -47,13 +47,13 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 
 ### 2. Configuration Generation
 - **`src/squid-config.ts`**: Generates Squid proxy configuration with domain ACL rules
-- **`src/docker-manager.ts`**: Generates Docker Compose YAML with two services (squid-proxy, copilot)
+- **`src/docker-manager.ts`**: Generates Docker Compose YAML with two services (squid-proxy, runner)
 - All configs are written to a temporary work directory (default: `/tmp/awf-<timestamp>`)
 
 ### 3. Docker Management (`src/docker-manager.ts`)
 - Manages container lifecycle using `execa` to run docker-compose commands
 - Fixed network topology: `172.30.0.0/24` subnet, Squid at `172.30.0.10`, Copilot at `172.30.0.20`
-- Squid container uses healthcheck; Copilot waits for Squid to be healthy before starting
+- Squid container uses healthcheck; Runner waits for Squid to be healthy before starting
 
 ### 4. Type Definitions (`src/types.ts`)
 - `WrapperConfig`: Main configuration interface
@@ -74,13 +74,13 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 - **Network:** Connected to `awf-net` at `172.30.0.10`
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
-### Copilot Container (`containers/copilot/`)
+### Runner Container (`containers/runner/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
 - `NET_ADMIN` capability required for iptables manipulation
 - Two-stage entrypoint:
-  1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (copilot container only)
+  1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (runner container only)
   2. `entrypoint.sh`: Tests connectivity, then executes user command
 - **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
   - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
@@ -92,7 +92,7 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
   - Allow DNS queries
   - Allow traffic to Squid proxy itself
   - Redirect all HTTP (port 80) and HTTPS (port 443) to Squid via DNAT (NAT table)
-  - **Note:** These NAT rules only apply to the copilot container itself, not spawned containers
+  - **Note:** These NAT rules only apply to the runner container itself, not spawned containers
 
 ## Traffic Flow
 
@@ -103,7 +103,7 @@ CLI generates configs (squid.conf, docker-compose.yml)
     ↓
 Docker Compose starts Squid container (with healthcheck)
     ↓
-Docker Compose starts Copilot container (waits for Squid healthy)
+Docker Compose starts Runner container (waits for Squid healthy)
     ↓
 iptables rules applied in Copilot container
     ↓
@@ -124,8 +124,8 @@ The wrapper generates:
 
 ### 2. Container Startup
 1. **Squid proxy starts first** with healthcheck
-2. **Copilot container waits** for Squid to be healthy
-3. **iptables rules applied** in copilot container to redirect all HTTP/HTTPS traffic
+2. **Runner container waits** for Squid to be healthy
+3. **iptables rules applied** in runner container to redirect all HTTP/HTTPS traffic
 
 ### 3. Traffic Routing
 - All HTTP (port 80) and HTTPS (port 443) traffic → Squid proxy
@@ -146,7 +146,7 @@ The wrapper generates:
 ### 6. Cleanup
 - Containers stopped and removed
 - Logs moved to persistent locations:
-  - Copilot logs → `/tmp/copilot-logs-<timestamp>/` (if they exist)
+  - Runner logs → `/tmp/runner-logs-<timestamp>/` (if they exist)
   - Squid logs → `/tmp/squid-logs-<timestamp>/` (if they exist)
 - Temporary files deleted (unless `--keep-containers` specified)
 - Exit code propagated from copilot command
@@ -181,7 +181,7 @@ The system uses a defense-in-depth cleanup strategy across four stages to preven
 
 ### Cleanup Script (`scripts/ci/cleanup.sh`)
 Removes all awf resources:
-- Containers by name (`awf-squid`, `awf-copilot`)
+- Containers by name (`awf-squid`, `awf-runner`)
 - All docker-compose services from work directories
 - Unused containers (`docker container prune -f`)
 - Unused networks (`docker network prune -f`) - **critical for subnet pool management**
@@ -199,8 +199,8 @@ Removes all awf resources:
 
 ## Exit Code Handling
 
-The wrapper propagates the exit code from the copilot container:
-1. Command runs in copilot container
+The wrapper propagates the exit code from the runner container:
+1. Command runs in runner container
 2. Container exits with command's exit code
 3. Wrapper inspects container: `docker inspect --format={{.State.ExitCode}}`
 4. Wrapper exits with same code
@@ -210,7 +210,7 @@ The wrapper propagates the exit code from the copilot container:
 All temporary files are created in `workDir` (default: `/tmp/awf-<timestamp>`):
 - `squid.conf`: Generated Squid proxy configuration
 - `docker-compose.yml`: Generated Docker Compose configuration
-- `copilot-logs/`: Directory for Copilot CLI logs (automatically preserved if logs are created)
+- `runner-logs/`: Directory for Copilot CLI logs (automatically preserved if logs are created)
 - `squid-logs/`: Directory for Squid proxy logs (automatically preserved if logs are created)
 
 Use `--keep-containers` to preserve containers and files after execution for debugging.

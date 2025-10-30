@@ -124,9 +124,9 @@
    ```bash
    copilot --disable-builtin-mcps --prompt "..."
    ```
-4. Review Copilot logs for MCP connection errors:
+4. Review Runner logs for MCP connection errors:
    ```bash
-   cat /tmp/copilot-logs-<timestamp>/*.log
+   cat /tmp/runner-logs-<timestamp>/*.log
    ```
 
 ## Log Analysis
@@ -145,14 +145,14 @@ sudo grep "TCP_DENIED" /tmp/squid-logs-<timestamp>/access.log | awk '{print $3}'
 
 **While containers are running** (with `--keep-containers`):
 ```bash
-docker logs awf-copilot
+docker logs awf-runner
 docker logs awf-squid
 ```
 
 **After command completes:**
 ```bash
-# Copilot logs
-cat /tmp/copilot-logs-<timestamp>/*.log
+# Runner logs
+cat /tmp/runner-logs-<timestamp>/*.log
 
 # Squid logs (requires sudo)
 sudo cat /tmp/squid-logs-<timestamp>/access.log
@@ -167,7 +167,7 @@ Blocked UDP and non-standard protocols are logged to kernel logs:
 sudo dmesg | grep FW_BLOCKED
 
 # From within container
-docker exec awf-copilot dmesg | grep FW_BLOCKED
+docker exec awf-runner dmesg | grep FW_BLOCKED
 ```
 
 ## Network Issues
@@ -200,7 +200,7 @@ docker exec awf-copilot dmesg | grep FW_BLOCKED
    ```
 2. Verify iptables rules are applied:
    ```bash
-   docker exec awf-copilot iptables -t nat -L -n -v
+   docker exec awf-runner iptables -t nat -L -n -v
    ```
 3. Increase timeout in your command:
    ```bash
@@ -224,7 +224,7 @@ docker exec awf-copilot dmesg | grep FW_BLOCKED
    ```
 3. Verify network connectivity:
    ```bash
-   docker exec awf-copilot ping -c 3 172.30.0.10
+   docker exec awf-runner ping -c 3 172.30.0.10
    ```
 
 ## Docker-in-Docker Issues
@@ -236,7 +236,7 @@ docker exec awf-copilot dmesg | grep FW_BLOCKED
 **Solution:**
 - Verify docker-wrapper.sh is working:
   ```bash
-  docker exec awf-copilot cat /tmp/docker-wrapper.log
+  docker exec awf-runner cat /tmp/docker-wrapper.log
   ```
 - Check that spawned containers have correct network:
   ```bash
@@ -276,7 +276,7 @@ docker exec awf-copilot dmesg | grep FW_BLOCKED
 **Solution:**
 1. Manually clean up containers:
    ```bash
-   docker rm -f awf-copilot awf-squid
+   docker rm -f awf-runner awf-squid
    ```
 2. Clean up networks:
    ```bash
@@ -294,7 +294,7 @@ docker exec awf-copilot dmesg | grep FW_BLOCKED
 **Solution:**
 1. Manually remove old logs:
    ```bash
-   rm -rf /tmp/copilot-logs-*
+   rm -rf /tmp/runner-logs-*
    rm -rf /tmp/squid-logs-*
    rm -rf /tmp/awf-*
    ```
@@ -364,10 +364,10 @@ If you're still experiencing issues:
    ```
 
 3. **Review all logs:**
-   - Copilot logs: `/tmp/copilot-logs-<timestamp>/`
+   - Runner logs: `/tmp/runner-logs-<timestamp>/`
    - Squid logs: `/tmp/squid-logs-<timestamp>/`
-   - Docker wrapper logs: `docker exec awf-copilot cat /tmp/docker-wrapper.log`
-   - Container logs: `docker logs awf-copilot`
+   - Docker wrapper logs: `docker exec awf-runner cat /tmp/docker-wrapper.log`
+   - Container logs: `docker logs awf-runner`
 
 4. **Check documentation:**
    - [Architecture](architecture.md) - Understand how the system works
