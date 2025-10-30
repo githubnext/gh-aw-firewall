@@ -71,7 +71,9 @@ Common domain lists:
 
 ## Verbosity and Logging
 
-Control the verbosity of awf output using the `--log-level` option:
+Control the verbosity of awf output using the `--log-level` option. The logging system uses the [`debug`](https://www.npmjs.com/package/debug) npm package for flexible, namespace-based logging.
+
+### Using --log-level flag
 
 ```bash
 # Available log levels: trace, debug, info, warn, error
@@ -102,6 +104,29 @@ sudo awf --log-level error \
   --allow-domains github.com \
   'curl https://api.github.com'
 ```
+
+### Advanced: Using DEBUG environment variable
+
+For more fine-grained control, you can use the `DEBUG` environment variable to enable specific log namespaces:
+
+```bash
+# Enable all awf logs
+DEBUG=awf:* sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+
+# Enable only debug and trace logs
+DEBUG=awf:debug,awf:trace sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+
+# Enable only info, warn, and error logs
+DEBUG=awf:info,awf:warn,awf:error sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+```
+
+**Available namespaces:**
+- `awf:trace` - Trace-level messages (most verbose)
+- `awf:debug` - Debug-level messages
+- `awf:info` - Informational messages
+- `awf:success` - Success messages
+- `awf:warn` - Warning messages
+- `awf:error` - Error messages
 
 **Log Level Hierarchy:**
 - `trace` - All messages (most verbose)

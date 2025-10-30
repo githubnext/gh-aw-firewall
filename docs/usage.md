@@ -224,10 +224,23 @@ sudo awf --allow-domains github.com "curl -f http://169.254.169.254"
 
 ### Enable Debug Logging
 
+The logging system uses the [`debug`](https://www.npmjs.com/package/debug) npm package for flexible namespace-based logging.
+
 ```bash
+# Using --log-level flag
 sudo awf \
   --allow-domains github.com \
   --log-level debug \
+  'your-command'
+
+# Using DEBUG environment variable for fine-grained control
+DEBUG=awf:* sudo -E awf \
+  --allow-domains github.com \
+  'your-command'
+
+# Enable only specific namespaces
+DEBUG=awf:debug,awf:info sudo -E awf \
+  --allow-domains github.com \
   'your-command'
 ```
 
@@ -237,6 +250,14 @@ This will show:
 - iptables rules applied
 - Network connectivity tests
 - Proxy traffic logs
+
+**Available namespaces:**
+- `awf:trace` - Most verbose
+- `awf:debug` - Debug information
+- `awf:info` - Informational messages
+- `awf:success` - Success messages
+- `awf:warn` - Warnings
+- `awf:error` - Errors
 
 ### Real-Time Log Streaming
 

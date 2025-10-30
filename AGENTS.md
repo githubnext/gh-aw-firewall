@@ -160,8 +160,10 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 5. **Logging** (`src/logger.ts`)
    - Singleton logger with configurable log levels (trace, debug, info, warn, error)
+   - Uses the [`debug`](https://www.npmjs.com/package/debug) npm package for flexible namespace-based logging
    - Uses `chalk` for colored output
    - All logs go to stderr (console.error) to avoid interfering with command stdout
+   - Supports both `--log-level` flag and `DEBUG` environment variable for fine-grained control
 
 ### Container Architecture
 

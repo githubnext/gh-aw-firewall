@@ -1,3 +1,4 @@
+import debug from 'debug';
 import chalk from 'chalk';
 import { LogLevel } from './types';
 
@@ -9,15 +10,52 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 4,
 };
 
+// Create debug instances for different namespaces
+const debugTrace = debug('awf:trace');
+const debugDebug = debug('awf:debug');
+const debugInfo = debug('awf:info');
+const debugWarn = debug('awf:warn');
+const debugError = debug('awf:error');
+const debugSuccess = debug('awf:success');
+
+// Configure debug to output to stderr
+debug.log = (...args: unknown[]) => console.error(...args);
+
 class Logger {
   private level: LogLevel;
 
   constructor(level: LogLevel = 'info') {
     this.level = level;
+    this.updateDebugNamespaces();
   }
 
   setLevel(level: LogLevel): void {
     this.level = level;
+    this.updateDebugNamespaces();
+  }
+
+  private updateDebugNamespaces(): void {
+    // Enable debug namespaces based on log level
+    const namespaces: string[] = [];
+    
+    if (LOG_LEVELS[this.level] <= LOG_LEVELS.trace) {
+      namespaces.push('awf:trace');
+    }
+    if (LOG_LEVELS[this.level] <= LOG_LEVELS.debug) {
+      namespaces.push('awf:debug');
+    }
+    if (LOG_LEVELS[this.level] <= LOG_LEVELS.info) {
+      namespaces.push('awf:info', 'awf:success');
+    }
+    if (LOG_LEVELS[this.level] <= LOG_LEVELS.warn) {
+      namespaces.push('awf:warn');
+    }
+    if (LOG_LEVELS[this.level] <= LOG_LEVELS.error) {
+      namespaces.push('awf:error');
+    }
+
+    // Set DEBUG environment variable to enable the appropriate namespaces
+    debug.enable(namespaces.join(','));
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -26,37 +64,37 @@ class Logger {
 
   trace(message: string, ...args: unknown[]): void {
     if (this.shouldLog('trace')) {
-      console.error(chalk.dim(`[TRACE] ${message}`), ...args);
+      debugTrace(chalk.dim(`[TRACE] ${message}`), ...args);
     }
   }
 
   debug(message: string, ...args: unknown[]): void {
     if (this.shouldLog('debug')) {
-      console.error(chalk.gray(`[DEBUG] ${message}`), ...args);
+      debugDebug(chalk.gray(`[DEBUG] ${message}`), ...args);
     }
   }
 
   info(message: string, ...args: unknown[]): void {
     if (this.shouldLog('info')) {
-      console.error(chalk.blue(`[INFO] ${message}`), ...args);
+      debugInfo(chalk.blue(`[INFO] ${message}`), ...args);
     }
   }
 
   warn(message: string, ...args: unknown[]): void {
     if (this.shouldLog('warn')) {
-      console.error(chalk.yellow(`[WARN] ${message}`), ...args);
+      debugWarn(chalk.yellow(`[WARN] ${message}`), ...args);
     }
   }
 
   error(message: string, ...args: unknown[]): void {
     if (this.shouldLog('error')) {
-      console.error(chalk.red(`[ERROR] ${message}`), ...args);
+      debugError(chalk.red(`[ERROR] ${message}`), ...args);
     }
   }
 
   success(message: string, ...args: unknown[]): void {
     if (this.shouldLog('info')) {
-      console.error(chalk.green(`[SUCCESS] ${message}`), ...args);
+      debugSuccess(chalk.green(`[SUCCESS] ${message}`), ...args);
     }
   }
 }
