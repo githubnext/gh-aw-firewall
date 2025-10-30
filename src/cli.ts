@@ -36,23 +36,36 @@ function redactSecrets(command: string): string {
 }
 
 /**
+ * Result of parsing environment variables
+ */
+export interface ParseEnvResult {
+  success: true;
+  env: Record<string, string>;
+}
+
+export interface ParseEnvError {
+  success: false;
+  invalidVar: string;
+}
+
+/**
  * Parses environment variables from an array of KEY=VALUE strings
  * @param envVars Array of environment variable strings in KEY=VALUE format
- * @returns Object with parsed key-value pairs, or null if any variable has invalid format
+ * @returns ParseEnvResult with parsed key-value pairs on success, or ParseEnvError with the invalid variable on failure
  */
-export function parseEnvironmentVariables(envVars: string[]): Record<string, string> | null {
+export function parseEnvironmentVariables(envVars: string[]): ParseEnvResult | ParseEnvError {
   const result: Record<string, string> = {};
   
   for (const envVar of envVars) {
     const match = envVar.match(/^([^=]+)=(.*)$/);
     if (!match) {
-      return null;
+      return { success: false, invalidVar: envVar };
     }
     const [, key, value] = match;
     result[key] = value;
   }
   
-  return result;
+  return { success: true, env: result };
 }
 
 const program = new Command();
@@ -131,12 +144,11 @@ program
     let additionalEnv: Record<string, string> = {};
     if (options.env && Array.isArray(options.env)) {
       const parsed = parseEnvironmentVariables(options.env);
-      if (!parsed) {
-        const invalidVar = options.env.find((envVar: string) => !envVar.match(/^([^=]+)=(.*)$/));
-        logger.error(`Invalid environment variable format: ${invalidVar} (expected KEY=VALUE)`);
+      if (!parsed.success) {
+        logger.error(`Invalid environment variable format: ${parsed.invalidVar} (expected KEY=VALUE)`);
         process.exit(1);
       }
-      additionalEnv = parsed;
+      additionalEnv = parsed.env;
     }
 
     const config: WrapperConfig = {
