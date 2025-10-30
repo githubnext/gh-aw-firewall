@@ -78,8 +78,8 @@ jobs:
             /tmp/squid-logs-*/
           retention-days: 7
 
-  test-robustness:
-    name: Robustness Tests
+  test-robustness-basics:
+    name: Robustness - Basics
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -102,8 +102,8 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Run robustness tests
-        run: sudo -E npm run test:integration -- robustness.test.ts
+      - name: Run robustness basics tests
+        run: sudo -E npm run test:integration -- robustness-basics.test.ts
 
       - name: Post-test cleanup
         if: always()
@@ -113,7 +113,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: robustness-test-logs
+          name: robustness-basics-test-logs
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
@@ -121,8 +121,8 @@ jobs:
             /tmp/squid-logs-*/
           retention-days: 7
 
-  test-docker-egress:
-    name: Docker Egress Tests
+  test-robustness-protocol:
+    name: Robustness - Protocol & Security
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -145,8 +145,8 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Run docker egress tests
-        run: sudo -E npm run test:integration -- docker-egress.test.ts
+      - name: Run robustness protocol tests
+        run: sudo -E npm run test:integration -- robustness-protocol.test.ts
 
       - name: Post-test cleanup
         if: always()
@@ -156,7 +156,179 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: docker-egress-test-logs
+          name: robustness-protocol-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/copilot-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
+
+  test-robustness-advanced:
+    name: Robustness - Advanced
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run robustness advanced tests
+        run: sudo -E npm run test:integration -- robustness-advanced.test.ts
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: robustness-advanced-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/copilot-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
+
+  test-docker-egress-basic:
+    name: Docker Egress - Basic
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run docker egress basic tests
+        run: sudo -E npm run test:integration -- docker-egress-basic.test.ts
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-egress-basic-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/copilot-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
+
+  test-docker-egress-intermediate:
+    name: Docker Egress - Intermediate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run docker egress intermediate tests
+        run: sudo -E npm run test:integration -- docker-egress-intermediate.test.ts
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-egress-intermediate-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/copilot-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
+
+  test-docker-egress-advanced:
+    name: Docker Egress - Advanced
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run docker egress advanced tests
+        run: sudo -E npm run test:integration -- docker-egress-advanced.test.ts
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-egress-advanced-test-logs
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
