@@ -4,18 +4,17 @@ set -e
 # Script to download artifacts from GitHub Actions workflow runs
 # Usage: ./scripts/download-latest-artifact.sh [RUN_ID] [WORKFLOW_FILE] [ARTIFACT_NAME]
 #   RUN_ID: Specific run ID to download from (optional, defaults to latest run)
-#   WORKFLOW_FILE: Path to workflow file (optional, defaults to test-copilot-mcp.yml)
-#   ARTIFACT_NAME: Name of artifact to download (optional, defaults to copilot-mcp-logs)
+#   WORKFLOW_FILE: Path to workflow file (optional, defaults to test-integration.yml)
+#   ARTIFACT_NAME: Name of artifact to download (optional, defaults to integration-test-logs)
 #
 # Examples:
 #   ./scripts/download-latest-artifact.sh
 #   ./scripts/download-latest-artifact.sh 1234567890
-#   ./scripts/download-latest-artifact.sh "" ".github/workflows/test-copilot-everything-mcp.yml" "copilot-everything-mcp-logs"
-#   ./scripts/download-latest-artifact.sh 1234567890 ".github/workflows/test-copilot-playwright-mcp.yml" "copilot-playwright-mcp-logs"
+#   ./scripts/download-latest-artifact.sh "" ".github/workflows/test-integration.yml" "integration-test-logs"
 
 # Default values
-DEFAULT_WORKFLOW=".github/workflows/test-copilot-mcp.yml"
-DEFAULT_ARTIFACT="copilot-mcp-logs"
+DEFAULT_WORKFLOW=".github/workflows/test-integration.yml"
+DEFAULT_ARTIFACT="integration-test-logs"
 DEFAULT_REPO="githubnext/gh-aw-firewall"
 
 # Parse arguments
