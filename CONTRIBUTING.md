@@ -109,10 +109,12 @@ logger.success('Operation completed successfully');
    - Clear description of what the PR does
    - Reference any related issues
    - Include tests for new functionality
-   - Ensure CI passes
+   - Ensure CI passes (including test coverage checks)
+   - Review the automated coverage report posted as a PR comment
 
 3. **Review process:**
    - Maintainers will review your PR
+   - The coverage report bot will automatically comment with test coverage metrics
    - Address any feedback
    - Once approved, your PR will be merged
 
