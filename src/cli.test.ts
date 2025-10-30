@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { parseEnvironmentVariables } from './cli';
 import { redactSecrets } from './redact-secrets';
 import { parseDomains } from './cli';
 
@@ -38,61 +39,69 @@ describe('cli', () => {
   describe('environment variable parsing', () => {
     it('should parse KEY=VALUE format correctly', () => {
       const envVars = ['GITHUB_TOKEN=abc123', 'API_KEY=xyz789'];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          GITHUB_TOKEN: 'abc123',
+          API_KEY: 'xyz789',
+        });
       }
-
-      expect(result).toEqual({
-        GITHUB_TOKEN: 'abc123',
-        API_KEY: 'xyz789',
-      });
     });
 
     it('should handle empty values', () => {
       const envVars = ['EMPTY_VAR='];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          EMPTY_VAR: '',
+        });
       }
-
-      expect(result).toEqual({
-        EMPTY_VAR: '',
-      });
     });
 
     it('should handle values with equals signs', () => {
       const envVars = ['BASE64_VAR=abc=def=ghi'];
-      const result: Record<string, string> = {};
+      const result = parseEnvironmentVariables(envVars);
 
-      for (const envVar of envVars) {
-        const match = envVar.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          const [, key, value] = match;
-          result[key] = value;
-        }
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({
+          BASE64_VAR: 'abc=def=ghi',
+        });
       }
-
-      expect(result).toEqual({
-        BASE64_VAR: 'abc=def=ghi',
-      });
     });
 
     it('should reject invalid format (no equals sign)', () => {
-      const envVar = 'INVALID_VAR';
-      const match = envVar.match(/^([^=]+)=(.*)$/);
+      const envVars = ['INVALID_VAR'];
+      const result = parseEnvironmentVariables(envVars);
 
-      expect(match).toBeNull();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidVar).toBe('INVALID_VAR');
+      }
+    });
+
+    it('should handle empty array', () => {
+      const envVars: string[] = [];
+      const result = parseEnvironmentVariables(envVars);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.env).toEqual({});
+      }
+    });
+
+    it('should return error on first invalid entry', () => {
+      const envVars = ['VALID_VAR=value', 'INVALID_VAR', 'ANOTHER_VALID=value2'];
+      const result = parseEnvironmentVariables(envVars);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidVar).toBe('INVALID_VAR');
+      }
     });
   });
 
