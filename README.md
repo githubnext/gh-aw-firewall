@@ -69,6 +69,71 @@ Common domain lists:
 --allow-domains github.com,arxiv.org,example.com
 ```
 
+## Verbosity and Logging
+
+Control the verbosity of awf output using the `--log-level` option. The logging system uses the [`debug`](https://www.npmjs.com/package/debug) npm package for flexible, namespace-based logging.
+
+### Using --log-level flag
+
+```bash
+# Available log levels: trace, debug, info, warn, error
+# Default: info
+
+# Trace level - most verbose, shows all internal operations
+sudo awf --log-level trace \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Debug level - detailed information for troubleshooting
+sudo awf --log-level debug \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Info level - standard output (default)
+sudo awf --log-level info \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Warn level - only warnings and errors
+sudo awf --log-level warn \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Error level - only errors
+sudo awf --log-level error \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+```
+
+### Advanced: Using DEBUG environment variable
+
+For more fine-grained control, you can use the `DEBUG` environment variable to enable specific log namespaces:
+
+```bash
+# Enable all awf logs
+DEBUG=awf:* sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+
+# Enable only debug and trace logs
+DEBUG=awf:debug,awf:trace sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+
+# Enable only info, warn, and error logs
+DEBUG=awf:info,awf:warn,awf:error sudo -E awf --allow-domains github.com 'curl https://api.github.com'
+```
+
+**Available namespaces:**
+- `awf:trace` - Trace-level messages (most verbose)
+- `awf:debug` - Debug-level messages
+- `awf:info` - Informational messages
+- `awf:success` - Success messages
+- `awf:warn` - Warning messages
+- `awf:error` - Error messages
+
+**Log Level Hierarchy:**
+- `trace` - All messages (most verbose)
+- `debug` - Debug, info, warnings, and errors
+- `info` - Info, warnings, and errors (default)
+- `warn` - Warnings and errors only
+- `error` - Errors only (least verbose)
 
 ## Security Considerations
 

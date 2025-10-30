@@ -145,14 +145,9 @@ export interface WrapperConfig {
 /**
  * Logging level type for controlling output verbosity
  * 
- * The logger filters messages based on this level. Each level includes
- * all messages from higher severity levels:
- * - 'debug' (0): Shows all messages
- * - 'info' (1): Shows info, warn, and error
- * - 'warn' (2): Shows warn and error
- * - 'error' (3): Shows only errors
+ * The logger filters messages based on this level.
  */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 
 /**
  * Configuration for the Squid proxy server
