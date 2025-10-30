@@ -135,17 +135,6 @@ npm run test:coverage
 npm run test:watch
 ```
 
-### Test Coverage
-
-The project maintains comprehensive test coverage. Current coverage status:
-
-- **Logger**: 100% coverage
-- **Squid Config**: 100% coverage
-- **CLI Workflow**: 100% coverage
-- **Overall**: 38%+ statement coverage with established thresholds
-
-For detailed testing information, see [TESTING.md](TESTING.md).
-
 ### Building
 
 ```bash
