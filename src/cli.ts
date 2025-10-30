@@ -21,6 +21,18 @@ import {
 } from './host-iptables';
 
 /**
+ * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
+ * @param input - Comma-separated domain string (e.g., "github.com, api.github.com, npmjs.org")
+ * @returns Array of trimmed domain strings with empty entries filtered out
+ */
+export function parseDomains(input: string): string[] {
+  return input
+    .split(',')
+    .map(d => d.trim())
+    .filter(d => d.length > 0);
+}
+
+/**
  * Redacts sensitive information from command strings
  */
 function redactSecrets(command: string): string {
@@ -97,10 +109,7 @@ program
 
     logger.setLevel(logLevel);
 
-    const allowedDomains = options.allowDomains
-      .split(',')
-      .map((d: string) => d.trim())
-      .filter((d: string) => d.length > 0);
+    const allowedDomains = parseDomains(options.allowDomains);
 
     if (allowedDomains.length === 0) {
       logger.error('At least one domain must be specified with --allow-domains');
@@ -224,4 +233,7 @@ program
     }
   });
 
-program.parse();
+// Only parse arguments if this file is run directly (not imported as a module)
+if (require.main === module) {
+  program.parse();
+}
