@@ -17,8 +17,8 @@ import {
   ensureFirewallNetwork,
   setupHostIptables,
   cleanupHostIptables,
-  cleanupFirewallNetwork,
 } from './host-iptables';
+import { runMainWorkflow } from './cli-workflow';
 
 /**
  * Redacts sensitive information from command strings
@@ -190,32 +190,27 @@ program
     });
 
     try {
-      // Step 0: Setup host-level network and iptables
-      logger.info('Setting up host-level firewall network and iptables rules...');
-      const networkConfig = await ensureFirewallNetwork();
-      await setupHostIptables(networkConfig.squidIp, 3128);
-      hostIptablesSetup = true;
+      exitCode = await runMainWorkflow(
+        config,
+        {
+          ensureFirewallNetwork,
+          setupHostIptables,
+          writeConfigs,
+          startContainers,
+          runCopilotCommand,
+        },
+        {
+          logger,
+          performCleanup,
+          onHostIptablesSetup: () => {
+            hostIptablesSetup = true;
+          },
+          onContainersStarted: () => {
+            containersStarted = true;
+          },
+        }
+      );
 
-      // Step 1: Write configuration files
-      logger.info('Generating configuration files...');
-      await writeConfigs(config);
-
-      // Step 2: Start containers
-      await startContainers(config.workDir, config.allowedDomains);
-      containersStarted = true;
-
-      // Step 3: Wait for copilot to complete
-      const result = await runCopilotCommand(config.workDir, config.allowedDomains);
-      exitCode = result.exitCode;
-
-      // Step 4: Cleanup (logs will be preserved automatically if they exist)
-      await performCleanup();
-
-      if (exitCode === 0) {
-        logger.success(`Command completed successfully`);
-      } else {
-        logger.warn(`Command completed with exit code: ${exitCode}`);
-      }
       process.exit(exitCode);
     } catch (error) {
       logger.error('Fatal error:', error);
