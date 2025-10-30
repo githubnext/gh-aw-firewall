@@ -30,6 +30,9 @@ jobs:
           npm install
           npm run build
 
+      - name: Run unit tests
+        run: npm test
+
       - name: Make wrapper available globally with sudo
         run: |
           # Create sudo wrapper script for iptables manipulation
