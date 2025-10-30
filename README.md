@@ -69,6 +69,46 @@ Common domain lists:
 --allow-domains github.com,arxiv.org,example.com
 ```
 
+## Verbosity and Logging
+
+Control the verbosity of awf output using the `--log-level` option:
+
+```bash
+# Available log levels: trace, debug, info, warn, error
+# Default: info
+
+# Trace level - most verbose, shows all internal operations
+sudo awf --log-level trace \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Debug level - detailed information for troubleshooting
+sudo awf --log-level debug \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Info level - standard output (default)
+sudo awf --log-level info \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Warn level - only warnings and errors
+sudo awf --log-level warn \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+
+# Error level - only errors
+sudo awf --log-level error \
+  --allow-domains github.com \
+  'curl https://api.github.com'
+```
+
+**Log Level Hierarchy:**
+- `trace` - All messages (most verbose)
+- `debug` - Debug, info, warnings, and errors
+- `info` - Info, warnings, and errors (default)
+- `warn` - Warnings and errors only
+- `error` - Errors only (least verbose)
 
 ## Security Considerations
 

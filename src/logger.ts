@@ -2,10 +2,11 @@ import chalk from 'chalk';
 import { LogLevel } from './types';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
+  trace: 0,
+  debug: 1,
+  info: 2,
+  warn: 3,
+  error: 4,
 };
 
 class Logger {
@@ -21,6 +22,12 @@ class Logger {
 
   private shouldLog(level: LogLevel): boolean {
     return LOG_LEVELS[level] >= LOG_LEVELS[this.level];
+  }
+
+  trace(message: string, ...args: unknown[]): void {
+    if (this.shouldLog('trace')) {
+      console.error(chalk.dim(`[TRACE] ${message}`), ...args);
+    }
   }
 
   debug(message: string, ...args: unknown[]): void {

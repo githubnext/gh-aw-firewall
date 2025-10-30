@@ -15,7 +15,7 @@ export interface WrapperConfig {
   envAll?: boolean;        // Pass all host environment variables (excluding system vars)
 }
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 
 export interface SquidConfig {
   domains: string[];

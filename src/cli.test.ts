@@ -210,7 +210,7 @@ describe('cli', () => {
           '--allow-domains <domains>',
           'Comma-separated list of allowed domains'
         )
-        .option('--log-level <level>', 'Log level: debug, info, warn, error', 'info')
+        .option('--log-level <level>', 'Log level: trace, debug, info, warn, error', 'info')
         .option('--keep-containers', 'Keep containers running after command exits', false)
         .argument('<command>', 'Copilot command to execute');
 
