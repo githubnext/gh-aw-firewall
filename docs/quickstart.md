@@ -120,11 +120,11 @@ awf \
 
 # Then inspect logs
 docker logs awf-squid
-docker logs awf-copilot
+docker logs awf-runner
 
 # Clean up manually when done
-docker stop awf-squid awf-copilot
-docker rm awf-squid awf-copilot
+docker stop awf-squid awf-runner
+docker rm awf-squid awf-runner
 ```
 
 ### Multiple Domains

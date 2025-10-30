@@ -103,7 +103,7 @@ To use a local, writable GitHub MCP server with Copilot CLI, you must:
 **Location:** The MCP configuration must be placed at:
 - `~/.copilot/mcp-config.json` (primary location)
 
-The copilot container mounts the HOME directory, so this config file is automatically accessible to Copilot CLI running inside the container.
+The runner container mounts the HOME directory, so this config file is automatically accessible to Copilot CLI running inside the container.
 
 **Format:**
 ```json
@@ -158,16 +158,16 @@ sudo -E awf \
 ```
 
 **Critical requirements:**
-- `sudo -E` - **REQUIRED** to pass environment variables through sudo to the copilot container
+- `sudo -E` - **REQUIRED** to pass environment variables through sudo to the runner container
 - `--disable-builtin-mcps` - Disables the built-in read-only GitHub MCP server
 - `--allow-tool github` - Grants permission to use all tools from the `github` MCP server (must match server name in config)
-- MCP config at `~/.copilot/mcp-config.json` - Automatically accessible since copilot container mounts HOME directory
+- MCP config at `~/.copilot/mcp-config.json` - Automatically accessible since runner container mounts HOME directory
 
 **Why `sudo -E` is required:**
 1. `awf` needs sudo for iptables manipulation
 2. `-E` preserves GITHUB_TOKEN and GITHUB_PERSONAL_ACCESS_TOKEN
-3. These variables are passed into the copilot container via the HOME directory mount
-4. The GitHub MCP server Docker container inherits them from the copilot container's environment
+3. These variables are passed into the runner container via the HOME directory mount
+4. The GitHub MCP server Docker container inherits them from the runner container's environment
 
 ### CI/CD Configuration
 
