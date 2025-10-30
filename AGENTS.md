@@ -14,6 +14,29 @@ This is a firewall for GitHub Copilot CLI (package name: `@github/awf`) that pro
 
 ## Development Workflow
 
+### GitHub Actions Best Practices
+
+**IMPORTANT:** When writing or modifying GitHub Actions workflows:
+
+1. **Use TypeScript for workflow scripts, not bash** - All scripts that run in GitHub Actions workflows should be written in TypeScript and executed with `npx tsx`. This ensures:
+   - Type safety and better IDE support
+   - Consistency with the rest of the codebase
+   - Easier testing and maintenance
+   - Better error handling
+
+2. **Inline script execution** - Run TypeScript scripts directly in workflow steps using `npx tsx path/to/script.ts`, rather than creating bash wrapper scripts. Example:
+   ```yaml
+   - name: Generate test summary
+     run: |
+       npx tsx scripts/ci/generate-test-summary.ts "test-file.ts" "Test Name" test-output.log
+   ```
+
+3. **Place scripts in `scripts/ci/`** - All CI/CD-related scripts should be in the `scripts/ci/` directory and written as TypeScript modules with proper type definitions.
+
+**Example:**
+- ❌ Bad: `scripts/ci/generate-summary.sh` (bash script)
+- ✅ Good: `scripts/ci/generate-test-summary.ts` (TypeScript script called with `npx tsx`)
+
 ### Debugging GitHub Actions Failures
 
 **IMPORTANT:** When GitHub Actions workflows fail, always follow this debugging workflow:

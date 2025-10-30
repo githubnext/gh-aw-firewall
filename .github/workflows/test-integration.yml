@@ -60,7 +60,19 @@ jobs:
         run: sudo ./scripts/ci/cleanup.sh
 
       - name: Run basic firewall tests
-        run: sudo -E npm run test:integration -- basic-firewall.test.ts
+        id: run-tests
+        run: |
+          sudo -E npm run test:integration -- basic-firewall.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "basic-firewall.test.ts" "Basic Firewall Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
 
       - name: Post-test cleanup
         if: always()
@@ -103,7 +115,19 @@ jobs:
         run: sudo ./scripts/ci/cleanup.sh
 
       - name: Run robustness tests
-        run: sudo -E npm run test:integration -- robustness.test.ts
+        id: run-tests
+        run: |
+          sudo -E npm run test:integration -- robustness.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "robustness.test.ts" "Robustness Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
 
       - name: Post-test cleanup
         if: always()
@@ -146,7 +170,19 @@ jobs:
         run: sudo ./scripts/ci/cleanup.sh
 
       - name: Run docker egress tests
-        run: sudo -E npm run test:integration -- docker-egress.test.ts
+        id: run-tests
+        run: |
+          sudo -E npm run test:integration -- docker-egress.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "docker-egress.test.ts" "Docker Egress Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
 
       - name: Post-test cleanup
         if: always()
