@@ -1,7 +1,6 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables } from './cli';
+import { parseEnvironmentVariables, parseDomains, escapeShellArg, joinShellArgs } from './cli';
 import { redactSecrets } from './redact-secrets';
-import { parseDomains } from './cli';
 
 describe('cli', () => {
   describe('domain parsing', () => {
@@ -302,7 +301,6 @@ describe('cli', () => {
 
   describe('shell argument escaping', () => {
     it('should not escape simple arguments', () => {
-      const { escapeShellArg } = require('./cli');
       expect(escapeShellArg('curl')).toBe('curl');
       expect(escapeShellArg('https://api.github.com')).toBe('https://api.github.com');
       expect(escapeShellArg('/usr/bin/node')).toBe('/usr/bin/node');
@@ -310,26 +308,22 @@ describe('cli', () => {
     });
 
     it('should escape arguments with spaces', () => {
-      const { escapeShellArg } = require('./cli');
       expect(escapeShellArg('hello world')).toBe("'hello world'");
       expect(escapeShellArg('Authorization: Bearer token')).toBe("'Authorization: Bearer token'");
     });
 
     it('should escape arguments with special characters', () => {
-      const { escapeShellArg } = require('./cli');
       expect(escapeShellArg('test$var')).toBe("'test$var'");
       expect(escapeShellArg('test`cmd`')).toBe("'test`cmd`'");
       expect(escapeShellArg('test;echo')).toBe("'test;echo'");
     });
 
     it('should escape single quotes in arguments', () => {
-      const { escapeShellArg } = require('./cli');
       expect(escapeShellArg("it's")).toBe("'it'\\''s'");
       expect(escapeShellArg("don't")).toBe("'don'\\''t'");
     });
 
     it('should join multiple arguments with proper escaping', () => {
-      const { joinShellArgs } = require('./cli');
       expect(joinShellArgs(['curl', 'https://api.github.com'])).toBe('curl https://api.github.com');
       expect(joinShellArgs(['curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']))
         .toBe("curl -H 'Authorization: Bearer token' https://api.github.com");
