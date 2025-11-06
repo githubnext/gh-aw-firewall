@@ -238,21 +238,6 @@ describe('cli', () => {
   });
 
   describe('argument parsing with variadic args', () => {
-    it('should handle single quoted string (backward compatibility)', () => {
-      const program = new Command();
-      let capturedArgs: string[] = [];
-
-      program
-        .argument('[args...]', 'Command and arguments')
-        .action((args: string[]) => {
-          capturedArgs = args;
-        });
-
-      program.parse(['node', 'awf', 'curl https://api.github.com']);
-
-      expect(capturedArgs).toEqual(['curl https://api.github.com']);
-    });
-
     it('should handle multiple arguments after -- separator', () => {
       const program = new Command();
       let capturedArgs: string[] = [];

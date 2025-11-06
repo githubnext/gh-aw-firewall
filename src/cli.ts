@@ -142,21 +142,17 @@ program
     'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
     false
   )
-  .argument('[args...]', 'Command and arguments to execute (use -- to separate from options, or wrap in quotes)')
+  .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
-    // Handle both old-style single string and new-style variadic args
-    let copilotCommand: string;
+    // Require -- separator for passing command arguments
     if (args.length === 0) {
-      console.error('Error: No command specified');
+      console.error('Error: No command specified. Use -- to separate command from options.');
+      console.error('Example: awf --allow-domains github.com -- curl https://api.github.com');
       process.exit(1);
-    } else if (args.length === 1) {
-      // Old style: single quoted string
-      copilotCommand = args[0];
-    } else {
-      // New style: multiple args from -- separator
-      // Properly escape and join arguments to preserve argument boundaries
-      copilotCommand = joinShellArgs(args);
     }
+    
+    // Join arguments with proper shell escaping to preserve argument boundaries
+    const copilotCommand = joinShellArgs(args);
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {

@@ -34,17 +34,12 @@ sudo awf --help
 ### Basic Usage
 
 ```bash
-# Simple HTTP request (with quoted command)
-sudo awf \
-  --allow-domains github.com,api.github.com \
-  'curl https://api.github.com'
-
-# Or use -- separator to avoid quoting (recommended for complex commands)
+# Simple HTTP request
 sudo awf \
   --allow-domains github.com,api.github.com \
   -- curl https://api.github.com
 
-# With GitHub Copilot CLI (-- separator avoids escaping issues)
+# With GitHub Copilot CLI
 sudo -E awf \
   --allow-domains github.com,api.github.com,googleapis.com \
   -- copilot --prompt "List my repositories"
@@ -55,17 +50,7 @@ sudo awf \
   -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
 ```
 
-**Command Syntax:**
-
-You can pass commands in two ways:
-
-1. **Quoted string** (traditional): `awf --allow-domains github.com 'curl https://api.github.com'`
-2. **-- separator** (recommended): `awf --allow-domains github.com -- curl https://api.github.com`
-
-The `--` separator is particularly useful for:
-- Commands with complex arguments or nested quotes
-- Avoiding shell escaping issues
-- Better readability in scripts
+**Note:** Always use the `--` separator to pass commands and arguments. This ensures proper argument handling and avoids shell escaping issues.
 
 ## Domain Whitelisting
 
@@ -73,7 +58,7 @@ Domains automatically match all subdomains:
 
 ```bash
 # github.com matches api.github.com, raw.githubusercontent.com, etc.
-sudo awf --allow-domains github.com "curl https://api.github.com"  # ✓ works
+sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
 ```
 
 Common domain lists:
