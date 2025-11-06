@@ -116,8 +116,20 @@ program
     'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
     false
   )
-  .argument('<command>', 'Copilot command to execute (wrap in quotes)')
-  .action(async (copilotCommand: string, options) => {
+  .argument('[args...]', 'Command and arguments to execute (use -- to separate from options, or wrap in quotes)')
+  .action(async (args: string[], options) => {
+    // Handle both old-style single string and new-style variadic args
+    let copilotCommand: string;
+    if (args.length === 0) {
+      console.error('Error: No command specified');
+      process.exit(1);
+    } else if (args.length === 1) {
+      // Old style: single quoted string
+      copilotCommand = args[0];
+    } else {
+      // New style: multiple args from -- separator
+      copilotCommand = args.join(' ');
+    }
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {

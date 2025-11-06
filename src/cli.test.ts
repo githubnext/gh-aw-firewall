@@ -212,7 +212,7 @@ describe('cli', () => {
         )
         .option('--log-level <level>', 'Log level: debug, info, warn, error', 'info')
         .option('--keep-containers', 'Keep containers running after command exits', false)
-        .argument('<command>', 'Copilot command to execute');
+        .argument('[args...]', 'Command and arguments to execute');
 
       expect(program.name()).toBe('awf');
       expect(program.description()).toBe('Network firewall for agentic workflows with domain whitelisting');
@@ -235,6 +235,82 @@ describe('cli', () => {
       expect(opts.keepContainers).toBe(false);
       expect(opts.buildLocal).toBe(false);
       expect(opts.envAll).toBe(false);
+    });
+  });
+
+  describe('argument parsing with variadic args', () => {
+    it('should handle single quoted string (backward compatibility)', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', 'curl https://api.github.com']);
+
+      expect(capturedArgs).toEqual(['curl https://api.github.com']);
+    });
+
+    it('should handle multiple arguments after -- separator', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'curl', 'https://api.github.com']);
+
+      expect(capturedArgs).toEqual(['curl', 'https://api.github.com']);
+    });
+
+    it('should handle arguments with flags after -- separator', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']);
+
+      expect(capturedArgs).toEqual(['curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']);
+    });
+
+    it('should handle complex command with multiple flags', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug']);
+
+      expect(capturedArgs).toEqual(['npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug']);
+    });
+
+    it('should join multiple arguments with spaces', () => {
+      const args = ['curl', 'https://api.github.com'];
+      const command = args.join(' ');
+
+      expect(command).toBe('curl https://api.github.com');
+    });
+
+    it('should join complex arguments correctly', () => {
+      const args = ['npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug'];
+      const command = args.join(' ');
+
+      expect(command).toBe('npx @github/copilot --prompt hello world --log-level debug');
     });
   });
 

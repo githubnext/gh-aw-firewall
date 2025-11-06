@@ -34,21 +34,38 @@ sudo awf --help
 ### Basic Usage
 
 ```bash
-# Simple HTTP request
+# Simple HTTP request (with quoted command)
 sudo awf \
   --allow-domains github.com,api.github.com \
   'curl https://api.github.com'
 
-# With GitHub Copilot CLI
+# Or use -- separator to avoid quoting (recommended for complex commands)
+sudo awf \
+  --allow-domains github.com,api.github.com \
+  -- curl https://api.github.com
+
+# With GitHub Copilot CLI (-- separator avoids escaping issues)
 sudo -E awf \
   --allow-domains github.com,api.github.com,googleapis.com \
-  'copilot --prompt "List my repositories"'
+  -- copilot --prompt "List my repositories"
 
 # Docker-in-Docker (spawned containers inherit firewall)
 sudo awf \
   --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
+  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
 ```
+
+**Command Syntax:**
+
+You can pass commands in two ways:
+
+1. **Quoted string** (traditional): `awf --allow-domains github.com 'curl https://api.github.com'`
+2. **-- separator** (recommended): `awf --allow-domains github.com -- curl https://api.github.com`
+
+The `--` separator is particularly useful for:
+- Commands with complex arguments or nested quotes
+- Avoiding shell escaping issues
+- Better readability in scripts
 
 ## Domain Whitelisting
 
