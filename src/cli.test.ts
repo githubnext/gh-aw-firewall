@@ -298,19 +298,43 @@ describe('cli', () => {
 
       expect(capturedArgs).toEqual(['npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug']);
     });
+  });
 
-    it('should join multiple arguments with spaces', () => {
-      const args = ['curl', 'https://api.github.com'];
-      const command = args.join(' ');
-
-      expect(command).toBe('curl https://api.github.com');
+  describe('shell argument escaping', () => {
+    it('should not escape simple arguments', () => {
+      const { escapeShellArg } = require('./cli');
+      expect(escapeShellArg('curl')).toBe('curl');
+      expect(escapeShellArg('https://api.github.com')).toBe('https://api.github.com');
+      expect(escapeShellArg('/usr/bin/node')).toBe('/usr/bin/node');
+      expect(escapeShellArg('--log-level=debug')).toBe('--log-level=debug');
     });
 
-    it('should join complex arguments correctly', () => {
-      const args = ['npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug'];
-      const command = args.join(' ');
+    it('should escape arguments with spaces', () => {
+      const { escapeShellArg } = require('./cli');
+      expect(escapeShellArg('hello world')).toBe("'hello world'");
+      expect(escapeShellArg('Authorization: Bearer token')).toBe("'Authorization: Bearer token'");
+    });
 
-      expect(command).toBe('npx @github/copilot --prompt hello world --log-level debug');
+    it('should escape arguments with special characters', () => {
+      const { escapeShellArg } = require('./cli');
+      expect(escapeShellArg('test$var')).toBe("'test$var'");
+      expect(escapeShellArg('test`cmd`')).toBe("'test`cmd`'");
+      expect(escapeShellArg('test;echo')).toBe("'test;echo'");
+    });
+
+    it('should escape single quotes in arguments', () => {
+      const { escapeShellArg } = require('./cli');
+      expect(escapeShellArg("it's")).toBe("'it'\\''s'");
+      expect(escapeShellArg("don't")).toBe("'don'\\''t'");
+    });
+
+    it('should join multiple arguments with proper escaping', () => {
+      const { joinShellArgs } = require('./cli');
+      expect(joinShellArgs(['curl', 'https://api.github.com'])).toBe('curl https://api.github.com');
+      expect(joinShellArgs(['curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']))
+        .toBe("curl -H 'Authorization: Bearer token' https://api.github.com");
+      expect(joinShellArgs(['echo', 'hello world', 'test']))
+        .toBe("echo 'hello world' test");
     });
   });
 
