@@ -1,7 +1,10 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables } from './cli';
+import { parseEnvironmentVariables, parseDomainsFromFile } from './cli';
 import { redactSecrets } from './redact-secrets';
 import { parseDomains } from './cli';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 describe('cli', () => {
   describe('domain parsing', () => {
@@ -33,6 +36,98 @@ describe('cli', () => {
       const result = parseDomains('github.com');
 
       expect(result).toEqual(['github.com']);
+    });
+  });
+
+  describe('domain parsing from file', () => {
+    let tempDir: string;
+    
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-test-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('should parse domains from file with one domain per line', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, 'github.com\napi.github.com\nnpmjs.org');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+    });
+
+    it('should filter out empty lines', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, 'github.com\n\napi.github.com\n\n\nnpmjs.org\n');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+    });
+
+    it('should filter out comment lines starting with #', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, '# This is a comment\ngithub.com\n# Another comment\napi.github.com');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com']);
+    });
+
+    it('should trim whitespace from each line', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, '  github.com  \n\tapi.github.com\t\n   npmjs.org   ');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+    });
+
+    it('should handle file with mixed content', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, 
+        '# GitHub domains\ngithub.com\n  api.github.com  \n\n# NPM registry\nnpmjs.org\n# End of file\n'
+      );
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
+    });
+
+    it('should handle empty file', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, '');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual([]);
+    });
+
+    it('should handle file with only comments and whitespace', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, '# Comment 1\n\n  \n# Comment 2\n\t\n');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual([]);
+    });
+
+    it('should throw error for non-existent file', () => {
+      const filePath = path.join(tempDir, 'nonexistent.txt');
+      
+      expect(() => parseDomainsFromFile(filePath)).toThrow();
+    });
+
+    it('should handle file with Windows line endings', () => {
+      const filePath = path.join(tempDir, 'domains.txt');
+      fs.writeFileSync(filePath, 'github.com\r\napi.github.com\r\nnpmjs.org\r\n');
+      
+      const result = parseDomainsFromFile(filePath);
+      
+      expect(result).toEqual(['github.com', 'api.github.com', 'npmjs.org']);
     });
   });
 
