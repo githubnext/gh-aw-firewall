@@ -33,6 +33,32 @@ export function parseDomains(input: string): string[] {
 }
 
 /**
+ * Escapes a shell argument by wrapping it in single quotes and escaping any single quotes within it
+ * @param arg - Argument to escape
+ * @returns Escaped argument safe for shell execution
+ */
+export function escapeShellArg(arg: string): string {
+  // If the argument doesn't contain special characters, return as-is
+  // Character class includes: letters, digits, underscore, dash, dot (literal), slash, equals, colon
+  if (/^[a-zA-Z0-9_\-\./=:]+$/.test(arg)) {
+    return arg;
+  }
+  // Otherwise, wrap in single quotes and escape any single quotes inside
+  // The pattern '\\'' works by: ending the single-quoted string ('),
+  // adding an escaped single quote (\'), then starting a new single-quoted string (')
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Joins an array of shell arguments into a single command string, properly escaping each argument
+ * @param args - Array of arguments
+ * @returns Command string with properly escaped arguments
+ */
+export function joinShellArgs(args: string[]): string {
+  return args.map(escapeShellArg).join(' ');
+}
+
+/**
  * Result of parsing environment variables
  */
 export interface ParseEnvResult {
@@ -116,8 +142,17 @@ program
     'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
     false
   )
-  .argument('<command>', 'Copilot command to execute (wrap in quotes)')
-  .action(async (copilotCommand: string, options) => {
+  .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
+  .action(async (args: string[], options) => {
+    // Require -- separator for passing command arguments
+    if (args.length === 0) {
+      console.error('Error: No command specified. Use -- to separate command from options.');
+      console.error('Example: awf --allow-domains github.com -- curl https://api.github.com');
+      process.exit(1);
+    }
+    
+    // Join arguments with proper shell escaping to preserve argument boundaries
+    const copilotCommand = joinShellArgs(args);
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {

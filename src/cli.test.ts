@@ -1,7 +1,6 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables } from './cli';
+import { parseEnvironmentVariables, parseDomains, escapeShellArg, joinShellArgs } from './cli';
 import { redactSecrets } from './redact-secrets';
-import { parseDomains } from './cli';
 
 describe('cli', () => {
   describe('domain parsing', () => {
@@ -212,7 +211,7 @@ describe('cli', () => {
         )
         .option('--log-level <level>', 'Log level: debug, info, warn, error', 'info')
         .option('--keep-containers', 'Keep containers running after command exits', false)
-        .argument('<command>', 'Copilot command to execute');
+        .argument('[args...]', 'Command and arguments to execute');
 
       expect(program.name()).toBe('awf');
       expect(program.description()).toBe('Network firewall for agentic workflows with domain whitelisting');
@@ -235,6 +234,86 @@ describe('cli', () => {
       expect(opts.keepContainers).toBe(false);
       expect(opts.buildLocal).toBe(false);
       expect(opts.envAll).toBe(false);
+    });
+  });
+
+  describe('argument parsing with variadic args', () => {
+    it('should handle multiple arguments after -- separator', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'curl', 'https://api.github.com']);
+
+      expect(capturedArgs).toEqual(['curl', 'https://api.github.com']);
+    });
+
+    it('should handle arguments with flags after -- separator', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']);
+
+      expect(capturedArgs).toEqual(['curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']);
+    });
+
+    it('should handle complex command with multiple flags', () => {
+      const program = new Command();
+      let capturedArgs: string[] = [];
+
+      program
+        .argument('[args...]', 'Command and arguments')
+        .action((args: string[]) => {
+          capturedArgs = args;
+        });
+
+      program.parse(['node', 'awf', '--', 'npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug']);
+
+      expect(capturedArgs).toEqual(['npx', '@github/copilot', '--prompt', 'hello world', '--log-level', 'debug']);
+    });
+  });
+
+  describe('shell argument escaping', () => {
+    it('should not escape simple arguments', () => {
+      expect(escapeShellArg('curl')).toBe('curl');
+      expect(escapeShellArg('https://api.github.com')).toBe('https://api.github.com');
+      expect(escapeShellArg('/usr/bin/node')).toBe('/usr/bin/node');
+      expect(escapeShellArg('--log-level=debug')).toBe('--log-level=debug');
+    });
+
+    it('should escape arguments with spaces', () => {
+      expect(escapeShellArg('hello world')).toBe("'hello world'");
+      expect(escapeShellArg('Authorization: Bearer token')).toBe("'Authorization: Bearer token'");
+    });
+
+    it('should escape arguments with special characters', () => {
+      expect(escapeShellArg('test$var')).toBe("'test$var'");
+      expect(escapeShellArg('test`cmd`')).toBe("'test`cmd`'");
+      expect(escapeShellArg('test;echo')).toBe("'test;echo'");
+    });
+
+    it('should escape single quotes in arguments', () => {
+      expect(escapeShellArg("it's")).toBe("'it'\\''s'");
+      expect(escapeShellArg("don't")).toBe("'don'\\''t'");
+    });
+
+    it('should join multiple arguments with proper escaping', () => {
+      expect(joinShellArgs(['curl', 'https://api.github.com'])).toBe('curl https://api.github.com');
+      expect(joinShellArgs(['curl', '-H', 'Authorization: Bearer token', 'https://api.github.com']))
+        .toBe("curl -H 'Authorization: Bearer token' https://api.github.com");
+      expect(joinShellArgs(['echo', 'hello world', 'test']))
+        .toBe("echo 'hello world' test");
     });
   });
 

@@ -37,18 +37,20 @@ sudo awf --help
 # Simple HTTP request
 sudo awf \
   --allow-domains github.com,api.github.com \
-  'curl https://api.github.com'
+  -- curl https://api.github.com
 
 # With GitHub Copilot CLI
 sudo -E awf \
   --allow-domains github.com,api.github.com,googleapis.com \
-  'copilot --prompt "List my repositories"'
+  -- copilot --prompt "List my repositories"
 
 # Docker-in-Docker (spawned containers inherit firewall)
 sudo awf \
   --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
+  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
 ```
+
+**Note:** Always use the `--` separator to pass commands and arguments. This ensures proper argument handling and avoids shell escaping issues.
 
 ## Domain Whitelisting
 
@@ -56,7 +58,7 @@ Domains automatically match all subdomains:
 
 ```bash
 # github.com matches api.github.com, raw.githubusercontent.com, etc.
-sudo awf --allow-domains github.com "curl https://api.github.com"  # ✓ works
+sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
 ```
 
 Common domain lists:
