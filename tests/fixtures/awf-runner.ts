@@ -12,6 +12,7 @@ export interface AwfOptions {
   imageTag?: string;
   timeout?: number; // milliseconds
   env?: Record<string, string>;
+  volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
 }
 
 export interface AwfResult {
@@ -65,6 +66,16 @@ export class AwfRunner {
     if (options.imageTag) {
       args.push('--image-tag', options.imageTag);
     }
+
+    // Add volume mounts
+    if (options.volumeMounts && options.volumeMounts.length > 0) {
+      options.volumeMounts.forEach(mount => {
+        args.push('--mount', mount);
+      });
+    }
+
+    // Add -- separator before command
+    args.push('--');
 
     // Add the command to execute
     args.push(command);
@@ -147,6 +158,16 @@ export class AwfRunner {
     if (options.imageTag) {
       args.push('--image-tag', options.imageTag);
     }
+
+    // Add volume mounts
+    if (options.volumeMounts && options.volumeMounts.length > 0) {
+      options.volumeMounts.forEach(mount => {
+        args.push('--mount', mount);
+      });
+    }
+
+    // Add -- separator before command
+    args.push('--');
 
     // Add the command to execute
     args.push(command);

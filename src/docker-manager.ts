@@ -205,6 +205,34 @@ export function generateDockerCompose(
     Object.assign(environment, config.additionalEnv);
   }
 
+  // Build volumes list for copilot container
+  const copilotVolumes: string[] = [
+    // Essential mounts that are always included
+    '/tmp:/tmp:rw',
+    `${process.env.HOME}:${process.env.HOME}:rw`,
+    // Mount Docker socket for MCP servers that need to run containers
+    '/var/run/docker.sock:/var/run/docker.sock:rw',
+    // Mount clean Docker config to override host's context
+    `${config.workDir}/.docker:/workspace/.docker:rw`,
+    // Override host's .docker directory with clean config to prevent Docker CLI
+    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
+    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
+    // Mount copilot logs directory to workDir for persistence
+    `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
+  ];
+
+  // Add custom volume mounts if specified
+  if (config.volumeMounts && config.volumeMounts.length > 0) {
+    logger.debug(`Adding ${config.volumeMounts.length} custom volume mount(s)`);
+    config.volumeMounts.forEach(mount => {
+      copilotVolumes.push(mount);
+    });
+  } else {
+    // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
+    logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
+    copilotVolumes.unshift('/:/host:rw');
+  }
+
   // Copilot service configuration
   const copilotService: any = {
     container_name: 'awf-copilot',
@@ -215,21 +243,7 @@ export function generateDockerCompose(
     },
     dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
-    volumes: [
-      // Mount host filesystem for copilot access
-      '/:/host:rw',
-      '/tmp:/tmp:rw',
-      `${process.env.HOME}:${process.env.HOME}:rw`,
-      // Mount Docker socket for MCP servers that need to run containers
-      '/var/run/docker.sock:/var/run/docker.sock:rw',
-      // Mount clean Docker config to override host's context
-      `${config.workDir}/.docker:/workspace/.docker:rw`,
-      // Override host's .docker directory with clean config to prevent Docker CLI
-      // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-      `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
-      // Mount copilot logs directory to workDir for persistence
-      `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
-    ],
+    volumes: copilotVolumes,
     environment,
     depends_on: {
       'squid-proxy': {

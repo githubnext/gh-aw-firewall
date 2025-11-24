@@ -72,13 +72,27 @@ export interface ParseEnvError {
 }
 
 /**
+ * Result of parsing volume mounts
+ */
+export interface ParseVolumeMountsResult {
+  success: true;
+  mounts: string[];
+}
+
+export interface ParseVolumeMountsError {
+  success: false;
+  invalidMount: string;
+  reason: string;
+}
+
+/**
  * Parses environment variables from an array of KEY=VALUE strings
  * @param envVars Array of environment variable strings in KEY=VALUE format
  * @returns ParseEnvResult with parsed key-value pairs on success, or ParseEnvError with the invalid variable on failure
  */
 export function parseEnvironmentVariables(envVars: string[]): ParseEnvResult | ParseEnvError {
   const result: Record<string, string> = {};
-  
+
   for (const envVar of envVars) {
     const match = envVar.match(/^([^=]+)=(.*)$/);
     if (!match) {
@@ -87,8 +101,100 @@ export function parseEnvironmentVariables(envVars: string[]): ParseEnvResult | P
     const [, key, value] = match;
     result[key] = value;
   }
-  
+
   return { success: true, env: result };
+}
+
+/**
+ * Parses and validates volume mount specifications
+ * @param mounts Array of volume mount strings in host_path:container_path[:mode] format
+ * @returns ParseVolumeMountsResult on success, or ParseVolumeMountsError with details on failure
+ */
+export function parseVolumeMounts(mounts: string[]): ParseVolumeMountsResult | ParseVolumeMountsError {
+  const result: string[] = [];
+
+  for (const mount of mounts) {
+    // Parse mount specification: host_path:container_path[:mode]
+    const parts = mount.split(':');
+
+    if (parts.length < 2 || parts.length > 3) {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Mount must be in format host_path:container_path[:mode]'
+      };
+    }
+
+    const [hostPath, containerPath, mode] = parts;
+
+    // Validate host path is not empty
+    if (!hostPath || hostPath.trim() === '') {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Host path cannot be empty'
+      };
+    }
+
+    // Validate container path is not empty
+    if (!containerPath || containerPath.trim() === '') {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Container path cannot be empty'
+      };
+    }
+
+    // Validate host path is absolute
+    if (!hostPath.startsWith('/')) {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Host path must be absolute (start with /)'
+      };
+    }
+
+    // Validate container path is absolute
+    if (!containerPath.startsWith('/')) {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Container path must be absolute (start with /)'
+      };
+    }
+
+    // Validate mode if specified
+    if (mode && mode !== 'ro' && mode !== 'rw') {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: 'Mount mode must be either "ro" or "rw"'
+      };
+    }
+
+    // Validate host path exists
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(hostPath)) {
+        return {
+          success: false,
+          invalidMount: mount,
+          reason: `Host path does not exist: ${hostPath}`
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        invalidMount: mount,
+        reason: `Failed to check host path: ${error}`
+      };
+    }
+
+    // Add to result list
+    result.push(mount);
+  }
+
+  return { success: true, mounts: result };
 }
 
 const program = new Command();
@@ -142,6 +248,12 @@ program
     'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
     false
   )
+  .option(
+    '-v, --mount <host_path:container_path[:mode]>',
+    'Volume mount (can be specified multiple times). Format: host_path:container_path[:ro|rw]',
+    (value, previous: string[] = []) => [...previous, value],
+    []
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -180,6 +292,19 @@ program
       additionalEnv = parsed.env;
     }
 
+    // Parse and validate volume mounts from --mount flags
+    let volumeMounts: string[] | undefined = undefined;
+    if (options.mount && Array.isArray(options.mount) && options.mount.length > 0) {
+      const parsed = parseVolumeMounts(options.mount);
+      if (!parsed.success) {
+        logger.error(`Invalid volume mount: ${parsed.invalidMount}`);
+        logger.error(`Reason: ${parsed.reason}`);
+        process.exit(1);
+      }
+      volumeMounts = parsed.mounts;
+      logger.debug(`Parsed ${volumeMounts.length} volume mount(s)`);
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       copilotCommand,
@@ -191,6 +316,7 @@ program
       imageTag: options.imageTag,
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
       envAll: options.envAll,
+      volumeMounts,
     };
 
     // Warn if --env-all is used

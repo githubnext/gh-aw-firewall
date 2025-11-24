@@ -130,16 +130,31 @@ export interface WrapperConfig {
 
   /**
    * Whether to pass all host environment variables to the container
-   * 
+   *
    * When true, all environment variables from the host (excluding system variables
    * like PATH, HOME, etc.) are passed to the copilot container. This is useful for
    * development but may pose security risks in production.
-   * 
+   *
    * When false (default), only variables specified in additionalEnv are passed.
-   * 
+   *
    * @default false
    */
   envAll?: boolean;
+
+  /**
+   * Custom volume mounts to add to the copilot container
+   *
+   * Array of volume mount specifications in Docker format:
+   * - 'host_path:container_path' (defaults to rw)
+   * - 'host_path:container_path:ro' (read-only)
+   * - 'host_path:container_path:rw' (read-write)
+   *
+   * These are in addition to essential mounts (Docker socket, HOME, /tmp).
+   * The blanket /:/host:rw mount is removed when custom mounts are specified.
+   *
+   * @example ['/workspace:/workspace:ro', '/data:/data:rw']
+   */
+  volumeMounts?: string[];
 }
 
 /**
