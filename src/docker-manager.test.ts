@@ -116,7 +116,7 @@ describe('docker-manager', () => {
       expect(env.SQUID_PROXY_PORT).toBe('3128');
     });
 
-    it('should mount required volumes in copilot container', () => {
+    it('should mount required volumes in copilot container (default behavior)', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const copilot = result.services.copilot;
       const volumes = copilot.volumes as string[];
@@ -125,6 +125,37 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/tmp:/tmp:rw');
       expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
       expect(volumes.some((v: string) => v.includes('copilot-logs'))).toBe(true);
+    });
+
+    it('should use custom volume mounts when specified', () => {
+      const configWithMounts = {
+        ...mockConfig,
+        volumeMounts: ['/workspace:/workspace:ro', '/data:/data:rw']
+      };
+      const result = generateDockerCompose(configWithMounts, mockNetworkConfig);
+      const copilot = result.services.copilot;
+      const volumes = copilot.volumes as string[];
+
+      // Should NOT include blanket /:/host:rw mount
+      expect(volumes).not.toContain('/:/host:rw');
+
+      // Should include custom mounts
+      expect(volumes).toContain('/workspace:/workspace:ro');
+      expect(volumes).toContain('/data:/data:rw');
+
+      // Should still include essential mounts
+      expect(volumes).toContain('/tmp:/tmp:rw');
+      expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
+      expect(volumes.some((v: string) => v.includes('copilot-logs'))).toBe(true);
+    });
+
+    it('should use blanket mount when no custom mounts specified', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const copilot = result.services.copilot;
+      const volumes = copilot.volumes as string[];
+
+      // Should include blanket /:/host:rw mount
+      expect(volumes).toContain('/:/host:rw');
     });
 
     it('should set copilot to depend on healthy squid', () => {
