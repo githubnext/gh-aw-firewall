@@ -47,7 +47,7 @@ jobs:
 
       - name: Clean npm cache
         if: always()
-        run: npm cache clean --force
+        run: sudo npm cache clean --force
 
       - name: Generate test summary
         if: always()
