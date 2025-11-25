@@ -460,14 +460,25 @@ export interface DockerService {
 
   /**
    * Port mappings from host to container
-   * 
+   *
    * Array of port mappings in format 'host:container' or 'host:container/protocol'.
    * The firewall typically doesn't expose ports as communication happens over
    * the Docker network.
-   * 
+   *
    * @example ['8080:80', '443:443/tcp']
    */
   ports?: string[];
+
+  /**
+   * Working directory inside the container
+   *
+   * Sets the initial working directory (pwd) for command execution.
+   * This overrides the WORKDIR specified in the Dockerfile.
+   *
+   * @example '/home/runner/work/repo/repo'
+   * @example '/workspace'
+   */
+  working_dir?: string;
 }
 
 /**

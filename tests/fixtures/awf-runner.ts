@@ -13,6 +13,7 @@ export interface AwfOptions {
   timeout?: number; // milliseconds
   env?: Record<string, string>;
   volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
+  containerWorkDir?: string; // Working directory inside the container
 }
 
 export interface AwfResult {
@@ -72,6 +73,11 @@ export class AwfRunner {
       options.volumeMounts.forEach(mount => {
         args.push('--mount', mount);
       });
+    }
+
+    // Add container working directory
+    if (options.containerWorkDir) {
+      args.push('--container-workdir', options.containerWorkDir);
     }
 
     // Add -- separator before command
@@ -164,6 +170,11 @@ export class AwfRunner {
       options.volumeMounts.forEach(mount => {
         args.push('--mount', mount);
       });
+    }
+
+    // Add container working directory
+    if (options.containerWorkDir) {
+      args.push('--container-workdir', options.containerWorkDir);
     }
 
     // Add -- separator before command

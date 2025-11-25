@@ -294,5 +294,79 @@ describe('docker-manager', () => {
         }
       }
     });
+
+    describe('containerWorkDir option', () => {
+      it('should not set working_dir when containerWorkDir is not specified', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+
+        expect(result.services.copilot.working_dir).toBeUndefined();
+      });
+
+      it('should set working_dir when containerWorkDir is specified', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '/home/runner/work/repo/repo',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        expect(result.services.copilot.working_dir).toBe('/home/runner/work/repo/repo');
+      });
+
+      it('should set working_dir to /workspace when containerWorkDir is /workspace', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '/workspace',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        expect(result.services.copilot.working_dir).toBe('/workspace');
+      });
+
+      it('should handle paths with special characters', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '/home/user/my-project with spaces',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        expect(result.services.copilot.working_dir).toBe('/home/user/my-project with spaces');
+      });
+
+      it('should preserve working_dir alongside other copilot service config', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '/custom/workdir',
+          envAll: true,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        // Verify working_dir is set
+        expect(result.services.copilot.working_dir).toBe('/custom/workdir');
+        // Verify other config is still present
+        expect(result.services.copilot.container_name).toBe('awf-copilot');
+        expect(result.services.copilot.cap_add).toContain('NET_ADMIN');
+      });
+
+      it('should handle empty string containerWorkDir by not setting working_dir', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        // Empty string is falsy, so working_dir should not be set
+        expect(result.services.copilot.working_dir).toBeUndefined();
+      });
+
+      it('should handle absolute paths correctly', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          containerWorkDir: '/var/lib/app/data',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+
+        expect(result.services.copilot.working_dir).toBe('/var/lib/app/data');
+      });
+    });
   });
 });
