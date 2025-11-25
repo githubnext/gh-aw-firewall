@@ -575,7 +575,7 @@ sequenceDiagram
         Copilot->>Squid: NAT redirect to proxy
         Squid->>Squid: Check domain ACL
         alt Domain allowed
-            Squid->>Agent: Forward request → return response
+            Squid->>Agent: Forward request and return response
         else Domain blocked
             Squid->>Agent: 403 Forbidden (TCP_DENIED)
         end
@@ -673,6 +673,7 @@ Always test firewall commands locally before adding to CI/CD:
 
 ```bash
 # Local testing (interactive debugging)
+# Note: --keep-containers is useful locally for inspection but should NOT be used in CI
 sudo -E awf \
   --allow-domains github.com \
   --log-level debug \
@@ -681,6 +682,9 @@ sudo -E awf \
 
 # Check logs after execution
 sudo cat /tmp/squid-logs-*/access.log
+
+# Remember to cleanup manually when using --keep-containers
+sudo docker compose down -v
 ```
 
 Once working locally, migrate to GitHub Actions workflow.
