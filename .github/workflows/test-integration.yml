@@ -67,7 +67,9 @@ jobs:
 
       - name: Clean npm cache
         if: always()
-        run: sudo npm cache clean --force
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
 
       - name: Generate test summary
         if: always()
@@ -126,7 +128,9 @@ jobs:
 
       - name: Clean npm cache
         if: always()
-        run: sudo npm cache clean --force
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
 
       - name: Generate test summary
         if: always()
@@ -185,7 +189,9 @@ jobs:
 
       - name: Clean npm cache
         if: always()
-        run: sudo npm cache clean --force
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
 
       - name: Generate test summary
         if: always()

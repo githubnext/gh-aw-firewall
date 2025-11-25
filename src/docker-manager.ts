@@ -36,7 +36,7 @@ async function getExistingDockerSubnets(): Promise<string[]> {
 
     logger.debug(`Found existing Docker subnets: ${subnets.join(', ')}`);
     return subnets;
-  } catch (error) {
+  } catch {
     logger.debug('Failed to query Docker networks, proceeding with random subnet');
     return [];
   }
@@ -434,7 +434,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
     await execa('docker', ['rm', '-f', 'awf-squid', 'awf-copilot'], {
       reject: false,
     });
-  } catch (error) {
+  } catch {
     // Ignore errors if containers don't exist
     logger.debug('No existing containers to remove (this is normal)');
   }
@@ -641,7 +641,8 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
 
           // Make logs readable by GitHub Actions runner for artifact upload
           // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
-          execa.sync('chmod', ['-R', '644', preservedSquidLogsDir]);
+          // chmod a+rX sets read for all users, and execute for dirs (capital X)
+          execa.sync('chmod', ['-R', 'a+rX', preservedSquidLogsDir]);
 
           logger.info(`Squid logs preserved at: ${preservedSquidLogsDir}`);
         } catch (error) {
