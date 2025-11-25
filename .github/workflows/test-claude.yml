@@ -45,17 +45,6 @@ jobs:
           echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
-      - name: Clean npm cache
-        if: always()
-        run: |
-          sudo npm cache clean --force
-          sudo rm -rf ~/.npm/_npx
-
-      - name: Generate test summary
-        if: always()
-        run: |
-          npx tsx scripts/ci/generate-test-summary.ts "claude-code.test.ts" "Claude Code Integration Tests" test-output.log
-
       - name: Check test results
         if: always()
         run: |
