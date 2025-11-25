@@ -242,7 +242,6 @@ describe('docker-manager', () => {
 
     it('should exclude system variables when envAll is enabled', () => {
       const originalPath = process.env.PATH;
-      const originalUser = process.env.USER;
       process.env.CUSTOM_HOST_VAR = 'test_value';
 
       try {

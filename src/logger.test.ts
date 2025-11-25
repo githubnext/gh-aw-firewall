@@ -1,5 +1,4 @@
 import { logger } from './logger';
-import chalk from 'chalk';
 
 // Mock chalk to avoid terminal output issues in tests
 jest.mock('chalk', () => ({

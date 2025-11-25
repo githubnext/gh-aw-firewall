@@ -77,7 +77,8 @@ export function subnetsOverlap(subnet1: string, subnet2: string): boolean {
  * Generates a random subnet in Docker's private IP range that doesn't conflict with existing networks
  * Uses 172.16-31.x.0/24 range (Docker's default bridge network range)
  */
-async function generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; copilotIp: string }> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; copilotIp: string }> {
   const existingSubnets = await getExistingDockerSubnets();
   const MAX_RETRIES = 50;
 
@@ -186,7 +187,7 @@ export function generateDockerCompose(
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
   if (config.envAll) {
     for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined && !EXCLUDED_ENV_VARS.has(key) && !environment.hasOwnProperty(key)) {
+      if (value !== undefined && !EXCLUDED_ENV_VARS.has(key) && !Object.prototype.hasOwnProperty.call(environment, key)) {
         environment[key] = value;
       }
     }
