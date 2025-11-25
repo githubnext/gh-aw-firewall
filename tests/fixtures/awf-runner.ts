@@ -135,6 +135,18 @@ export class AwfRunner {
 
   /**
    * Run awf with sudo (required for iptables manipulation)
+   *
+   * @param command - Command to execute:
+   *   - String: Complete shell command (may contain $vars, pipes, redirects)
+   *            Passed as single argument to preserve shell syntax
+   *   - Array: Pre-parsed argv array, each element will be shell-escaped
+   *
+   * IMPORTANT: When passing strings with shell variables like $HOME or $(pwd),
+   * use the string format to ensure they expand in the container, not on host.
+   *
+   * Examples:
+   *   runWithSudo('echo $HOME && pwd')  // Variables expand in container ✅
+   *   runWithSudo(['echo', '$HOME'])    // Literal string "$HOME" ❌
    */
   async runWithSudo(command: string, options: AwfOptions = {}): Promise<AwfResult> {
     const args: string[] = [];

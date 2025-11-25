@@ -62,6 +62,54 @@ sudo awf \
   'copilot --mcp arxiv,tavily --prompt "Search arxiv for recent AI papers"'
 ```
 
+## Command Passing with Environment Variables
+
+AWF preserves shell variables for expansion inside the container, making it compatible with GitHub Actions and other CI/CD environments.
+
+### Single Argument (Recommended for Complex Commands)
+
+Quote your entire command to preserve shell syntax and variables:
+
+```bash
+# Variables expand inside the container
+sudo awf --allow-domains github.com -- 'echo $HOME && pwd'
+```
+
+Variables like `$HOME`, `$USER`, `$PWD` will expand inside the container, not on your host machine. This is **critical** for commands that need to reference the container environment.
+
+### Multiple Arguments (Simple Commands)
+
+For simple commands without variables or special shell syntax:
+
+```bash
+# Each argument is automatically shell-escaped
+sudo awf --allow-domains github.com -- curl -H "Authorization: Bearer token" https://api.github.com
+```
+
+### GitHub Actions Usage
+
+Environment variables work correctly when using the single-argument format:
+
+```yaml
+- name: Run with environment variables
+  run: |
+    sudo -E awf --allow-domains github.com -- 'cd $GITHUB_WORKSPACE && npm test'
+```
+
+**Why this works:**
+- GitHub Actions expands `${{ }}` syntax before the shell sees it
+- Shell variables like `$GITHUB_WORKSPACE` are preserved literally
+- These variables then expand inside the container with correct values
+
+**Important:** Do NOT use multi-argument format with variables:
+```bash
+# ❌ Wrong: Variables won't expand correctly
+sudo awf -- echo $HOME  # Shell expands $HOME on host first
+
+# ✅ Correct: Single-quoted preserves for container
+sudo awf -- 'echo $HOME'  # Expands to container home
+```
+
 ## Domain Whitelisting
 
 ### Subdomain Matching
