@@ -196,6 +196,8 @@ export function generateDockerCompose(
     if (process.env.GITHUB_TOKEN) environment.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+    // Anthropic API key for Claude Code
+    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
@@ -253,7 +255,7 @@ export function generateDockerCompose(
     },
     cap_add: ['NET_ADMIN'], // Required for iptables
     stdin_open: true,
-    tty: false, // Disable TTY to prevent ANSI escape sequences in logs
+    tty: config.tty || false, // Use --tty flag, default to false for clean logs
     // Escape $ with $$ for Docker Compose variable interpolation
     command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
   };

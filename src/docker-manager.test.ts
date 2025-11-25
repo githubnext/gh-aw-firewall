@@ -173,11 +173,19 @@ describe('docker-manager', () => {
       expect(copilot.cap_add).toContain('NET_ADMIN');
     });
 
-    it('should disable TTY to prevent ANSI escape sequences', () => {
+    it('should disable TTY by default to prevent ANSI escape sequences', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const copilot = result.services.copilot;
 
       expect(copilot.tty).toBe(false);
+    });
+
+    it('should enable TTY when config.tty is true', () => {
+      const configWithTty = { ...mockConfig, tty: true };
+      const result = generateDockerCompose(configWithTty, mockNetworkConfig);
+      const copilot = result.services.copilot;
+
+      expect(copilot.tty).toBe(true);
     });
 
     it('should escape dollar signs in commands for docker-compose', () => {

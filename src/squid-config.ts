@@ -96,6 +96,31 @@ error_directory /usr/share/squid/errors/en
 cache_mem 64 MB
 maximum_object_size 0 KB
 
+# Timeout settings for streaming/long-lived connections (AI inference APIs)
+# read_timeout: Time to wait for data from server before giving up
+# Increased to accommodate long AI inference calls and SSE streaming
+read_timeout 30 minutes
+
+# connect_timeout: Time to wait for TCP connection to origin server
+connect_timeout 30 seconds
+
+# request_timeout: Time to wait for client to send first request after connection
+request_timeout 2 minutes
+
+# persistent_request_timeout: Time to wait for next request on persistent connection
+persistent_request_timeout 2 minutes
+
+# pconn_timeout: How long to keep idle persistent connections to servers
+pconn_timeout 2 minutes
+
+# client_lifetime: Maximum time a client connection can be open
+# Set high to accommodate long streaming sessions
+client_lifetime 8 hours
+
+# half_closed_clients: Allow half-closed connections for streaming
+# Critical for SSE where server sends but client doesn't respond
+half_closed_clients on
+
 # Debugging (can be enabled for troubleshooting)
 # debug_options ALL,1 33,2
 `;

@@ -264,6 +264,11 @@ program
     false
   )
   .option(
+    '--tty',
+    'Allocate a pseudo-TTY for the container (required for interactive tools like Claude Code)',
+    false
+  )
+  .option(
     '--work-dir <dir>',
     'Working directory for temporary files',
     path.join(os.tmpdir(), `awf-${Date.now()}`)
@@ -381,6 +386,7 @@ program
       copilotCommand,
       logLevel,
       keepContainers: options.keepContainers,
+      tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
       imageRegistry: options.imageRegistry,
