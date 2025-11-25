@@ -61,6 +61,8 @@ Domains automatically match all subdomains:
 sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
 ```
 
+### Using Command-Line Flag
+
 Common domain lists:
 
 ```bash
@@ -69,6 +71,43 @@ Common domain lists:
 
 # For MCP servers
 --allow-domains github.com,arxiv.org,example.com
+```
+
+### Using a Domains File
+
+You can also specify domains in a file using `--allow-domains-file`:
+
+```bash
+# Create a domains file (see examples/domains.txt)
+cat > allowed-domains.txt << 'EOF'
+# GitHub domains
+github.com
+api.github.com
+
+# NPM registry
+npmjs.org, registry.npmjs.org
+
+# Example with inline comment
+example.com # Example domain
+EOF
+
+# Use the domains file
+sudo awf --allow-domains-file allowed-domains.txt -- curl https://api.github.com
+```
+
+**File format:**
+- One domain per line or comma-separated
+- Comments start with `#` (full line or inline)
+- Empty lines are ignored
+- Whitespace is trimmed
+
+**Combining both methods:**
+```bash
+# You can use both flags together - domains are merged
+sudo awf \
+  --allow-domains github.com \
+  --allow-domains-file my-domains.txt \
+  -- curl https://api.github.com
 ```
 
 

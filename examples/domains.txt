@@ -1,0 +1,22 @@
+# Example domains file for awf (Agentic Workflow Firewall)
+# 
+# This file demonstrates the supported formats for specifying allowed domains.
+# You can use:
+# - One domain per line
+# - Comma-separated domains on the same line
+# - Comments starting with # (full line or inline)
+# - Empty lines (they will be ignored)
+
+# GitHub domains
+github.com
+api.github.com
+raw.githubusercontent.com
+
+# Google services (comma-separated)
+googleapis.com, google.com
+
+# NPM registry
+registry.npmjs.org # NPM package registry
+
+# Example domain
+example.com
