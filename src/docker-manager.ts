@@ -638,6 +638,11 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
         const preservedSquidLogsDir = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
         try {
           fs.renameSync(squidLogsDir, preservedSquidLogsDir);
+
+          // Make logs readable by GitHub Actions runner for artifact upload
+          // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
+          execa.sync('chmod', ['-R', '644', preservedSquidLogsDir]);
+
           logger.info(`Squid logs preserved at: ${preservedSquidLogsDir}`);
         } catch (error) {
           logger.debug('Could not preserve squid logs:', error);

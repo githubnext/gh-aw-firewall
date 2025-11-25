@@ -45,6 +45,10 @@ jobs:
           echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
+      - name: Clean npm cache
+        if: always()
+        run: npm cache clean --force
+
       - name: Generate test summary
         if: always()
         run: |
