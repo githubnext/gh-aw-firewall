@@ -155,6 +155,19 @@ export interface WrapperConfig {
    * @example ['/workspace:/workspace:ro', '/data:/data:rw']
    */
   volumeMounts?: string[];
+
+  /**
+   * Working directory inside the copilot container
+   *
+   * Sets the initial working directory (pwd) for command execution.
+   * This overrides the Dockerfile's WORKDIR and should match GITHUB_WORKSPACE
+   * for path consistency with AI prompts.
+   *
+   * When not specified, defaults to the container's WORKDIR (/workspace).
+   *
+   * @example '/home/runner/work/repo/repo'
+   */
+  containerWorkDir?: string;
 }
 
 /**

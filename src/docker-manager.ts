@@ -257,6 +257,12 @@ export function generateDockerCompose(
     command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
   };
 
+  // Set working directory if specified (overrides Dockerfile WORKDIR)
+  if (config.containerWorkDir) {
+    copilotService.working_dir = config.containerWorkDir;
+    logger.debug(`Set container working directory to: ${config.containerWorkDir}`);
+  }
+
   // Use GHCR image or build locally
   if (useGHCR) {
     copilotService.image = `${registry}/copilot:${tag}`;
