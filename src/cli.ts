@@ -40,7 +40,7 @@ export function parseDomains(input: string): string[] {
 export function escapeShellArg(arg: string): string {
   // If the argument doesn't contain special characters, return as-is
   // Character class includes: letters, digits, underscore, dash, dot (literal), slash, equals, colon
-  if (/^[a-zA-Z0-9_\-\./=:]+$/.test(arg)) {
+  if (/^[a-zA-Z0-9_\-./=:]+$/.test(arg)) {
     return arg;
   }
   // Otherwise, wrap in single quotes and escape any single quotes inside
@@ -174,6 +174,7 @@ export function parseVolumeMounts(mounts: string[]): ParseVolumeMountsResult | P
 
     // Validate host path exists
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
       const fs = require('fs');
       if (!fs.existsSync(hostPath)) {
         return {

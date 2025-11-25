@@ -106,57 +106,109 @@ jobs:
           cd release
           sha256sum * > checksums.txt
 
+      - name: Get previous release tag
+        id: previous_tag
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+
+          # Use git tags directly (more reliable than gh release list)
+          # Get the most recent tag that is not the current tag
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || echo "")
+
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREVIOUS_TAG (current: $CURRENT_TAG)"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
+
+          echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+
+          # Generate changelog using GitHub's API
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              -f previous_tag_name="$PREVIOUS_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          else
+            # First release - try API without previous tag
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          fi
+
+          # If API call failed, fall back to git log
+          if [ -z "$CHANGELOG" ]; then
+            echo "GitHub API failed, falling back to git log"
+            if [ -n "$PREVIOUS_TAG" ]; then
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" "$PREVIOUS_TAG..HEAD" 2>/dev/null || echo "* Initial release")
+            else
+              # First release - get all commits (no arbitrary limit)
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" 2>/dev/null || echo "* Initial release")
+            fi
+          fi
+
+          # Write changelog to file for multiline handling
+          echo "$CHANGELOG" > changelog_body.md
+
+          # Validate changelog was generated
+          if [ ! -s changelog_body.md ]; then
+            echo "Error: Changelog generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "Changelog generated successfully ($(wc -l < changelog_body.md) lines)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate CLI help output
+        id: cli_help
+        run: |
+          set -euo pipefail
+
+          # Generate CLI help from the built binary
+          node dist/cli.js --help > cli_help.txt
+
+          # Validate CLI help was generated
+          if [ ! -s cli_help.txt ]; then
+            echo "Error: CLI help generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "CLI help generated ($(wc -l < cli_help.txt) lines):"
+          cat cli_help.txt
+
       - name: Create Release Notes
         id: release_notes
+        env:
+          VERSION: ${{ steps.version_early.outputs.version }}
+          VERSION_NUMBER: ${{ steps.version_early.outputs.version_number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          cat > release_notes.md << 'EOF'
-          ## Installation
+          set -euo pipefail
 
-          ### Binary Installation (Recommended)
+          # Use Node.js script for safe template substitution
+          # (avoids shell injection issues with special characters)
+          node scripts/generate-release-notes.js \
+            changelog_body.md \
+            cli_help.txt \
+            release_notes.md
 
-          **Linux (x64):**
-          ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ steps.version_early.outputs.version }}/awf-linux-x64 -o awf
-          chmod +x awf
-          sudo mv awf /usr/local/bin/
-          ```
+          # Validate output was generated
+          if [ ! -s release_notes.md ]; then
+            echo "Error: Release notes generation failed"
+            exit 1
+          fi
 
-          ### NPM Installation (Alternative)
+          # Cleanup temp files
+          rm -f changelog_body.md cli_help.txt
 
-          ```bash
-          # Install from tarball
-          npm install -g https://github.com/${{ github.repository }}/releases/download/${{ steps.version_early.outputs.version }}/awf.tgz
-          ```
-
-          ### Requirements
-
-          - Docker and Docker Compose must be installed
-          - For iptables manipulation, run with sudo: `sudo awf ...`
-          - Container images will be pulled automatically from GHCR on first run
-
-          ## Verification
-
-          Verify checksums after download:
-          ```bash
-          sha256sum -c checksums.txt
-          ```
-
-          ## Usage
-
-          ```bash
-          sudo awf --allow-domains github.com,api.github.com 'curl https://api.github.com'
-          ```
-
-          See [README.md](https://github.com/${{ github.repository }}/blob/${{ steps.version_early.outputs.version }}/README.md) for full documentation.
-
-          ## Container Images
-
-          Published to GitHub Container Registry:
-          - `ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}`
-          - `ghcr.io/${{ github.repository }}/copilot:${{ steps.version_early.outputs.version_number }}`
-          - `ghcr.io/${{ github.repository }}/squid:latest`
-          - `ghcr.io/${{ github.repository }}/copilot:latest`
-          EOF
+          echo "Release notes preview (first 20 lines):"
+          head -20 release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
