@@ -264,6 +264,11 @@ program
     false
   )
   .option(
+    '--tty',
+    'Allocate a pseudo-TTY for the container (required for interactive tools like Claude Code)',
+    false
+  )
+  .option(
     '--work-dir <dir>',
     'Working directory for temporary files',
     path.join(os.tmpdir(), `awf-${Date.now()}`)
@@ -312,9 +317,34 @@ program
       console.error('Example: awf --allow-domains github.com -- curl https://api.github.com');
       process.exit(1);
     }
-    
-    // Join arguments with proper shell escaping to preserve argument boundaries
-    const copilotCommand = joinShellArgs(args);
+
+    // Command argument handling:
+    //
+    // SINGLE ARGUMENT (complete shell command):
+    //   When a single argument is passed, it's treated as a complete shell
+    //   command string. This is CRITICAL for preserving shell variables ($HOME,
+    //   $(command), etc.) that must expand in the container, not on the host.
+    //
+    //   Example: awf -- 'echo $HOME'
+    //   → args = ['echo $HOME']  (single element)
+    //   → Passed as-is: 'echo $HOME'
+    //   → Docker Compose: 'echo $$HOME' (escaped for YAML)
+    //   → Container shell: 'echo $HOME' (expands to container home)
+    //
+    // MULTIPLE ARGUMENTS (shell-parsed by user's shell):
+    //   When multiple arguments are passed, each is shell-escaped and joined.
+    //   This happens when the user doesn't quote the command.
+    //
+    //   Example: awf -- curl -H "Auth: token" https://api.github.com
+    //   → args = ['curl', '-H', 'Auth: token', 'https://api.github.com']
+    //   → joinShellArgs(): curl -H 'Auth: token' https://api.github.com
+    //
+    // Why not use shell-quote library?
+    // - shell-quote expands variables on the HOST ($HOME → /home/hostuser)
+    // - We need variables to expand in CONTAINER ($HOME → /root or /home/runner)
+    // - The $$$$  escaping pattern requires literal $ preservation
+    //
+    const copilotCommand = args.length === 1 ? args[0] : joinShellArgs(args);
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
@@ -381,6 +411,7 @@ program
       copilotCommand,
       logLevel,
       keepContainers: options.keepContainers,
+      tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
       imageRegistry: options.imageRegistry,

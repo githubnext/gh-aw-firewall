@@ -65,6 +65,12 @@ jobs:
           sudo -E npm run test:integration -- basic-firewall.test.ts 2>&1 | tee test-output.log
         continue-on-error: true
 
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
+
       - name: Generate test summary
         if: always()
         run: |
@@ -120,6 +126,12 @@ jobs:
           sudo -E npm run test:integration -- robustness.test.ts 2>&1 | tee test-output.log
         continue-on-error: true
 
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
+
       - name: Generate test summary
         if: always()
         run: |
@@ -174,6 +186,12 @@ jobs:
         run: |
           sudo -E npm run test:integration -- docker-egress.test.ts 2>&1 | tee test-output.log
         continue-on-error: true
+
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
 
       - name: Generate test summary
         if: always()

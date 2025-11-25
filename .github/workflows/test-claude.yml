@@ -1,0 +1,70 @@
+name: Claude Code Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-claude-code:
+    name: Claude Code Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run Claude Code tests
+        id: run-tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set +e
+          sudo -E npm run test:integration -- claude-code.test.ts 2>&1 | tee test-output.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Check test results
+        if: always()
+        run: |
+          if [ "${{ steps.run-tests.outputs.exit_code }}" != "0" ]; then
+            echo "Tests failed with exit code ${{ steps.run-tests.outputs.exit_code }}"
+            exit 1
+          fi
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: claude-code-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/copilot-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7

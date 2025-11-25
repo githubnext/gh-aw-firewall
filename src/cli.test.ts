@@ -441,6 +441,38 @@ describe('cli', () => {
     });
   });
 
+  describe('command argument handling with variables', () => {
+    it('should preserve $ in single argument for container expansion', () => {
+      // Single argument - passed through for container expansion
+      const args = ['echo $HOME && echo $USER'];
+      const result = args.length === 1 ? args[0] : joinShellArgs(args);
+      expect(result).toBe('echo $HOME && echo $USER');
+      // $ signs will be escaped to $$ by Docker Compose generator
+    });
+
+    it('should escape arguments when multiple provided', () => {
+      // Multiple arguments - each escaped
+      const args = ['echo', '$HOME', '&&', 'echo', '$USER'];
+      const result = args.length === 1 ? args[0] : joinShellArgs(args);
+      expect(result).toBe("echo '$HOME' '&&' echo '$USER'");
+      // Now $ signs are quoted, won't expand
+    });
+
+    it('should handle GitHub Actions style commands', () => {
+      // Simulates: awf -- 'cd $GITHUB_WORKSPACE && npm test'
+      const args = ['cd $GITHUB_WORKSPACE && npm test'];
+      const result = args.length === 1 ? args[0] : joinShellArgs(args);
+      expect(result).toBe('cd $GITHUB_WORKSPACE && npm test');
+    });
+
+    it('should preserve command substitution', () => {
+      // Simulates: awf -- 'echo $(pwd) && echo $(whoami)'
+      const args = ['echo $(pwd) && echo $(whoami)'];
+      const result = args.length === 1 ? args[0] : joinShellArgs(args);
+      expect(result).toBe('echo $(pwd) && echo $(whoami)');
+    });
+  });
+
   describe('work directory generation', () => {
     it('should generate unique work directories', () => {
       const dir1 = `/tmp/awf-${Date.now()}`;

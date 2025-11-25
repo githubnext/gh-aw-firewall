@@ -41,7 +41,7 @@ export async function ensureFirewallNetwork(): Promise<{
     await execa('docker', ['network', 'inspect', NETWORK_NAME]);
     networkExists = true;
     logger.debug(`Network '${NETWORK_NAME}' already exists`);
-  } catch (error) {
+  } catch {
     // Network doesn't exist
   }
 
@@ -96,7 +96,7 @@ export async function setupHostIptables(squidIp: string, squidPort: number): Pro
     logger.warn('DOCKER-USER chain does not exist, which is unexpected. Attempting to create it...');
     try {
       await execa('iptables', ['-t', 'filter', '-N', 'DOCKER-USER']);
-    } catch (createError) {
+    } catch {
       throw new Error(
         'Failed to create DOCKER-USER chain. This may indicate a permission or Docker installation issue.'
       );

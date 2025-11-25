@@ -60,18 +60,35 @@ export interface WrapperConfig {
 
   /**
    * Whether to preserve containers and configuration files after execution
-   * 
+   *
    * When true:
    * - Docker containers are not stopped or removed
    * - Work directory and all config files remain on disk
    * - Useful for debugging, inspecting logs, and troubleshooting
-   * 
+   *
    * When false (default):
    * - Containers are stopped and removed via 'docker compose down -v'
    * - Work directory is deleted (except preserved log directories)
    * - Squid and Copilot logs are moved to /tmp if they exist
    */
   keepContainers: boolean;
+
+  /**
+   * Whether to allocate a pseudo-TTY for the copilot container
+   *
+   * When true:
+   * - Allocates a pseudo-TTY (stdin becomes a TTY)
+   * - Required for interactive CLI tools like Claude Code that use Ink/raw mode
+   * - Logs will contain ANSI escape sequences (colors, cursor movements)
+   *
+   * When false (default):
+   * - No TTY allocation (stdin is a pipe)
+   * - Clean logs without ANSI escape sequences
+   * - Interactive tools requiring TTY will hang or fail
+   *
+   * @default false
+   */
+  tty?: boolean;
 
   /**
    * Temporary work directory for configuration files and logs

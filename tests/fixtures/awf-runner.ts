@@ -14,6 +14,7 @@ export interface AwfOptions {
   env?: Record<string, string>;
   volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
   containerWorkDir?: string; // Working directory inside the container
+  tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
 }
 
 export interface AwfResult {
@@ -80,6 +81,11 @@ export class AwfRunner {
       args.push('--container-workdir', options.containerWorkDir);
     }
 
+    // Add TTY flag
+    if (options.tty) {
+      args.push('--tty');
+    }
+
     // Add -- separator before command
     args.push('--');
 
@@ -129,6 +135,18 @@ export class AwfRunner {
 
   /**
    * Run awf with sudo (required for iptables manipulation)
+   *
+   * @param command - Command to execute:
+   *   - String: Complete shell command (may contain $vars, pipes, redirects)
+   *            Passed as single argument to preserve shell syntax
+   *   - Array: Pre-parsed argv array, each element will be shell-escaped
+   *
+   * IMPORTANT: When passing strings with shell variables like $HOME or $(pwd),
+   * use the string format to ensure they expand in the container, not on host.
+   *
+   * Examples:
+   *   runWithSudo('echo $HOME && pwd')  // Variables expand in container ✅
+   *   runWithSudo(['echo', '$HOME'])    // Literal string "$HOME" ❌
    */
   async runWithSudo(command: string, options: AwfOptions = {}): Promise<AwfResult> {
     const args: string[] = [];
@@ -175,6 +193,11 @@ export class AwfRunner {
     // Add container working directory
     if (options.containerWorkDir) {
       args.push('--container-workdir', options.containerWorkDir);
+    }
+
+    // Add TTY flag
+    if (options.tty) {
+      args.push('--tty');
     }
 
     // Add -- separator before command

@@ -36,7 +36,7 @@ async function getExistingDockerSubnets(): Promise<string[]> {
 
     logger.debug(`Found existing Docker subnets: ${subnets.join(', ')}`);
     return subnets;
-  } catch (error) {
+  } catch {
     logger.debug('Failed to query Docker networks, proceeding with random subnet');
     return [];
   }
@@ -196,6 +196,8 @@ export function generateDockerCompose(
     if (process.env.GITHUB_TOKEN) environment.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+    // Anthropic API key for Claude Code
+    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
@@ -253,7 +255,7 @@ export function generateDockerCompose(
     },
     cap_add: ['NET_ADMIN'], // Required for iptables
     stdin_open: true,
-    tty: false, // Disable TTY to prevent ANSI escape sequences in logs
+    tty: config.tty || false, // Use --tty flag, default to false for clean logs
     // Escape $ with $$ for Docker Compose variable interpolation
     command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
   };
@@ -432,7 +434,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
     await execa('docker', ['rm', '-f', 'awf-squid', 'awf-copilot'], {
       reject: false,
     });
-  } catch (error) {
+  } catch {
     // Ignore errors if containers don't exist
     logger.debug('No existing containers to remove (this is normal)');
   }
@@ -636,6 +638,12 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
         const preservedSquidLogsDir = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
         try {
           fs.renameSync(squidLogsDir, preservedSquidLogsDir);
+
+          // Make logs readable by GitHub Actions runner for artifact upload
+          // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
+          // chmod a+rX sets read for all users, and execute for dirs (capital X)
+          execa.sync('chmod', ['-R', 'a+rX', preservedSquidLogsDir]);
+
           logger.info(`Squid logs preserved at: ${preservedSquidLogsDir}`);
         } catch (error) {
           logger.debug('Could not preserve squid logs:', error);
