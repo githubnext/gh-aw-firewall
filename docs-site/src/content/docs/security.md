@@ -5,7 +5,7 @@ description: Deep dive into the firewall's defense-in-depth security model, thre
 
 # Security Architecture
 
-This document provides a comprehensive security analysis of the Agentic Workflow Firewall, designed for security engineers evaluating the tool for production use.
+This document provides a comprehensive security analysis of the Agentic Workflow Firewall designed for security engineers evaluating the tool for production use.
 
 ## Executive Summary
 
@@ -146,7 +146,7 @@ sudo awf --allow-domains github.com -- ssh git@github.com
 
 #### 7. Docker Socket Privilege Escalation
 
-**Attack:** Use mounted Docker socket to spawn unfiltered container.
+**Attack:** Use mounted Docker socket to spawn an unfiltered container.
 
 **Mitigations:**
 - **Network enforcement**: All spawned containers forced onto `awf-net` by wrapper
@@ -179,7 +179,7 @@ sudo awf --allow-domains github.com -- \
 
 #### 9. Localhost Bypass Attack
 
-**Attack:** Run local HTTP server and proxy traffic through it to bypass Squid.
+**Attack:** Run a local HTTP server and proxy traffic through it to bypass Squid.
 
 **Mitigations:**
 - **Localhost exemption is intentional**: Required for stdio MCP servers

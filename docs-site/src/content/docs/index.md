@@ -171,21 +171,21 @@ The firewall uses a containerized architecture with three security layers:
 
 <div class="sl-steps">
 
-1. **Get Started**
-   
-   Follow the [Installation Guide](/getting-started/installation) for platform-specific instructions.
-
-2. **Learn Domain Whitelisting**
-   
-   Read the [Domain Whitelisting Guide](/guides/domain-whitelisting) to understand domain matching and formatting.
-
-3. **Understand Security**
+1. **Understand Security**
    
    Review the [Security Architecture](/security) to learn how the firewall protects against attacks.
 
-4. **Debug Issues**
+2. **Read Full Documentation**
    
-   Check the [Troubleshooting Guide](/troubleshooting) for common problems and solutions.
+   Check the [README](https://github.com/githubnext/gh-aw-firewall#readme) for detailed usage examples and configuration options.
+
+3. **Debug Issues**
+   
+   See the [troubleshooting guide](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
+
+4. **Explore Examples**
+   
+   Browse the [examples directory](https://github.com/githubnext/gh-aw-firewall/tree/main/examples) for real-world use cases.
 
 </div>
 
@@ -270,4 +270,4 @@ Half measures are as bad as nothing at all.
 - **GitHub**: [Report issues](https://github.com/githubnext/gh-aw-firewall/issues) or contribute
 - **Examples**: Check the [examples directory](https://github.com/githubnext/gh-aw-firewall/tree/main/examples)
 
-Ready to get started? Head to the [Installation Guide](/getting-started/installation)!
+Ready to dive deeper? Read the [full documentation on GitHub](https://github.com/githubnext/gh-aw-firewall#readme).
