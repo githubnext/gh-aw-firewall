@@ -14,6 +14,7 @@ export interface AwfOptions {
   env?: Record<string, string>;
   volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
   containerWorkDir?: string; // Working directory inside the container
+  tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
 }
 
 export interface AwfResult {
@@ -78,6 +79,11 @@ export class AwfRunner {
     // Add container working directory
     if (options.containerWorkDir) {
       args.push('--container-workdir', options.containerWorkDir);
+    }
+
+    // Add TTY flag
+    if (options.tty) {
+      args.push('--tty');
     }
 
     // Add -- separator before command
@@ -175,6 +181,11 @@ export class AwfRunner {
     // Add container working directory
     if (options.containerWorkDir) {
       args.push('--container-workdir', options.containerWorkDir);
+    }
+
+    // Add TTY flag
+    if (options.tty) {
+      args.push('--tty');
     }
 
     // Add -- separator before command
