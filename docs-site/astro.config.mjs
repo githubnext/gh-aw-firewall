@@ -22,40 +22,6 @@ export default defineConfig({
 			customCss: [
 				'./src/styles/custom.css',
 			],
-			sidebar: [
-				{
-					label: 'Getting Started',
-					items: [
-						{ label: 'Quick Start', slug: 'getting-started/quickstart' },
-						{ label: 'Installation', slug: 'getting-started/installation' },
-					],
-				},
-				{
-					label: 'Guides',
-					items: [
-						{ label: 'Usage Guide', slug: 'guides/usage' },
-						{ label: 'GitHub Actions Integration', slug: 'guides/github-actions' },
-						{ label: 'Environment Variables', slug: 'guides/environment' },
-						{ label: 'Troubleshooting', slug: 'guides/troubleshooting' },
-					],
-				},
-				{
-					label: 'Reference',
-					items: [
-						{ label: 'Architecture', slug: 'reference/architecture' },
-						{ label: 'Logging', slug: 'reference/logging' },
-						{ label: 'Squid Log Filtering', slug: 'reference/squid-log-filtering' },
-					],
-				},
-				{
-					label: 'Development',
-					items: [
-						{ label: 'Contributing', slug: 'development/contributing' },
-						{ label: 'Testing', slug: 'development/testing' },
-						{ label: 'Releasing', slug: 'development/releasing' },
-					],
-				},
-			],
 		}),
 	],
 });

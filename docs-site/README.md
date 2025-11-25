@@ -39,45 +39,10 @@ docs-site/
 │   ├── assets/          # Images and static assets
 │   ├── content/
 │   │   └── docs/        # Documentation content (Markdown/MDX)
-│   │       ├── getting-started/
-│   │       ├── guides/
-│   │       ├── reference/
-│   │       └── development/
 │   └── styles/          # Custom CSS
 ├── public/              # Public static files
 ├── astro.config.mjs     # Astro configuration
 └── package.json
-```
-
-## Writing Documentation
-
-Documentation files are located in `src/content/docs/` and use Markdown or MDX format.
-
-### Frontmatter
-
-Each documentation page should include frontmatter:
-
-```markdown
----
-title: Page Title
-description: Brief description of the page
----
-
-Content here...
-```
-
-### Using Components
-
-MDX files can use Astro and Starlight components:
-
-```mdx
-import { Card, CardGrid } from '@astrojs/starlight/components';
-
-<CardGrid>
-  <Card title="Feature" icon="rocket">
-    Description
-  </Card>
-</CardGrid>
 ```
 
 ## Deployment
