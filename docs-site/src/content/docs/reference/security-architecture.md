@@ -674,6 +674,7 @@ Always test firewall commands locally before adding to CI/CD:
 ```bash
 # Local testing (interactive debugging)
 # Note: --keep-containers is useful locally for inspection but should NOT be used in CI
+# (in CI, it causes resource accumulation since containers aren't cleaned up between runs)
 sudo -E awf \
   --allow-domains github.com \
   --log-level debug \
