@@ -19,8 +19,6 @@ Everything below the `---` separator becomes the release notes.
 
 ---
 
-## What's Changed
-
 {{CHANGELOG}}
 
 ## CLI Options

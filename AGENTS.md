@@ -75,6 +75,36 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 
 **Example:** The "Pool overlaps" Docker network error was reproduced locally, traced to orphaned networks from `timeout`-killed processes, fixed by adding pre-test cleanup in scripts, then verified before updating workflows.
 
+### Commit Message Format
+
+**IMPORTANT:** This repository enforces [Conventional Commits](https://www.conventionalcommits.org/) via commitlint and husky hooks.
+
+**Format:** `type(scope): subject` (scope is optional)
+
+**Rules:**
+- `type` and `subject` must be lowercase
+- No period at end of subject
+- Header (entire commit message first line) max 72 characters
+- `scope` is optional but can help clarify the area of change
+- Both commit messages AND PR titles must follow this format
+
+**Common types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `chore`: Maintenance tasks
+- `test`: Test changes
+- `refactor`: Code refactoring
+- `ci`: CI/CD changes
+
+**Examples:**
+- ✅ `docs: fix duplicate heading in release template`
+- ✅ `docs(template): fix duplicate heading in release template`
+- ✅ `feat: add new domain whitelist option`
+- ✅ `fix(cleanup): resolve container cleanup race condition`
+- ❌ `Fix bug` (missing type)
+- ❌ `docs: Fix template.` (uppercase subject, period at end)
+
 ## Development Commands
 
 ### Build and Testing
