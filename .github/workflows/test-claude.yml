@@ -40,7 +40,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          set +e
           sudo -E npm run test:integration -- claude-code.test.ts 2>&1 | tee test-output.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Generate test summary
@@ -49,8 +51,12 @@ jobs:
           npx tsx scripts/ci/generate-test-summary.ts "claude-code.test.ts" "Claude Code Integration Tests" test-output.log
 
       - name: Check test results
-        if: steps.run-tests.outcome == 'failure'
-        run: exit 1
+        if: always()
+        run: |
+          if [ "${{ steps.run-tests.outputs.exit_code }}" != "0" ]; then
+            echo "Tests failed with exit code ${{ steps.run-tests.outputs.exit_code }}"
+            exit 1
+          fi
 
       - name: Post-test cleanup
         if: always()

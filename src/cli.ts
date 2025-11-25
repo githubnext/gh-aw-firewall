@@ -317,9 +317,11 @@ program
       console.error('Example: awf --allow-domains github.com -- curl https://api.github.com');
       process.exit(1);
     }
-    
-    // Join arguments with proper shell escaping to preserve argument boundaries
-    const copilotCommand = joinShellArgs(args);
+
+    // If single argument, treat it as a complete shell command (don't escape it)
+    // This allows passing complex shell commands like: 'npx -y @anthropic-ai/claude-code --print "what is 2+2"'
+    // If multiple arguments, join them with proper shell escaping to preserve argument boundaries
+    const copilotCommand = args.length === 1 ? args[0] : joinShellArgs(args);
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
