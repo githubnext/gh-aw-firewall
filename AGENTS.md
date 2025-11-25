@@ -84,7 +84,7 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 **Rules:**
 - `type` and `subject` must be lowercase
 - No period at end of subject
-- Subject max 72 characters
+- Header (entire commit message first line) max 72 characters
 - `scope` is optional but can help clarify the area of change
 - Both commit messages AND PR titles must follow this format
 
