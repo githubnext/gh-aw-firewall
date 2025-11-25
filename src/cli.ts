@@ -254,6 +254,10 @@ program
     (value, previous: string[] = []) => [...previous, value],
     []
   )
+  .option(
+    '--container-workdir <dir>',
+    'Working directory inside the container (should match GITHUB_WORKSPACE for path consistency)'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -317,6 +321,7 @@ program
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
       envAll: options.envAll,
       volumeMounts,
+      containerWorkDir: options.containerWorkdir,
     };
 
     // Warn if --env-all is used

@@ -155,6 +155,19 @@ export interface WrapperConfig {
    * @example ['/workspace:/workspace:ro', '/data:/data:rw']
    */
   volumeMounts?: string[];
+
+  /**
+   * Working directory inside the copilot container
+   *
+   * Sets the initial working directory (pwd) for command execution.
+   * This overrides the Dockerfile's WORKDIR and should match GITHUB_WORKSPACE
+   * for path consistency with AI prompts.
+   *
+   * When not specified, defaults to the container's WORKDIR (/workspace).
+   *
+   * @example '/home/runner/work/repo/repo'
+   */
+  containerWorkDir?: string;
 }
 
 /**
@@ -447,14 +460,25 @@ export interface DockerService {
 
   /**
    * Port mappings from host to container
-   * 
+   *
    * Array of port mappings in format 'host:container' or 'host:container/protocol'.
    * The firewall typically doesn't expose ports as communication happens over
    * the Docker network.
-   * 
+   *
    * @example ['8080:80', '443:443/tcp']
    */
   ports?: string[];
+
+  /**
+   * Working directory inside the container
+   *
+   * Sets the initial working directory (pwd) for command execution.
+   * This overrides the WORKDIR specified in the Dockerfile.
+   *
+   * @example '/home/runner/work/repo/repo'
+   * @example '/workspace'
+   */
+  working_dir?: string;
 }
 
 /**
