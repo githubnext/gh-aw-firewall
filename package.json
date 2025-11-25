@@ -17,7 +17,10 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist",
-    "prepare": "husky"
+    "prepare": "husky",
+    "docs:dev": "cd docs-site && npm run dev",
+    "docs:build": "cd docs-site && npm run build",
+    "docs:preview": "cd docs-site && npm run preview"
   },
   "keywords": [
     "agentic-workflows",

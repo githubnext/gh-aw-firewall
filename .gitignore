@@ -11,3 +11,8 @@ coverage/
 *.swo
 *~
 .idea/
+
+# Documentation site build artifacts
+docs-site/dist/
+docs-site/.astro/
+docs-site/node_modules/

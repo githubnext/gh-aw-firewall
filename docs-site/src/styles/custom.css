@@ -1,0 +1,16 @@
+/* Custom styles for Agentic Workflow Firewall documentation */
+
+:root {
+  --sl-color-accent: #0969da;
+  --sl-color-accent-high: #1f6feb;
+}
+
+/* Add custom styling for code blocks */
+pre {
+  border-radius: 8px;
+}
+
+/* Improve card styling */
+.sl-card {
+  border-radius: 12px;
+}

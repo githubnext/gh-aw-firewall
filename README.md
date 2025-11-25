@@ -5,6 +5,18 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 > [!TIP]
 > This project is a part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). For more background, check out the [project page on the GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
 
+## 📚 Documentation
+
+**[View the full documentation →](https://githubnext.github.io/gh-aw-firewall/)**
+
+The comprehensive documentation includes:
+- Quick start guide
+- Installation instructions
+- Usage examples
+- Architecture overview
+- Troubleshooting guides
+- API reference
+
 ## Features
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer

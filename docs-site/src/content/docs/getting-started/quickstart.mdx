@@ -1,0 +1,215 @@
+---
+title: Quick Start
+description: Get started with the Agentic Workflow Firewall in 5 minutes
+---
+
+Get started with the firewall in 5 minutes!
+
+## Prerequisites
+
+- Docker installed and running
+- Node.js 18+ and npm
+- GitHub Copilot CLI (optional, for testing with copilot)
+
+## Installation
+
+### Option 1: Download Binary (Recommended)
+
+```bash
+# Download the latest release binary
+curl -L https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+chmod +x awf
+sudo mv awf /usr/local/bin/
+
+# Verify installation
+sudo awf --help
+```
+
+**Note:** Verify checksums after download by downloading `checksums.txt` from the release page.
+
+### Option 2: Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/githubnext/gh-aw-firewall.git
+cd gh-aw-firewall
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+
+# Make it available globally
+npm link
+```
+
+## Verify Installation
+
+```bash
+awf --version
+```
+
+## Your First Command
+
+```bash
+# Domains match subdomains: github.com allows api.github.com
+sudo awf --allow-domains github.com -- curl -f https://api.github.com
+```
+
+:::tip[Remember the `--` separator]
+Always use the `--` separator to pass commands and arguments. This ensures proper argument handling.
+:::
+
+Expected output:
+- `[INFO] Allowed domains: github.com`
+- `[INFO] Starting containers...`
+- `[SUCCESS] Containers started successfully`
+- GitHub API JSON response
+- `[SUCCESS] Command completed with exit code: 0`
+
+## Test Domain Blocking
+
+Verify that non-whitelisted domains are blocked:
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  -- curl -f --max-time 10 https://example.com
+```
+
+This should **fail** with a connection error - that's correct behavior! ✓
+
+## Enable Debug Logging
+
+See what's happening under the hood:
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --log-level debug \
+  -- curl https://api.github.com
+```
+
+You'll see:
+- Configuration details
+- Squid config generation
+- Docker container logs
+- iptables rules being applied
+- Network diagnostics
+
+## Use with GitHub Copilot CLI
+
+```bash
+# Install GitHub Copilot CLI
+npm install -g @github/copilot@latest
+
+# Set your token
+export GITHUB_TOKEN="your_copilot_token"
+
+# Run copilot through the firewall
+sudo -E awf \
+  --allow-domains github.com,api.github.com,googleapis.com \
+  -- copilot --prompt "What is GitHub Actions?"
+```
+
+## Common Workflows
+
+### Test MCP Server Access
+
+```bash
+# Allow arxiv domain
+sudo awf \
+  --allow-domains arxiv.org \
+  -- curl -f https://arxiv.org
+
+# This should fail (domain not whitelisted)
+sudo awf \
+  --allow-domains github.com \
+  -- curl -f https://arxiv.org
+```
+
+### Debugging Failed Requests
+
+When a command fails, keep containers running to inspect logs:
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --keep-containers \
+  -- your-failing-command
+
+# Then inspect logs
+docker logs awf-squid
+docker logs awf-copilot
+
+# Clean up manually when done
+docker stop awf-squid awf-copilot
+docker rm awf-squid awf-copilot
+```
+
+### Multiple Domains
+
+```bash
+sudo awf \
+  --allow-domains github.com,api.github.com,arxiv.org \
+  -- bash -c "curl https://api.github.com && curl https://arxiv.org"
+```
+
+## What Gets Blocked
+
+The firewall prevents bypass attempts:
+
+```bash
+# ✓ Bypass attempts are blocked
+sudo awf --allow-domains github.com \
+  -- curl -f --connect-to ::github.com: https://example.com
+# Fails with SSL certificate mismatch (as expected)
+```
+
+## Limitations
+
+:::caution[Important Limitations]
+- **No wildcard syntax**: Use base domain instead (e.g., `github.com` not `*.github.com`)
+- **No internationalized domains**: Use punycode (e.g., `xn--bcher-kva.ch`)
+- **HTTP→HTTPS redirects may fail**: Use HTTPS directly
+- **HTTP/3 not supported**: Use HTTP/1.1 or HTTP/2
+- **IPv6 not supported**: Only IPv4 configured
+:::
+
+## Next Steps
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Usage Guide" icon="open-book">
+    Learn all the options and features in the [Usage Guide](/guides/usage/)
+  </Card>
+  <Card title="Architecture" icon="puzzle">
+    Understand how it works in the [Architecture documentation](/reference/architecture/)
+  </Card>
+  <Card title="Troubleshooting" icon="warning">
+    Having issues? Check the [Troubleshooting guide](/guides/troubleshooting/)
+  </Card>
+</CardGrid>
+
+## Tips & Tricks
+
+### Shell Alias
+Add to your `.bashrc` or `.zshrc`:
+```bash
+alias fw='sudo awf'
+```
+
+Then use:
+```bash
+fw --allow-domains github.com -- curl https://api.github.com
+```
+
+### Environment Variable for Domains
+```bash
+export ALLOWED_DOMAINS="github.com,api.github.com,githubusercontent.com"
+sudo awf --allow-domains "$ALLOWED_DOMAINS" -- copilot ...
+```
+
+Happy firewalling! 🔥🧱

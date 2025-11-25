@@ -1,0 +1,293 @@
+---
+title: Usage Guide
+description: Complete guide to using the Agentic Workflow Firewall
+---
+
+## Command-Line Options
+
+```
+sudo awf [options] -- <command>
+
+Options:
+  --allow-domains <domains>       Comma-separated list of allowed domains (required)
+  --allow-domains-file <file>     Path to file containing allowed domains
+  --log-level <level>             Log level: debug, info, warn, error (default: info)
+  --keep-containers               Keep containers running after command exits
+  --work-dir <dir>                Working directory for temporary files
+  -V, --version                   Output the version number
+  -h, --help                      Display help for command
+
+Arguments:
+  command                         Command to execute (after the -- separator)
+```
+
+:::tip[Always use the `--` separator]
+Use `--` before your command to avoid argument parsing issues: `sudo awf --allow-domains github.com -- curl https://api.github.com`
+:::
+
+## Basic Examples
+
+### Simple HTTP Request
+
+```bash
+sudo awf \
+  --allow-domains github.com,api.github.com \
+  -- curl https://api.github.com
+```
+
+### Docker-in-Docker Example
+
+The firewall enforces domain filtering on spawned containers:
+
+```bash
+# Allowed - api.github.com is in the allowlist
+sudo awf \
+  --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
+  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
+
+# Blocked - api.github.com NOT in the allowlist
+sudo awf \
+  --allow-domains registry-1.docker.io,auth.docker.io \
+  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
+# Returns: curl: (22) The requested URL returned error: 403
+```
+
+### With GitHub Copilot CLI
+
+```bash
+sudo -E awf \
+  --allow-domains github.com,api.github.com,googleapis.com \
+  -- copilot --prompt "List my repositories"
+```
+
+## Domain Whitelisting
+
+### Subdomain Matching
+
+Domains automatically match all subdomains:
+
+```bash
+# github.com matches api.github.com, raw.githubusercontent.com, etc.
+sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
+```
+
+### Using Command-Line Flag
+
+```bash
+# Multiple domains
+sudo awf --allow-domains github.com,arxiv.org -- curl https://api.github.com
+```
+
+Common domain lists:
+
+**For GitHub Copilot with GitHub API:**
+```bash
+--allow-domains github.com,api.github.com,githubusercontent.com,googleapis.com
+```
+
+**For MCP servers:**
+```bash
+--allow-domains github.com,arxiv.org,example.com
+```
+
+### Using a Domains File
+
+You can also specify domains in a file using `--allow-domains-file`:
+
+```bash
+# Create a domains file (see examples/domains.txt)
+cat > allowed-domains.txt << 'EOF'
+# GitHub domains
+github.com
+api.github.com
+
+# NPM registry
+npmjs.org, registry.npmjs.org
+
+# Example with inline comment
+example.com # Example domain
+EOF
+
+# Use the domains file
+sudo awf --allow-domains-file allowed-domains.txt -- curl https://api.github.com
+```
+
+**File format:**
+- One domain per line or comma-separated
+- Comments start with `#` (full line or inline)
+- Empty lines are ignored
+- Whitespace is trimmed
+
+**Combining both methods:**
+```bash
+# You can use both flags together - domains are merged
+sudo awf \
+  --allow-domains github.com \
+  --allow-domains-file my-domains.txt \
+  -- curl https://api.github.com
+```
+
+### Normalization
+
+Domains are case-insensitive, spaces/trailing dots are trimmed:
+
+```bash
+# These are equivalent
+--allow-domains github.com
+--allow-domains " GitHub.COM. "
+```
+
+## Limitations
+
+### No Wildcard Syntax
+
+Wildcards are not needed - subdomains match automatically:
+
+```bash
+--allow-domains '*.github.com'  # ✗ syntax not supported
+--allow-domains github.com       # ✓ matches *.github.com automatically
+```
+
+### No Internationalized Domains
+
+Use punycode instead:
+
+```bash
+--allow-domains bücher.ch              # ✗ fails
+--allow-domains xn--bcher-kva.ch       # ✓ works
+curl https://xn--bcher-kva.ch          # use punycode in URL too
+```
+
+### HTTP→HTTPS Redirects
+
+Redirects from HTTP to HTTPS may fail. Use HTTPS directly:
+
+```bash
+sudo awf --allow-domains github.com -- curl -fL http://github.com   # May fail
+sudo awf --allow-domains github.com -- curl -fL https://github.com  # ✓ works
+```
+
+### Other Protocol Limitations
+
+- **HTTP/3 not supported**: Use HTTP/1.1 or HTTP/2
+- **IPv6 not supported**: Only IPv4 configured
+- **Limited tooling**: Install via npm or use built-in tools (curl, git, nodejs, npm)
+
+### Security Restrictions
+
+The firewall blocks these Docker flags for security:
+
+```bash
+# ✗ --network host bypasses firewall
+sudo awf --allow-domains github.com \
+  -- docker run --network host curlimages/curl https://example.com
+
+# ✗ --add-host enables DNS poisoning
+sudo awf --allow-domains github.com \
+  -- docker run --add-host github.com:1.2.3.4 curlimages/curl https://github.com
+
+# ✗ --privileged bypasses all security
+sudo awf --allow-domains github.com \
+  -- docker run --privileged curlimages/curl https://example.com
+```
+
+## IP-Based Access
+
+Direct IP access (without domain names) is blocked:
+
+```bash
+# ✓ Cloud metadata services blocked
+sudo awf --allow-domains github.com -- curl -f http://169.254.169.254
+# Returns 400 Bad Request (blocked as expected)
+```
+
+## Debugging
+
+### Enable Debug Logging
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --log-level debug \
+  -- your-command
+```
+
+This will show:
+- Squid configuration generation
+- Docker container startup logs (streamed in real-time)
+- iptables rules applied
+- Network connectivity tests
+- Proxy traffic logs
+
+### Real-Time Log Streaming
+
+Container logs are streamed in real-time:
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  -- npx @github/copilot@0.0.347 -p 'your prompt' --allow-all-tools
+# Logs appear immediately as copilot runs, not after completion
+```
+
+### Log Preservation
+
+Both Copilot CLI and Squid proxy logs are automatically preserved:
+
+```bash
+# Logs automatically saved after command completes
+sudo awf \
+  --allow-domains github.com,api.enterprise.githubcopilot.com \
+  -- npx @github/copilot@0.0.347 -p 'your prompt' --log-level debug --allow-all-tools
+
+# Output:
+# [INFO] Copilot logs preserved at: /tmp/copilot-logs-<timestamp>
+# [INFO] Squid logs preserved at: /tmp/squid-logs-<timestamp>
+```
+
+**Copilot Logs:**
+- Contains Copilot CLI debug output and session information
+- Location: `/tmp/copilot-logs-<timestamp>/`
+- View with: `cat /tmp/copilot-logs-<timestamp>/*.log`
+
+**Squid Logs:**
+- Contains all HTTP/HTTPS traffic (allowed and denied)
+- Location: `/tmp/squid-logs-<timestamp>/`
+- Requires sudo: `sudo cat /tmp/squid-logs-<timestamp>/access.log`
+
+```bash
+# Check which domains were blocked
+sudo grep "TCP_DENIED" /tmp/squid-logs-<timestamp>/access.log
+
+# View all traffic
+sudo cat /tmp/squid-logs-<timestamp>/access.log
+```
+
+### Keep Containers for Inspection
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --keep-containers \
+  -- your-command
+
+# View real-time container logs:
+docker logs awf-copilot
+docker logs awf-squid
+```
+
+## Log Analysis
+
+Find all blocked domains:
+```bash
+docker exec awf-squid grep "TCP_DENIED" /var/log/squid/access.log | awk '{print $3}' | sort -u
+```
+
+Count blocked attempts by domain:
+```bash
+docker exec awf-squid grep "TCP_DENIED" /var/log/squid/access.log | awk '{print $3}' | sort | uniq -c | sort -rn
+```
+
+:::tip[Detailed Logging Documentation]
+For comprehensive logging information, see the [Logging Reference](/reference/logging/)
+:::
