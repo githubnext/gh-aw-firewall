@@ -79,12 +79,13 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 
 **IMPORTANT:** This repository enforces [Conventional Commits](https://www.conventionalcommits.org/) via commitlint and husky hooks.
 
-**Format:** `type(scope): subject`
+**Format:** `type(scope): subject` (scope is optional)
 
 **Rules:**
 - `type` and `subject` must be lowercase
 - No period at end of subject
 - Subject max 72 characters
+- `scope` is optional but can help clarify the area of change
 - Both commit messages AND PR titles must follow this format
 
 **Common types:**
@@ -98,8 +99,9 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 
 **Examples:**
 - ✅ `docs: fix duplicate heading in release template`
+- ✅ `docs(template): fix duplicate heading in release template`
 - ✅ `feat: add new domain whitelist option`
-- ✅ `fix: resolve container cleanup race condition`
+- ✅ `fix(cleanup): resolve container cleanup race condition`
 - ❌ `Fix bug` (missing type)
 - ❌ `docs: Fix template.` (uppercase subject, period at end)
 
