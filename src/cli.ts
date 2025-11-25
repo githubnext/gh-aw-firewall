@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
@@ -30,6 +31,46 @@ export function parseDomains(input: string): string[] {
     .split(',')
     .map(d => d.trim())
     .filter(d => d.length > 0);
+}
+
+/**
+ * Parses domains from a file, supporting both line-separated and comma-separated formats
+ * @param filePath - Path to file containing domains (one per line or comma-separated)
+ * @returns Array of trimmed domain strings with empty entries and comments filtered out
+ * @throws Error if file doesn't exist or can't be read
+ */
+export function parseDomainsFile(filePath: string): string[] {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Domains file not found: ${filePath}`);
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const domains: string[] = [];
+
+  // Split by lines first
+  const lines = content.split('\n');
+  
+  for (const line of lines) {
+    // Remove comments (anything after #)
+    const withoutComment = line.split('#')[0].trim();
+    
+    // Skip empty lines
+    if (withoutComment.length === 0) {
+      continue;
+    }
+    
+    // Check if line contains commas (comma-separated format)
+    if (withoutComment.includes(',')) {
+      // Parse as comma-separated domains
+      const commaSeparated = parseDomains(withoutComment);
+      domains.push(...commaSeparated);
+    } else {
+      // Single domain per line
+      domains.push(withoutComment);
+    }
+  }
+
+  return domains;
 }
 
 /**
@@ -203,9 +244,13 @@ program
   .name('awf')
   .description('Network firewall for agentic workflows with domain whitelisting')
   .version('0.1.0')
-  .requiredOption(
+  .option(
     '--allow-domains <domains>',
     'Comma-separated list of allowed domains (e.g., github.com,api.github.com)'
+  )
+  .option(
+    '--allow-domains-file <path>',
+    'Path to file containing allowed domains (one per line or comma-separated, supports # comments)'
   )
   .option(
     '--log-level <level>',
@@ -278,12 +323,33 @@ program
 
     logger.setLevel(logLevel);
 
-    const allowedDomains = parseDomains(options.allowDomains);
+    // Parse domains from both --allow-domains flag and --allow-domains-file
+    let allowedDomains: string[] = [];
 
+    // Parse domains from command-line flag if provided
+    if (options.allowDomains) {
+      allowedDomains = parseDomains(options.allowDomains);
+    }
+
+    // Parse domains from file if provided
+    if (options.allowDomainsFile) {
+      try {
+        const fileDomainsArray = parseDomainsFile(options.allowDomainsFile);
+        allowedDomains.push(...fileDomainsArray);
+      } catch (error) {
+        logger.error(`Failed to read domains file: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
+
+    // Ensure at least one domain is specified
     if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains');
+      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
       process.exit(1);
     }
+
+    // Remove duplicates (in case domains appear in both sources)
+    allowedDomains = [...new Set(allowedDomains)];
 
     // Parse additional environment variables from --env flags
     let additionalEnv: Record<string, string> = {};
