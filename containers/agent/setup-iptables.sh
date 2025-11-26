@@ -26,15 +26,34 @@ echo "[iptables] Allow localhost traffic..."
 iptables -t nat -A OUTPUT -o lo -j RETURN
 iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
 
-# Allow DNS queries to any DNS server (including Docker's 127.0.0.11 and configured DNS servers)
-echo "[iptables] Allow DNS queries..."
-iptables -t nat -A OUTPUT -p udp --dport 53 -j RETURN
-iptables -t nat -A OUTPUT -p tcp --dport 53 -j RETURN
+# Get DNS servers from environment (default to Google DNS)
+DNS_SERVERS="${AWF_DNS_SERVERS:-8.8.8.8,8.8.4.4}"
+echo "[iptables] Configuring DNS rules for trusted servers: $DNS_SERVERS"
 
-# Explicitly allow DNS servers configured in the container (8.8.8.8, 8.8.4.4)
-echo "[iptables] Allow traffic to DNS servers..."
-iptables -t nat -A OUTPUT -d 8.8.8.8 -j RETURN
-iptables -t nat -A OUTPUT -d 8.8.4.4 -j RETURN
+# Allow DNS queries ONLY to trusted DNS servers (prevents DNS exfiltration)
+IFS=',' read -ra DNS_ARRAY <<< "$DNS_SERVERS"
+for dns_server in "${DNS_ARRAY[@]}"; do
+  dns_server=$(echo "$dns_server" | tr -d ' ')
+  if [ -n "$dns_server" ]; then
+    echo "[iptables] Allow DNS to trusted server: $dns_server"
+    iptables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
+    iptables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
+  fi
+done
+
+# Allow DNS to Docker's embedded DNS server (127.0.0.11) for container name resolution
+echo "[iptables] Allow DNS to Docker embedded DNS (127.0.0.11)..."
+iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN
+iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN
+
+# Allow return traffic to trusted DNS servers
+echo "[iptables] Allow traffic to trusted DNS servers..."
+for dns_server in "${DNS_ARRAY[@]}"; do
+  dns_server=$(echo "$dns_server" | tr -d ' ')
+  if [ -n "$dns_server" ]; then
+    iptables -t nat -A OUTPUT -d "$dns_server" -j RETURN
+  fi
+done
 
 # Allow traffic to Squid proxy itself
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."

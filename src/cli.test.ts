@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -665,6 +665,92 @@ describe('cli', () => {
       if (!result.success) {
         expect(result.invalidMount).toBe('invalid-mount');
       }
+    });
+  });
+
+  describe('IPv4 validation', () => {
+    it('should accept valid IPv4 addresses', () => {
+      expect(isValidIPv4('8.8.8.8')).toBe(true);
+      expect(isValidIPv4('1.1.1.1')).toBe(true);
+      expect(isValidIPv4('192.168.1.1')).toBe(true);
+      expect(isValidIPv4('0.0.0.0')).toBe(true);
+      expect(isValidIPv4('255.255.255.255')).toBe(true);
+      expect(isValidIPv4('10.0.0.1')).toBe(true);
+      expect(isValidIPv4('172.16.0.1')).toBe(true);
+    });
+
+    it('should reject invalid IPv4 addresses', () => {
+      expect(isValidIPv4('256.1.1.1')).toBe(false);
+      expect(isValidIPv4('1.1.1')).toBe(false);
+      expect(isValidIPv4('1.1.1.1.1')).toBe(false);
+      expect(isValidIPv4('1.1.1.256')).toBe(false);
+      expect(isValidIPv4('a.b.c.d')).toBe(false);
+      expect(isValidIPv4('1.1.1.1a')).toBe(false);
+      expect(isValidIPv4('')).toBe(false);
+      expect(isValidIPv4('localhost')).toBe(false);
+      expect(isValidIPv4('::1')).toBe(false);
+    });
+  });
+
+  describe('IPv6 validation', () => {
+    it('should accept valid IPv6 addresses', () => {
+      expect(isValidIPv6('2001:4860:4860::8888')).toBe(true);
+      expect(isValidIPv6('2001:4860:4860::8844')).toBe(true);
+      expect(isValidIPv6('::1')).toBe(true);
+      expect(isValidIPv6('::')).toBe(true);
+      expect(isValidIPv6('fe80::1')).toBe(true);
+      expect(isValidIPv6('2001:db8:85a3::8a2e:370:7334')).toBe(true);
+      expect(isValidIPv6('2001:0db8:85a3:0000:0000:8a2e:0370:7334')).toBe(true);
+    });
+
+    it('should reject invalid IPv6 addresses', () => {
+      expect(isValidIPv6('8.8.8.8')).toBe(false);
+      expect(isValidIPv6('localhost')).toBe(false);
+      expect(isValidIPv6('')).toBe(false);
+      expect(isValidIPv6('2001:4860:4860:8888')).toBe(false); // Missing ::
+    });
+  });
+
+  describe('DNS servers parsing', () => {
+    it('should parse valid IPv4 DNS servers', () => {
+      const result = parseDnsServers('8.8.8.8,8.8.4.4');
+      expect(result).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+
+    it('should parse single DNS server', () => {
+      const result = parseDnsServers('1.1.1.1');
+      expect(result).toEqual(['1.1.1.1']);
+    });
+
+    it('should parse mixed IPv4 and IPv6 DNS servers', () => {
+      const result = parseDnsServers('8.8.8.8,2001:4860:4860::8888');
+      expect(result).toEqual(['8.8.8.8', '2001:4860:4860::8888']);
+    });
+
+    it('should trim whitespace from DNS servers', () => {
+      const result = parseDnsServers('  8.8.8.8  ,  1.1.1.1  ');
+      expect(result).toEqual(['8.8.8.8', '1.1.1.1']);
+    });
+
+    it('should filter empty entries', () => {
+      const result = parseDnsServers('8.8.8.8,,1.1.1.1,');
+      expect(result).toEqual(['8.8.8.8', '1.1.1.1']);
+    });
+
+    it('should throw error for invalid IP address', () => {
+      expect(() => parseDnsServers('invalid.dns.server')).toThrow('Invalid DNS server IP address');
+    });
+
+    it('should throw error for empty input', () => {
+      expect(() => parseDnsServers('')).toThrow('At least one DNS server must be specified');
+    });
+
+    it('should throw error for whitespace-only input', () => {
+      expect(() => parseDnsServers('  ,  ,  ')).toThrow('At least one DNS server must be specified');
+    });
+
+    it('should throw error if any server is invalid', () => {
+      expect(() => parseDnsServers('8.8.8.8,invalid,1.1.1.1')).toThrow('Invalid DNS server IP address: invalid');
     });
   });
 });

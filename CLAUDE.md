@@ -223,6 +223,27 @@ Containers stopped, temporary files cleaned up
   - `.github.com` → matches all subdomains
 - Squid denies any domain not in the allowlist
 
+## DNS Configuration
+
+DNS traffic is restricted to trusted DNS servers only to prevent DNS-based data exfiltration:
+
+- **CLI Option**: `--dns-servers <servers>` (comma-separated list of IP addresses)
+- **Default**: Google DNS (`8.8.8.8,8.8.4.4`)
+- **IPv6 Support**: Both IPv4 and IPv6 DNS servers are supported
+- **Docker DNS**: `127.0.0.11` is always allowed for container name resolution
+
+**Implementation**:
+- Host-level iptables (`src/host-iptables.ts`): DNS traffic to non-whitelisted servers is blocked
+- Container NAT rules (`containers/agent/setup-iptables.sh`): Reads from `AWF_DNS_SERVERS` env var
+- Container DNS config (`containers/agent/entrypoint.sh`): Configures `/etc/resolv.conf`
+- Docker Compose (`src/docker-manager.ts`): Sets container `dns:` config and `AWF_DNS_SERVERS` env var
+
+**Example**:
+```bash
+# Use Cloudflare DNS instead of Google DNS
+sudo awf --allow-domains github.com --dns-servers 1.1.1.1,1.0.0.1 -- curl https://api.github.com
+```
+
 ## Exit Code Handling
 
 The wrapper propagates the exit code from the agent container:
