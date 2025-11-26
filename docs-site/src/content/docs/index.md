@@ -3,8 +3,6 @@ title: Agentic Workflow Firewall
 description: Network firewall for AI agents with domain whitelisting - control egress HTTP/HTTPS traffic using Squid proxy and Docker containers.
 ---
 
-# Agentic Workflow Firewall
-
 A network firewall designed specifically for AI agents and agentic workflows. Control which domains your AI agents can access while maintaining full filesystem access and Docker-in-Docker capabilities.
 
 :::tip[Part of GitHub Next]
