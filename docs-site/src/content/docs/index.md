@@ -163,7 +163,7 @@ The firewall uses a containerized architecture with three security layers:
 └─────────────────────────────────────────┘
 ```
 
-**Learn more:** See the [Security Documentation](/reference/security-architecture) for detailed architecture and threat model.
+**Learn more:** See the [Security Documentation](/gh-aw-firewall/reference/security-architecture/) for detailed architecture and threat model.
 
 ## Next Steps
 
@@ -171,7 +171,7 @@ The firewall uses a containerized architecture with three security layers:
 
 1. **Understand Security**
    
-   Review the [Security Architecture](/reference/security-architecture) to learn how the firewall protects against attacks.
+   Review the [Security Architecture](/gh-aw-firewall/reference/security-architecture/) to learn how the firewall protects against attacks.
 
 2. **Read Full Documentation**
    
