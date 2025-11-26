@@ -3,8 +3,6 @@ title: Security Architecture
 description: Deep dive into the firewall's defense-in-depth security model, threat analysis, and protection mechanisms.
 ---
 
-# Security Architecture
-
 This document provides a comprehensive security analysis of the Agentic Workflow Firewall designed for security engineers evaluating the tool for production use.
 
 ## Executive Summary
