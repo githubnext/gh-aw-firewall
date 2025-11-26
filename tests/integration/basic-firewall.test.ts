@@ -153,13 +153,13 @@ describe('Basic Firewall Functionality', () => {
     const squidRunning = await docker.isRunning('awf-squid');
     expect(squidRunning).toBe(true);
 
-    // Verify copilot container still exists (may have exited)
-    const copilotInfo = await docker.inspect('awf-copilot');
-    expect(copilotInfo).not.toBeNull();
+    // Verify agent container still exists (may have exited)
+    const agentInfo = await docker.inspect('awf-agent');
+    expect(agentInfo).not.toBeNull();
 
     // Clean up manually
     await docker.stop('awf-squid');
     await docker.rm('awf-squid', true);
-    await docker.rm('awf-copilot', true);
+    await docker.rm('awf-agent', true);
   }, 120000);
 });
