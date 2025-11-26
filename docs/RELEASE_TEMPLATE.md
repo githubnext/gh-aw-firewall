@@ -80,6 +80,6 @@ See [README.md](https://github.com/{{REPOSITORY}}/blob/{{VERSION}}/README.md) fo
 
 Published to GitHub Container Registry:
 - `ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}`
-- `ghcr.io/{{REPOSITORY}}/copilot:{{VERSION_NUMBER}}`
+- `ghcr.io/{{REPOSITORY}}/agent:{{VERSION_NUMBER}}`
 - `ghcr.io/{{REPOSITORY}}/squid:latest`
-- `ghcr.io/{{REPOSITORY}}/copilot:latest`
+- `ghcr.io/{{REPOSITORY}}/agent:latest`

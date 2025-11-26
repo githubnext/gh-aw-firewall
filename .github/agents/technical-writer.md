@@ -80,7 +80,7 @@ Use `--log-level debug` to see detailed traffic logs when debugging connection i
 **:::caution** - Important warnings
 ```markdown
 :::caution
-The `--keep-containers` flag leaves Docker containers running. Remember to clean up manually with `docker stop awf-squid awf-copilot`.
+The `--keep-containers` flag leaves Docker containers running. Remember to clean up manually with `docker stop awf-squid awf-agent`.
 :::
 ```
 

@@ -131,7 +131,7 @@ logger.success('Operation completed successfully');
 │   └── types.ts             # TypeScript type definitions
 ├── containers/              # Docker container definitions
 │   ├── squid/               # Squid proxy container
-│   └── copilot/             # Copilot CLI container
+│   └── agent/               # Agent execution container
 ├── scripts/                 # Utility scripts
 │   └── ci/                  # CI/CD scripts
 ├── docs/                    # Documentation

@@ -32,7 +32,7 @@
     "domain-whitelisting",
     "proxy",
     "squid",
-    "copilot",
+    "agent",
     "mcp",
     "egress-control"
   ],

@@ -25,7 +25,7 @@ export class Cleanup {
   async removeContainers(): Promise<void> {
     this.log('Removing awf containers by name...');
     try {
-      await execa('docker', ['rm', '-f', 'awf-squid', 'awf-copilot']);
+      await execa('docker', ['rm', '-f', 'awf-squid', 'awf-agent']);
     } catch (error) {
       // Ignore errors (containers may not exist)
     }

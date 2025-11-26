@@ -35,7 +35,7 @@ describe('host-iptables', () => {
       expect(result).toEqual({
         subnet: '172.30.0.0/24',
         squidIp: '172.30.0.10',
-        copilotIp: '172.30.0.20',
+        agentIp: '172.30.0.20',
       });
 
       // Should only check if network exists, not create it
@@ -59,7 +59,7 @@ describe('host-iptables', () => {
       expect(result).toEqual({
         subnet: '172.30.0.0/24',
         squidIp: '172.30.0.10',
-        copilotIp: '172.30.0.20',
+        agentIp: '172.30.0.20',
       });
 
       expect(mockedExeca).toHaveBeenCalledWith('docker', ['network', 'inspect', 'awf-net']);

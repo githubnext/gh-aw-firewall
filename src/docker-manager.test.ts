@@ -36,7 +36,7 @@ describe('docker-manager', () => {
   describe('generateDockerCompose', () => {
     const mockConfig: WrapperConfig = {
       allowedDomains: ['github.com', 'npmjs.org'],
-      copilotCommand: 'echo "test"',
+      agentCommand: 'echo "test"',
       logLevel: 'info',
       keepContainers: false,
       workDir: '/tmp/awf-test',
@@ -48,16 +48,16 @@ describe('docker-manager', () => {
     const mockNetworkConfig = {
       subnet: '172.30.0.0/24',
       squidIp: '172.30.0.10',
-      copilotIp: '172.30.0.20',
+      agentIp: '172.30.0.20',
     };
 
     it('should generate docker-compose config with GHCR images by default', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
       expect(result.services['squid-proxy'].image).toBe('ghcr.io/githubnext/gh-aw-firewall/squid:latest');
-      expect(result.services.copilot.image).toBe('ghcr.io/githubnext/gh-aw-firewall/copilot:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
       expect(result.services['squid-proxy'].build).toBeUndefined();
-      expect(result.services.copilot.build).toBeUndefined();
+      expect(result.services.agent.build).toBeUndefined();
     });
 
     it('should use local build when buildLocal is true', () => {
@@ -65,9 +65,9 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(localConfig, mockNetworkConfig);
 
       expect(result.services['squid-proxy'].build).toBeDefined();
-      expect(result.services.copilot.build).toBeDefined();
+      expect(result.services.agent.build).toBeDefined();
       expect(result.services['squid-proxy'].image).toBeUndefined();
-      expect(result.services.copilot.image).toBeUndefined();
+      expect(result.services.agent.image).toBeUndefined();
     });
 
     it('should use custom registry and tag', () => {
@@ -79,7 +79,7 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(customConfig, mockNetworkConfig);
 
       expect(result.services['squid-proxy'].image).toBe('docker.io/myrepo/squid:v1.0.0');
-      expect(result.services.copilot.image).toBe('docker.io/myrepo/copilot:v1.0.0');
+      expect(result.services.agent.image).toBe('docker.io/myrepo/agent:v1.0.0');
     });
 
     it('should configure network with correct IPs', () => {
@@ -90,8 +90,8 @@ describe('docker-manager', () => {
       const squidNetworks = result.services['squid-proxy'].networks as { [key: string]: { ipv4_address?: string } };
       expect(squidNetworks['awf-net'].ipv4_address).toBe('172.30.0.10');
 
-      const copilotNetworks = result.services.copilot.networks as { [key: string]: { ipv4_address?: string } };
-      expect(copilotNetworks['awf-net'].ipv4_address).toBe('172.30.0.20');
+      const agentNetworks = result.services.agent.networks as { [key: string]: { ipv4_address?: string } };
+      expect(agentNetworks['awf-net'].ipv4_address).toBe('172.30.0.20');
     });
 
     it('should configure squid container correctly', () => {
@@ -105,10 +105,10 @@ describe('docker-manager', () => {
       expect(squid.ports).toContain('3128:3128');
     });
 
-    it('should configure copilot container with proxy settings', () => {
+    it('should configure agent container with proxy settings', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const env = copilot.environment as Record<string, string>;
+      const agent = result.services.agent;
+      const env = agent.environment as Record<string, string>;
 
       expect(env.HTTP_PROXY).toBe('http://172.30.0.10:3128');
       expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
@@ -116,15 +116,15 @@ describe('docker-manager', () => {
       expect(env.SQUID_PROXY_PORT).toBe('3128');
     });
 
-    it('should mount required volumes in copilot container (default behavior)', () => {
+    it('should mount required volumes in agent container (default behavior)', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const volumes = copilot.volumes as string[];
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
 
       expect(volumes).toContain('/:/host:rw');
       expect(volumes).toContain('/tmp:/tmp:rw');
       expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
-      expect(volumes.some((v: string) => v.includes('copilot-logs'))).toBe(true);
+      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
     it('should use custom volume mounts when specified', () => {
@@ -133,8 +133,8 @@ describe('docker-manager', () => {
         volumeMounts: ['/workspace:/workspace:ro', '/data:/data:rw']
       };
       const result = generateDockerCompose(configWithMounts, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const volumes = copilot.volumes as string[];
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
 
       // Should NOT include blanket /:/host:rw mount
       expect(volumes).not.toContain('/:/host:rw');
@@ -146,58 +146,58 @@ describe('docker-manager', () => {
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
       expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
-      expect(volumes.some((v: string) => v.includes('copilot-logs'))).toBe(true);
+      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
     it('should use blanket mount when no custom mounts specified', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const volumes = copilot.volumes as string[];
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
     });
 
-    it('should set copilot to depend on healthy squid', () => {
+    it('should set agent to depend on healthy squid', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const depends = copilot.depends_on as { [key: string]: { condition: string } };
+      const agent = result.services.agent;
+      const depends = agent.depends_on as { [key: string]: { condition: string } };
 
       expect(depends['squid-proxy'].condition).toBe('service_healthy');
     });
 
-    it('should add NET_ADMIN capability to copilot', () => {
+    it('should add NET_ADMIN capability to agent', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
+      const agent = result.services.agent;
 
-      expect(copilot.cap_add).toContain('NET_ADMIN');
+      expect(agent.cap_add).toContain('NET_ADMIN');
     });
 
     it('should disable TTY by default to prevent ANSI escape sequences', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
+      const agent = result.services.agent;
 
-      expect(copilot.tty).toBe(false);
+      expect(agent.tty).toBe(false);
     });
 
     it('should enable TTY when config.tty is true', () => {
       const configWithTty = { ...mockConfig, tty: true };
       const result = generateDockerCompose(configWithTty, mockNetworkConfig);
-      const copilot = result.services.copilot;
+      const agent = result.services.agent;
 
-      expect(copilot.tty).toBe(true);
+      expect(agent.tty).toBe(true);
     });
 
     it('should escape dollar signs in commands for docker-compose', () => {
       const configWithVars = {
         ...mockConfig,
-        copilotCommand: 'echo $HOME && echo ${USER}',
+        agentCommand: 'echo $HOME && echo ${USER}',
       };
       const result = generateDockerCompose(configWithVars, mockNetworkConfig);
-      const copilot = result.services.copilot;
+      const agent = result.services.agent;
 
       // Docker compose requires $$ to represent a literal $
-      expect(copilot.command).toEqual(['/bin/bash', '-c', 'echo $$HOME && echo $${USER}']);
+      expect(agent.command).toEqual(['/bin/bash', '-c', 'echo $$HOME && echo $${USER}']);
     });
 
     it('should pass through GITHUB_TOKEN when present in environment', () => {
@@ -206,7 +206,7 @@ describe('docker-manager', () => {
 
       try {
         const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-        const env = result.services.copilot.environment as Record<string, string>;
+        const env = result.services.agent.environment as Record<string, string>;
         expect(env.GITHUB_TOKEN).toBe('ghp_testtoken123');
       } finally {
         if (originalEnv !== undefined) {
@@ -223,7 +223,7 @@ describe('docker-manager', () => {
 
       try {
         const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-        const env = result.services.copilot.environment as Record<string, string>;
+        const env = result.services.agent.environment as Record<string, string>;
         expect(env.GITHUB_TOKEN).toBeUndefined();
       } finally {
         if (originalEnv !== undefined) {
@@ -241,8 +241,8 @@ describe('docker-manager', () => {
         },
       };
       const result = generateDockerCompose(configWithEnv, mockNetworkConfig);
-      const copilot = result.services.copilot;
-      const env = copilot.environment as Record<string, string>;
+      const agent = result.services.agent;
+      const env = agent.environment as Record<string, string>;
 
       expect(env.CUSTOM_VAR).toBe('custom_value');
       expect(env.ANOTHER_VAR).toBe('another_value');
@@ -255,8 +255,8 @@ describe('docker-manager', () => {
       try {
         const configWithEnvAll = { ...mockConfig, envAll: true };
         const result = generateDockerCompose(configWithEnvAll, mockNetworkConfig);
-        const copilot = result.services.copilot;
-        const env = copilot.environment as Record<string, string>;
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
 
         // Should NOT pass through excluded vars
         expect(env.PATH).not.toBe(originalPath);
@@ -271,10 +271,10 @@ describe('docker-manager', () => {
 
     it('should configure DNS to use Google DNS', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const copilot = result.services.copilot;
+      const agent = result.services.agent;
 
-      expect(copilot.dns).toEqual(['8.8.8.8', '8.8.4.4']);
-      expect(copilot.dns_search).toEqual([]);
+      expect(agent.dns).toEqual(['8.8.8.8', '8.8.4.4']);
+      expect(agent.dns_search).toEqual([]);
     });
 
     it('should override environment variables with additionalEnv', () => {
@@ -289,7 +289,7 @@ describe('docker-manager', () => {
           },
         };
         const result = generateDockerCompose(configWithOverride, mockNetworkConfig);
-        const env = result.services.copilot.environment as Record<string, string>;
+        const env = result.services.agent.environment as Record<string, string>;
 
         // additionalEnv should win
         expect(env.GITHUB_TOKEN).toBe('overridden_token');
@@ -306,7 +306,7 @@ describe('docker-manager', () => {
       it('should not set working_dir when containerWorkDir is not specified', () => {
         const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
-        expect(result.services.copilot.working_dir).toBeUndefined();
+        expect(result.services.agent.working_dir).toBeUndefined();
       });
 
       it('should set working_dir when containerWorkDir is specified', () => {
@@ -316,7 +316,7 @@ describe('docker-manager', () => {
         };
         const result = generateDockerCompose(config, mockNetworkConfig);
 
-        expect(result.services.copilot.working_dir).toBe('/home/runner/work/repo/repo');
+        expect(result.services.agent.working_dir).toBe('/home/runner/work/repo/repo');
       });
 
       it('should set working_dir to /workspace when containerWorkDir is /workspace', () => {
@@ -326,7 +326,7 @@ describe('docker-manager', () => {
         };
         const result = generateDockerCompose(config, mockNetworkConfig);
 
-        expect(result.services.copilot.working_dir).toBe('/workspace');
+        expect(result.services.agent.working_dir).toBe('/workspace');
       });
 
       it('should handle paths with special characters', () => {
@@ -336,10 +336,10 @@ describe('docker-manager', () => {
         };
         const result = generateDockerCompose(config, mockNetworkConfig);
 
-        expect(result.services.copilot.working_dir).toBe('/home/user/my-project with spaces');
+        expect(result.services.agent.working_dir).toBe('/home/user/my-project with spaces');
       });
 
-      it('should preserve working_dir alongside other copilot service config', () => {
+      it('should preserve working_dir alongside other agent service config', () => {
         const config: WrapperConfig = {
           ...mockConfig,
           containerWorkDir: '/custom/workdir',
@@ -348,10 +348,10 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(config, mockNetworkConfig);
 
         // Verify working_dir is set
-        expect(result.services.copilot.working_dir).toBe('/custom/workdir');
+        expect(result.services.agent.working_dir).toBe('/custom/workdir');
         // Verify other config is still present
-        expect(result.services.copilot.container_name).toBe('awf-copilot');
-        expect(result.services.copilot.cap_add).toContain('NET_ADMIN');
+        expect(result.services.agent.container_name).toBe('awf-agent');
+        expect(result.services.agent.cap_add).toContain('NET_ADMIN');
       });
 
       it('should handle empty string containerWorkDir by not setting working_dir', () => {
@@ -362,7 +362,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(config, mockNetworkConfig);
 
         // Empty string is falsy, so working_dir should not be set
-        expect(result.services.copilot.working_dir).toBeUndefined();
+        expect(result.services.agent.working_dir).toBeUndefined();
       });
 
       it('should handle absolute paths correctly', () => {
@@ -372,7 +372,7 @@ describe('docker-manager', () => {
         };
         const result = generateDockerCompose(config, mockNetworkConfig);
 
-        expect(result.services.copilot.working_dir).toBe('/var/lib/app/data');
+        expect(result.services.agent.working_dir).toBe('/var/lib/app/data');
       });
     });
   });

@@ -9,7 +9,7 @@ import { logger } from './logger';
 import {
   writeConfigs,
   startContainers,
-  runCopilotCommand,
+  runAgentCommand,
   stopContainers,
   cleanup,
 } from './docker-manager';
@@ -344,7 +344,7 @@ program
     // - We need variables to expand in CONTAINER ($HOME → /root or /home/runner)
     // - The $$$$  escaping pattern requires literal $ preservation
     //
-    const copilotCommand = args.length === 1 ? args[0] : joinShellArgs(args);
+    const agentCommand = args.length === 1 ? args[0] : joinShellArgs(args);
     // Parse and validate options
     const logLevel = options.logLevel as LogLevel;
     if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
@@ -408,7 +408,7 @@ program
 
     const config: WrapperConfig = {
       allowedDomains,
-      copilotCommand,
+      agentCommand,
       logLevel,
       keepContainers: options.keepContainers,
       tty: options.tty || false,
@@ -431,7 +431,7 @@ program
     // Log config with redacted secrets
     const redactedConfig = {
       ...config,
-      copilotCommand: redactSecrets(config.copilotCommand),
+      agentCommand: redactSecrets(config.agentCommand),
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
@@ -460,7 +460,7 @@ program
         // across multiple runs. Cleanup script will handle removal if needed.
       } else {
         logger.info(`Configuration files preserved at: ${config.workDir}`);
-        logger.info(`Copilot logs available at: ${config.workDir}/copilot-logs/`);
+        logger.info(`Agent logs available at: ${config.workDir}/agent-logs/`);
         logger.info(`Squid logs available at: ${config.workDir}/squid-logs/`);
         logger.info(`Host iptables rules preserved (--keep-containers enabled)`);
       }
@@ -485,7 +485,7 @@ program
           setupHostIptables,
           writeConfigs,
           startContainers,
-          runCopilotCommand,
+          runAgentCommand,
         },
         {
           logger,
