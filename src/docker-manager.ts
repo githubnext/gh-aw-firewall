@@ -78,7 +78,7 @@ export function subnetsOverlap(subnet1: string, subnet2: string): boolean {
  * Uses 172.16-31.x.0/24 range (Docker's default bridge network range)
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; copilotIp: string }> {
+async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: string; agentIp: string }> {
   const existingSubnets = await getExistingDockerSubnets();
   const MAX_RETRIES = 50;
 
@@ -95,8 +95,8 @@ async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: strin
 
     if (!hasConflict) {
       const squidIp = `172.${secondOctet}.${thirdOctet}.10`;
-      const copilotIp = `172.${secondOctet}.${thirdOctet}.20`;
-      return { subnet, squidIp, copilotIp };
+      const agentIp = `172.${secondOctet}.${thirdOctet}.20`;
+      return { subnet, squidIp, agentIp };
     }
 
     logger.debug(`Subnet ${subnet} conflicts with existing network, retrying... (attempt ${attempt + 1}/${MAX_RETRIES})`);
@@ -114,7 +114,7 @@ async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: strin
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; copilotIp: string }
+  networkConfig: { subnet: string; squidIp: string; agentIp: string }
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
 
@@ -155,7 +155,7 @@ export function generateDockerCompose(
     };
   }
 
-  // Build environment variables for copilot container
+  // Build environment variables for agent execution container
   // System variables that must be overridden or excluded (would break container operation)
   const EXCLUDED_ENV_VARS = new Set([
     'PATH',           // Must use container's PATH
@@ -208,8 +208,8 @@ export function generateDockerCompose(
     Object.assign(environment, config.additionalEnv);
   }
 
-  // Build volumes list for copilot container
-  const copilotVolumes: string[] = [
+  // Build volumes list for agent execution container
+  const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
     `${process.env.HOME}:${process.env.HOME}:rw`,
@@ -220,33 +220,33 @@ export function generateDockerCompose(
     // Override host's .docker directory with clean config to prevent Docker CLI
     // from reading host's context (e.g., desktop-linux pointing to wrong socket)
     `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
-    // Mount copilot logs directory to workDir for persistence
-    `${config.workDir}/copilot-logs:${process.env.HOME}/.copilot/logs:rw`,
+    // Mount agent logs directory to workDir for persistence
+    `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
 
   // Add custom volume mounts if specified
   if (config.volumeMounts && config.volumeMounts.length > 0) {
     logger.debug(`Adding ${config.volumeMounts.length} custom volume mount(s)`);
     config.volumeMounts.forEach(mount => {
-      copilotVolumes.push(mount);
+      agentVolumes.push(mount);
     });
   } else {
     // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
     logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
-    copilotVolumes.unshift('/:/host:rw');
+    agentVolumes.unshift('/:/host:rw');
   }
 
-  // Copilot service configuration
-  const copilotService: any = {
-    container_name: 'awf-copilot',
+  // Agent service configuration
+  const agentService: any = {
+    container_name: 'awf-agent',
     networks: {
       'awf-net': {
-        ipv4_address: networkConfig.copilotIp,
+        ipv4_address: networkConfig.agentIp,
       },
     },
     dns: ['8.8.8.8', '8.8.4.4'], // Use Google DNS instead of Docker's embedded DNS
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
-    volumes: copilotVolumes,
+    volumes: agentVolumes,
     environment,
     depends_on: {
       'squid-proxy': {
@@ -257,21 +257,21 @@ export function generateDockerCompose(
     stdin_open: true,
     tty: config.tty || false, // Use --tty flag, default to false for clean logs
     // Escape $ with $$ for Docker Compose variable interpolation
-    command: ['/bin/bash', '-c', config.copilotCommand.replace(/\$/g, '$$$$')],
+    command: ['/bin/bash', '-c', config.agentCommand.replace(/\$/g, '$$$$')],
   };
 
   // Set working directory if specified (overrides Dockerfile WORKDIR)
   if (config.containerWorkDir) {
-    copilotService.working_dir = config.containerWorkDir;
+    agentService.working_dir = config.containerWorkDir;
     logger.debug(`Set container working directory to: ${config.containerWorkDir}`);
   }
 
   // Use GHCR image or build locally
   if (useGHCR) {
-    copilotService.image = `${registry}/copilot:${tag}`;
+    agentService.image = `${registry}/agent:${tag}`;
   } else {
-    copilotService.build = {
-      context: path.join(projectRoot, 'containers/copilot'),
+    agentService.build = {
+      context: path.join(projectRoot, 'containers/agent'),
       dockerfile: 'Dockerfile',
     };
   }
@@ -279,7 +279,7 @@ export function generateDockerCompose(
   return {
     services: {
       'squid-proxy': squidService,
-      'copilot': copilotService,
+      'agent': agentService,
     },
     networks: {
       'awf-net': {
@@ -318,12 +318,12 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   );
   logger.debug(`Docker config written to: ${dockerConfigDir}/config.json`);
 
-  // Create copilot logs directory for persistence
-  const copilotLogsDir = path.join(config.workDir, 'copilot-logs');
-  if (!fs.existsSync(copilotLogsDir)) {
-    fs.mkdirSync(copilotLogsDir, { recursive: true });
+  // Create agent logs directory for persistence
+  const agentLogsDir = path.join(config.workDir, 'agent-logs');
+  if (!fs.existsSync(agentLogsDir)) {
+    fs.mkdirSync(agentLogsDir, { recursive: true });
   }
-  logger.debug(`Copilot logs directory created at: ${copilotLogsDir}`);
+  logger.debug(`Agent logs directory created at: ${agentLogsDir}`);
 
   // Create squid logs directory for persistence
   // Note: Squid runs as user 'proxy' (UID 13, GID 13 in ubuntu/squid image)
@@ -338,9 +338,9 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const networkConfig = {
     subnet: '172.30.0.0/24',
     squidIp: '172.30.0.10',
-    copilotIp: '172.30.0.20',
+    agentIp: '172.30.0.20',
   };
-  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, copilot: ${networkConfig.copilotIp})`);
+  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp})`);
 
   // Write Squid config
   const squidConfig = generateSquidConfig({
@@ -431,7 +431,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
   // This handles orphaned containers from failed/interrupted previous runs
   logger.debug('Removing any existing containers with conflicting names...');
   try {
-    await execa('docker', ['rm', '-f', 'awf-squid', 'awf-copilot'], {
+    await execa('docker', ['rm', '-f', 'awf-squid', 'awf-agent'], {
       reject: false,
     });
   } catch {
@@ -504,15 +504,15 @@ export async function startContainers(workDir: string, allowedDomains: string[])
 }
 
 /**
- * Runs the copilot command in the container and reports any blocked domains
+ * Runs the agent command in the container and reports any blocked domains
  */
-export async function runCopilotCommand(workDir: string, allowedDomains: string[]): Promise<{ exitCode: number; blockedDomains: string[] }> {
-  logger.info('Executing copilot command...');
+export async function runAgentCommand(workDir: string, allowedDomains: string[]): Promise<{ exitCode: number; blockedDomains: string[] }> {
+  logger.info('Executing agent command...');
 
   try {
     // Stream logs in real-time using docker logs -f (follow mode)
     // Run this in the background and wait for the container to exit separately
-    const logsProcess = execa('docker', ['logs', '-f', 'awf-copilot'], {
+    const logsProcess = execa('docker', ['logs', '-f', 'awf-agent'], {
       stdio: 'inherit',
       reject: false,
     });
@@ -520,7 +520,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
     // Wait for the container to exit (this will run concurrently with log streaming)
     const { stdout: exitCodeStr } = await execa('docker', [
       'wait',
-      'awf-copilot',
+      'awf-agent',
     ]);
 
     const exitCode = parseInt(exitCodeStr.trim(), 10);
@@ -528,7 +528,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
     // Wait for the logs process to finish (it should exit automatically when container stops)
     await logsProcess;
 
-    logger.debug(`Copilot exit code: ${exitCode}`);
+    logger.debug(`Agent exit code: ${exitCode}`);
 
     // Small delay to ensure Squid logs are flushed to disk
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -577,7 +577,7 @@ export async function runCopilotCommand(workDir: string, allowedDomains: string[
 
     return { exitCode, blockedDomains: blockedTargets.map(b => b.domain) };
   } catch (error) {
-    logger.error('Failed to run copilot command:', error);
+    logger.error('Failed to run agent command:', error);
     throw error;
   }
 }
@@ -607,7 +607,7 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
 
 /**
  * Cleans up temporary files
- * Preserves copilot logs by moving them to a persistent location before cleanup
+ * Preserves agent logs by moving them to a persistent location before cleanup
  */
 export async function cleanup(workDir: string, keepFiles: boolean): Promise<void> {
   if (keepFiles) {
@@ -620,15 +620,15 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
     if (fs.existsSync(workDir)) {
       const timestamp = path.basename(workDir).replace('awf-', '');
 
-      // Preserve copilot logs before cleanup by moving them to /tmp
-      const copilotLogsDir = path.join(workDir, 'copilot-logs');
-      if (fs.existsSync(copilotLogsDir) && fs.readdirSync(copilotLogsDir).length > 0) {
-        const preservedLogsDir = path.join(os.tmpdir(), `copilot-logs-${timestamp}`);
+      // Preserve agent logs before cleanup by moving them to /tmp
+      const agentLogsDir = path.join(workDir, 'agent-logs');
+      if (fs.existsSync(agentLogsDir) && fs.readdirSync(agentLogsDir).length > 0) {
+        const preservedLogsDir = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
         try {
-          fs.renameSync(copilotLogsDir, preservedLogsDir);
-          logger.info(`Copilot logs preserved at: ${preservedLogsDir}`);
+          fs.renameSync(agentLogsDir, preservedLogsDir);
+          logger.info(`Agent logs preserved at: ${preservedLogsDir}`);
         } catch (error) {
-          logger.debug('Could not preserve copilot logs:', error);
+          logger.debug('Could not preserve agent logs:', error);
         }
       }
 

@@ -16,7 +16,7 @@
  * ```typescript
  * const config: WrapperConfig = {
  *   allowedDomains: ['github.com', 'api.github.com'],
- *   copilotCommand: 'npx @github/copilot --prompt "test"',
+ *   agentCommand: 'npx @github/copilot --prompt "test"',
  *   logLevel: 'info',
  *   keepContainers: false,
  *   workDir: '/tmp/awf-1234567890',
@@ -45,7 +45,7 @@ export interface WrapperConfig {
    * @example 'npx @github/copilot --prompt "list files"'
    * @example 'curl https://api.github.com/zen'
    */
-  copilotCommand: string;
+  agentCommand: string;
 
   /**
    * Logging verbosity level
@@ -69,12 +69,12 @@ export interface WrapperConfig {
    * When false (default):
    * - Containers are stopped and removed via 'docker compose down -v'
    * - Work directory is deleted (except preserved log directories)
-   * - Squid and Copilot logs are moved to /tmp if they exist
+   * - Squid and agent logs are moved to /tmp if they exist
    */
   keepContainers: boolean;
 
   /**
-   * Whether to allocate a pseudo-TTY for the copilot container
+   * Whether to allocate a pseudo-TTY for the agent execution container
    *
    * When true:
    * - Allocates a pseudo-TTY (stdin becomes a TTY)
@@ -96,7 +96,7 @@ export interface WrapperConfig {
    * This directory contains:
    * - squid.conf: Generated Squid proxy configuration
    * - docker-compose.yml: Docker Compose service definitions
-   * - copilot-logs/: Volume mount for Copilot CLI logs
+   * - agent-logs/: Volume mount for agent logs
    * - squid-logs/: Volume mount for Squid proxy logs
    * 
    * @example '/tmp/awf-1234567890'
@@ -127,7 +127,7 @@ export interface WrapperConfig {
    * Whether to build container images locally instead of pulling from registry
    * 
    * When true, Docker images are built from local Dockerfiles in containers/squid
-   * and containers/copilot directories. When false (default), images are pulled
+   * and containers/agent directories. When false (default), images are pulled
    * from the configured registry.
    * 
    * @default false
@@ -135,7 +135,7 @@ export interface WrapperConfig {
   buildLocal?: boolean;
 
   /**
-   * Additional environment variables to pass to the copilot container
+   * Additional environment variables to pass to the agent execution container
    * 
    * These variables are explicitly passed to the container and are accessible
    * to the command and any MCP servers. Common use cases include API tokens,
@@ -149,7 +149,7 @@ export interface WrapperConfig {
    * Whether to pass all host environment variables to the container
    *
    * When true, all environment variables from the host (excluding system variables
-   * like PATH, HOME, etc.) are passed to the copilot container. This is useful for
+   * like PATH, HOME, etc.) are passed to the agent execution container. This is useful for
    * development but may pose security risks in production.
    *
    * When false (default), only variables specified in additionalEnv are passed.
@@ -159,7 +159,7 @@ export interface WrapperConfig {
   envAll?: boolean;
 
   /**
-   * Custom volume mounts to add to the copilot container
+   * Custom volume mounts to add to the agent execution container
    *
    * Array of volume mount specifications in Docker format:
    * - 'host_path:container_path' (defaults to rw)
@@ -174,7 +174,7 @@ export interface WrapperConfig {
   volumeMounts?: string[];
 
   /**
-   * Working directory inside the copilot container
+   * Working directory inside the agent execution container
    *
    * Sets the initial working directory (pwd) for command execution.
    * This overrides the Dockerfile's WORKDIR and should match GITHUB_WORKSPACE
@@ -231,12 +231,12 @@ export interface SquidConfig {
  * Docker Compose configuration structure
  * 
  * Represents the structure of a docker-compose.yml file used to orchestrate
- * the Squid proxy container and Copilot execution container. This configuration
+ * the Squid proxy container and agent execution container. This configuration
  * is generated dynamically and written to the work directory.
  * 
  * The typical setup includes:
  * - A Squid proxy service for traffic filtering
- * - A Copilot service for command execution with iptables NAT rules
+ * - An agent service for command execution with iptables NAT rules
  * - A custom Docker network with fixed IP assignments
  * - Named volumes for log persistence
  */
@@ -253,9 +253,9 @@ export interface DockerComposeConfig {
    * 
    * Typically includes two services:
    * - 'squid-proxy': Squid proxy server for traffic filtering
-   * - 'copilot': Ubuntu container for command execution with iptables
+   * - 'agent': Ubuntu container for command execution with iptables
    * 
-   * @example { 'squid-proxy': {...}, 'copilot': {...} }
+   * @example { 'squid-proxy': {...}, 'agent': {...} }
    */
   services: {
     [key: string]: DockerService;
@@ -303,7 +303,7 @@ export interface DockerService {
    * from the registry (local or remote).
    * 
    * @example 'ubuntu/squid:latest'
-   * @example 'ghcr.io/githubnext/gh-aw-firewall/copilot:latest'
+   * @example 'ghcr.io/githubnext/gh-aw-firewall/agent:latest'
    */
   image?: string;
 
@@ -326,10 +326,10 @@ export interface DockerService {
    * Container name for the service
    * 
    * Used for container identification, logging, and inter-container communication.
-   * The firewall typically uses 'awf-squid' and 'awf-copilot'.
+   * The firewall typically uses 'awf-squid' and 'awf-agent'.
    * 
    * @example 'awf-squid'
-   * @example 'awf-copilot'
+   * @example 'awf-agent'
    */
   container_name: string;
 
@@ -398,7 +398,7 @@ export interface DockerService {
    * - Simple array: ['squid-proxy'] - Wait for service to start
    * - Object with conditions: { 'squid-proxy': { condition: 'service_healthy' } }
    * 
-   * The copilot service typically depends on squid being healthy before starting.
+   * The agent service typically depends on squid being healthy before starting.
    * 
    * @example ['squid-proxy']
    * @example { 'squid-proxy': { condition: 'service_healthy' } }
@@ -409,7 +409,7 @@ export interface DockerService {
    * Container health check configuration
    * 
    * Defines how Docker monitors container health. The Squid service uses
-   * health checks to ensure the proxy is ready before starting the copilot container.
+   * health checks to ensure the proxy is ready before starting the agent container.
    * 
    * @example
    * ```typescript
@@ -439,7 +439,7 @@ export interface DockerService {
    * Linux capabilities to add to the container
    * 
    * Grants additional privileges beyond the default container capabilities.
-   * The copilot container requires NET_ADMIN for iptables manipulation.
+   * The agent container requires NET_ADMIN for iptables manipulation.
    * 
    * @example ['NET_ADMIN']
    */
