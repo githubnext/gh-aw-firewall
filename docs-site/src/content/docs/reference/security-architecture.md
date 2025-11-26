@@ -586,11 +586,6 @@ sequenceDiagram
     AWF->>AWF: Cleanup temp files
     AWF->>Runner: Exit with agent's exit code
     Runner->>GH: Report job status
-    
-    style GH fill:#2088FF,stroke:#0969DA,color:#fff
-    style AWF fill:#FF9800,stroke:#E65100,color:#fff
-    style Squid fill:#4CAF50,stroke:#2E7D32,color:#fff
-    style Agent fill:#9C27B0,stroke:#6A1B9A,color:#fff
 ```
 
 ## Best Practices for GitHub Actions
