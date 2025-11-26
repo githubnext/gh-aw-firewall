@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
+import { isIPv6 } from 'net';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
@@ -89,19 +90,12 @@ export function isValidIPv4(ip: string): boolean {
 }
 
 /**
- * Validates that a string is a valid IPv6 address
+ * Validates that a string is a valid IPv6 address using Node.js built-in net module
  * @param ip - String to validate
  * @returns true if the string is a valid IPv6 address
  */
 export function isValidIPv6(ip: string): boolean {
-  // Comprehensive IPv6 validation covering:
-  // - Full form: 2001:0db8:85a3:0000:0000:8a2e:0370:7334
-  // - Compressed form: 2001:db8:85a3::8a2e:370:7334
-  // - Loopback: ::1
-  // - Unspecified: ::
-  // - IPv4-mapped: ::ffff:192.0.2.1
-  const ipv6Regex = /^(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?::[0-9a-fA-F]{1,4}){1,7}|::)$/;
-  return ipv6Regex.test(ip);
+  return isIPv6(ip);
 }
 
 /**
