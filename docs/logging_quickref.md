@@ -23,7 +23,7 @@ docker exec awf-squid grep "TCP_TUNNEL\|TCP_MISS" /var/log/squid/access.log
 sudo dmesg | grep FW_BLOCKED
 
 # From copilot container
-docker exec awf-copilot dmesg | grep FW_BLOCKED
+docker exec awf-agent dmesg | grep FW_BLOCKED
 
 # Using journalctl (systemd)
 sudo journalctl -k | grep FW_BLOCKED

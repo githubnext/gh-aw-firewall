@@ -294,12 +294,12 @@ Container logs are streamed in real-time, allowing you to see output as commands
 sudo awf \
   --allow-domains github.com \
   "npx @github/copilot@0.0.347 -p 'your prompt' --allow-all-tools"
-# Logs appear immediately as copilot runs, not after completion
+# Logs appear immediately as command runs, not after completion
 ```
 
 ### Log Preservation
 
-Both Copilot CLI and Squid proxy logs are automatically preserved for debugging:
+Both GitHub Copilot CLI and Squid proxy logs are automatically preserved for debugging:
 
 ```bash
 # Logs automatically saved after command completes
@@ -308,14 +308,14 @@ sudo awf \
   "npx @github/copilot@0.0.347 -p 'your prompt' --log-level debug --allow-all-tools"
 
 # Output:
-# [INFO] Copilot logs preserved at: /tmp/copilot-logs-<timestamp>
+# [INFO] Agent logs preserved at: /tmp/awf-agent-logs-<timestamp>
 # [INFO] Squid logs preserved at: /tmp/squid-logs-<timestamp>
 ```
 
-**Copilot Logs:**
-- Contains Copilot CLI debug output and session information
-- Location: `/tmp/copilot-logs-<timestamp>/`
-- View with: `cat /tmp/copilot-logs-<timestamp>/*.log`
+**Agent Logs:**
+- Contains GitHub Copilot CLI debug output and session information
+- Location: `/tmp/awf-agent-logs-<timestamp>/`
+- View with: `cat /tmp/awf-agent-logs-<timestamp>/*.log`
 
 **Squid Logs:**
 - Contains all HTTP/HTTPS traffic (allowed and denied)
@@ -331,9 +331,9 @@ sudo cat /tmp/squid-logs-<timestamp>/access.log
 ```
 
 **How it works:**
-- Copilot writes to `~/.copilot/logs/`, Squid writes to `/var/log/squid/`
-- Volume mounts map these to `${workDir}/copilot-logs/` and `${workDir}/squid-logs/`
-- Before cleanup, logs are automatically moved to `/tmp/*-logs-<timestamp>/` (if they exist)
+- GitHub Copilot CLI writes to `~/.copilot/logs/`, Squid writes to `/var/log/squid/`
+- Volume mounts map these to `${workDir}/agent-logs/` and `${workDir}/squid-logs/`
+- Before cleanup, logs are automatically moved to `/tmp/awf-agent-logs-<timestamp>/` and `/tmp/squid-logs-<timestamp>/` (if they exist)
 - Empty log directories are not preserved (avoids cluttering /tmp)
 
 ### Keep Containers for Inspection
@@ -345,11 +345,11 @@ sudo awf \
   'your-command'
 
 # View real-time container logs:
-docker logs awf-copilot
+docker logs awf-agent
 docker logs awf-squid
 
 # Access preserved logs at:
-# /tmp/awf-<timestamp>/copilot-logs/
+# /tmp/awf-<timestamp>/agent-logs/
 # /tmp/awf-<timestamp>/squid-logs/
 ```
 
