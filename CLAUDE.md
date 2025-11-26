@@ -117,7 +117,7 @@ sudo awf --help
 
 ## Container Image Strategy
 
-The firewall uses two Docker containers (Squid proxy and Copilot execution environment). By default, the CLI pulls pre-built images from GitHub Container Registry (GHCR) for faster startup and easier distribution.
+The firewall uses two Docker containers (Squid proxy and agent execution environment). By default, the CLI pulls pre-built images from GitHub Container Registry (GHCR) for faster startup and easier distribution.
 
 **Default behavior (GHCR images):**
 - Images are automatically pulled from `ghcr.io/githubnext/gh-aw-firewall/squid:latest` and `ghcr.io/githubnext/gh-aw-firewall/agent:latest`
