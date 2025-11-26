@@ -1150,7 +1150,7 @@ If you discover a security vulnerability in this firewall, please report it resp
 - Include: Detailed description, reproduction steps, impact assessment
 - Allow: Reasonable time for patch development and release
 
-See [SECURITY.md](https://github.com/githubnext/gh-aw-firewall/blob/main/SECURITY.md) for full disclosure policy.
+For more details, see [GitHub's Safe Harbor Policy](https://docs.github.com/en/github/site-policy/github-bug-bounty-program-legal-safe-harbor#1-safe-harbor-terms).
 
 ## Conclusion
 
