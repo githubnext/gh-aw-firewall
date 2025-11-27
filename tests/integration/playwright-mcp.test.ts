@@ -40,31 +40,35 @@ describe('Playwright MCP Integration', () => {
   });
 
   test('Test 1: Playwright MCP can navigate to GitHub and verify page title', async () => {
-    // Create MCP config for playwright
-    const mcpConfig = {
-      mcpServers: {
-        playwright: {
-          type: 'local',
-          command: 'docker',
-          args: [
-            'run',
-            '-i',
-            '--rm',
-            '--init',
-            'mcr.microsoft.com/playwright/mcp',
-            '--output-dir',
-            '/tmp/gh-aw/mcp-logs/playwright',
-            '--allowed-hosts',
-            'localhost;localhost:*;127.0.0.1;127.0.0.1:*;github.com'
-          ],
-          tools: ['*']
-        }
-      }
-    };
+    // Create MCP config for playwright using a heredoc to avoid injection risks
+    const mcpConfigJson = `{
+  "mcpServers": {
+    "playwright": {
+      "type": "local",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "mcr.microsoft.com/playwright/mcp",
+        "--output-dir",
+        "/tmp/gh-aw/mcp-logs/playwright",
+        "--allowed-hosts",
+        "localhost;localhost:*;127.0.0.1;127.0.0.1:*;github.com"
+      ],
+      "tools": ["*"]
+    }
+  }
+}`;
 
     // Write MCP config to a temporary file and set up the test
+    // Using heredoc to safely write the config without shell escaping issues
     const result = await runner.runWithSudo(
-      `bash -c "mkdir -p ~/.copilot && echo '${JSON.stringify(mcpConfig)}' > ~/.copilot/mcp-config.json && cat ~/.copilot/mcp-config.json"`,
+      `bash -c 'mkdir -p ~/.copilot && cat > ~/.copilot/mcp-config.json << "MCPEOF"
+${mcpConfigJson}
+MCPEOF
+cat ~/.copilot/mcp-config.json'`,
       {
         allowDomains: [
           'github.com',

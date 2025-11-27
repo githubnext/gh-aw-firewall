@@ -74,9 +74,7 @@ jobs:
       - name: Run Playwright MCP tests
         id: run-tests
         run: |
-          set +e
           sudo -E npm run test:integration -- playwright-mcp.test.ts 2>&1 | tee test-output.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Clean npm cache
@@ -91,12 +89,8 @@ jobs:
           npx tsx scripts/ci/generate-test-summary.ts "playwright-mcp.test.ts" "Playwright MCP Tests" test-output.log
 
       - name: Check test results
-        if: always()
-        run: |
-          if [ "${{ steps.run-tests.outputs.exit_code }}" != "0" ]; then
-            echo "Tests failed with exit code ${{ steps.run-tests.outputs.exit_code }}"
-            exit 1
-          fi
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
 
       - name: Post-test cleanup
         if: always()
