@@ -13,7 +13,7 @@ is_ipv6() {
 
 # Function to check if ip6tables is available and functional
 has_ip6tables() {
-  if command -v ip6tables &>/dev/null && ip6tables -L -n &>/dev/null 2>&1; then
+  if command -v ip6tables &>/dev/null && ip6tables -L -n &>/dev/null; then
     return 0
   else
     return 1

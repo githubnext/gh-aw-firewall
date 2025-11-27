@@ -7,6 +7,9 @@ const CHAIN_NAME = 'FW_WRAPPER';
 const CHAIN_NAME_V6 = 'FW_WRAPPER_V6';
 const NETWORK_SUBNET = '172.30.0.0/24';
 
+// Cache for ip6tables availability check (only checked once per run)
+let ip6tablesAvailableCache: boolean | null = null;
+
 /**
  * Gets the bridge interface name for the firewall network
  */
@@ -28,14 +31,22 @@ async function getNetworkBridgeName(): Promise<string | null> {
 }
 
 /**
- * Checks if ip6tables is available and functional
+ * Checks if ip6tables is available and functional.
+ * The result is cached to avoid redundant system calls.
  */
 async function isIp6tablesAvailable(): Promise<boolean> {
+  // Return cached result if available
+  if (ip6tablesAvailableCache !== null) {
+    return ip6tablesAvailableCache;
+  }
+
   try {
     await execa('ip6tables', ['-L', '-n'], { timeout: 5000 });
+    ip6tablesAvailableCache = true;
     return true;
   } catch (error) {
     logger.debug('ip6tables not available:', error);
+    ip6tablesAvailableCache = false;
     return false;
   }
 }
