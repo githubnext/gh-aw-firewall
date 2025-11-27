@@ -2,7 +2,6 @@ import { SquidConfig } from './types';
 import {
   parseDomainList,
   isDomainMatchedByPattern,
-  isWildcardPattern,
 } from './domain-patterns';
 
 /**
@@ -30,13 +29,9 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Remove redundant plain subdomains (e.g., if github.com is present, api.github.com is redundant)
   const uniquePlainDomains = plainDomains.filter((domain, index, arr) => {
-    // Skip if this is a wildcard pattern
-    if (isWildcardPattern(domain)) return true;
-
     // Check if this domain is a subdomain of another plain domain in the list
     return !arr.some((otherDomain, otherIndex) => {
       if (index === otherIndex) return false;
-      if (isWildcardPattern(otherDomain)) return false;
       // Check if domain is a subdomain of otherDomain (but not an exact duplicate)
       return domain !== otherDomain && domain.endsWith('.' + otherDomain);
     });
