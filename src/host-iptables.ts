@@ -295,7 +295,16 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
       '-j', 'ACCEPT',
     ]);
 
-    // 3. Allow DNS ONLY to specified trusted IPv6 DNS servers
+    // 3. Allow essential ICMPv6 (required for IPv6 functionality)
+    // This includes: destination unreachable, packet too big, time exceeded,
+    // echo request/reply, and Neighbor Discovery Protocol (NDP)
+    await execa('ip6tables', [
+      '-t', 'filter', '-A', CHAIN_NAME_V6,
+      '-p', 'ipv6-icmp',
+      '-j', 'ACCEPT',
+    ]);
+
+    // 4. Allow DNS ONLY to specified trusted IPv6 DNS servers
     for (const dnsServer of ipv6DnsServers) {
       await execa('ip6tables', [
         '-t', 'filter', '-A', CHAIN_NAME_V6,
@@ -310,7 +319,7 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
       ]);
     }
 
-    // 4. Block IPv6 multicast and link-local traffic
+    // 5. Block IPv6 multicast and link-local traffic
     await execa('ip6tables', [
       '-t', 'filter', '-A', CHAIN_NAME_V6,
       '-d', 'ff00::/8',  // IPv6 multicast range
@@ -323,7 +332,7 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
       '-j', 'REJECT', '--reject-with', 'icmp6-port-unreachable',
     ]);
 
-    // 5. Block all other IPv6 UDP traffic (DNS to whitelisted servers already allowed above)
+    // 6. Block all other IPv6 UDP traffic (DNS to whitelisted servers already allowed above)
     await execa('ip6tables', [
       '-t', 'filter', '-A', CHAIN_NAME_V6,
       '-p', 'udp',
@@ -336,7 +345,7 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
       '-j', 'REJECT', '--reject-with', 'icmp6-port-unreachable',
     ]);
 
-    // 6. Default deny all other IPv6 traffic (including TCP)
+    // 7. Default deny all other IPv6 traffic (including TCP)
     // This prevents IPv6 from being an unfiltered bypass path
     await execa('ip6tables', [
       '-t', 'filter', '-A', CHAIN_NAME_V6,
