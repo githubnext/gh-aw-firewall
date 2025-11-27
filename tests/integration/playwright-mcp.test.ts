@@ -39,7 +39,7 @@ describe('Playwright MCP Integration', () => {
     await cleanup(false);
   });
 
-  test('Test 1: Playwright MCP can navigate to GitHub and verify page title', async () => {
+  test('Test 1: MCP configuration can be written and validated', async () => {
     // Create MCP config for playwright using a heredoc to avoid injection risks
     const mcpConfigJson = `{
   "mcpServers": {
