@@ -1,0 +1,104 @@
+name: Playwright MCP Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-playwright-mcp:
+    name: Playwright MCP Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pull Playwright MCP Docker image
+        run: docker pull mcr.microsoft.com/playwright/mcp
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Setup MCP configuration
+        run: |
+          mkdir -p ~/.copilot
+          cat > ~/.copilot/mcp-config.json << 'EOF'
+          {
+            "mcpServers": {
+              "playwright": {
+                "type": "local",
+                "command": "docker",
+                "args": [
+                  "run",
+                  "-i",
+                  "--rm",
+                  "--init",
+                  "mcr.microsoft.com/playwright/mcp",
+                  "--output-dir",
+                  "/tmp/gh-aw/mcp-logs/playwright",
+                  "--allowed-hosts",
+                  "localhost;localhost:*;127.0.0.1;127.0.0.1:*;github.com"
+                ],
+                "tools": ["*"]
+              }
+            }
+          }
+          EOF
+          cat ~/.copilot/mcp-config.json
+
+      - name: Run Playwright MCP tests
+        id: run-tests
+        run: |
+          sudo -E npm run test:integration -- playwright-mcp.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "playwright-mcp.test.ts" "Playwright MCP Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-mcp-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/awf-agent-logs-*/
+            /tmp/squid-logs-*/
+            /tmp/gh-aw/mcp-logs/playwright/
+          retention-days: 7
