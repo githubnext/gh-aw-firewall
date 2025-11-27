@@ -178,11 +178,24 @@ export async function setupHostIptables(squidIp: string, squidPort: number): Pro
     '-j', 'ACCEPT',
   ]);
 
-  // 4. Allow DNS (UDP and TCP port 53)
+  // 4. Allow DNS (UDP and TCP port 53) with logging for audit trail
+  // Log DNS queries first (LOG doesn't terminate processing)
+  await execa('iptables', [
+    '-t', 'filter', '-A', chainName,
+    '-p', 'udp', '--dport', '53',
+    '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+  ]);
+
   await execa('iptables', [
     '-t', 'filter', '-A', chainName,
     '-p', 'udp', '--dport', '53',
     '-j', 'ACCEPT',
+  ]);
+
+  await execa('iptables', [
+    '-t', 'filter', '-A', chainName,
+    '-p', 'tcp', '--dport', '53',
+    '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
   ]);
 
   await execa('iptables', [
