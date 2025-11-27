@@ -185,6 +185,18 @@ export interface WrapperConfig {
    * @example '/home/runner/work/repo/repo'
    */
   containerWorkDir?: string;
+
+  /**
+   * Custom directory for preserving logs after execution
+   *
+   * When specified, Squid and agent logs are copied to this directory
+   * instead of the default timestamped /tmp locations. The directory
+   * is created if it doesn't exist. Subdirectories squid-logs/ and
+   * agent-logs/ will be created within it.
+   *
+   * @example '/tmp/my-project-logs'
+   */
+  logsDir?: string;
 }
 
 /**
@@ -570,11 +582,71 @@ export interface BlockedTarget {
 
   /**
    * Port number if specified in the blocked request
-   * 
+   *
    * Non-standard ports (other than 80/443) that were part of the connection attempt.
-   * 
+   *
    * @example '8443'
    * @example '8080'
    */
   port?: string;
+}
+
+/**
+ * Parsed entry from Squid's firewall_detailed log format
+ *
+ * Represents a single log line parsed into structured fields for
+ * display formatting and analysis.
+ */
+export interface ParsedLogEntry {
+  /** Unix timestamp with milliseconds (e.g., 1761074374.646) */
+  timestamp: number;
+  /** Client IP address */
+  clientIp: string;
+  /** Client port number */
+  clientPort: string;
+  /** Host header value (may be "-" for CONNECT requests) */
+  host: string;
+  /** Destination IP address (may be "-" for denied requests) */
+  destIp: string;
+  /** Destination port number */
+  destPort: string;
+  /** HTTP protocol version (e.g., "1.1") */
+  protocol: string;
+  /** HTTP method (CONNECT, GET, POST, etc.) */
+  method: string;
+  /** HTTP status code (200, 403, etc.) */
+  statusCode: number;
+  /** Squid decision code (e.g., "TCP_TUNNEL:HIER_DIRECT", "TCP_DENIED:HIER_NONE") */
+  decision: string;
+  /** Request URL or domain:port for CONNECT */
+  url: string;
+  /** User-Agent header value */
+  userAgent: string;
+  /** Extracted domain name */
+  domain: string;
+  /** true if request was allowed (TCP_TUNNEL), false if denied (TCP_DENIED) */
+  isAllowed: boolean;
+  /** true if CONNECT method (HTTPS) */
+  isHttps: boolean;
+}
+
+/**
+ * Output format for log display
+ */
+export type OutputFormat = 'raw' | 'pretty' | 'json';
+
+/**
+ * Source of log data (running container or preserved log files)
+ */
+export interface LogSource {
+  /** Type of log source */
+  type: 'running' | 'preserved';
+  /** Path to preserved log directory (for preserved type) */
+  path?: string;
+  /** Container name (for running type) */
+  containerName?: string;
+  /** Timestamp extracted from directory name (for preserved type) */
+  timestamp?: number;
+  /** Human-readable date string (for preserved type) */
+  dateStr?: string;
 }

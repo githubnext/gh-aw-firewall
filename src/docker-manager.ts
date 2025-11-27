@@ -608,8 +608,11 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
 /**
  * Cleans up temporary files
  * Preserves agent logs by moving them to a persistent location before cleanup
+ * @param workDir - Working directory containing configs and logs
+ * @param keepFiles - If true, skip cleanup and keep files
+ * @param logsDir - Optional custom directory to copy logs to (creates subdirs)
  */
-export async function cleanup(workDir: string, keepFiles: boolean): Promise<void> {
+export async function cleanup(workDir: string, keepFiles: boolean, logsDir?: string): Promise<void> {
   if (keepFiles) {
     logger.debug(`Keeping temporary files in: ${workDir}`);
     return;
@@ -620,31 +623,52 @@ export async function cleanup(workDir: string, keepFiles: boolean): Promise<void
     if (fs.existsSync(workDir)) {
       const timestamp = path.basename(workDir).replace('awf-', '');
 
-      // Preserve agent logs before cleanup by moving them to /tmp
+      // Determine log destination based on logsDir option
+      // If logsDir is specified, use it; otherwise fall back to timestamped /tmp directories
+      const agentLogsDestination = logsDir
+        ? path.join(logsDir, 'agent-logs')
+        : path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
+      const squidLogsDestination = logsDir
+        ? path.join(logsDir, 'squid-logs')
+        : path.join(os.tmpdir(), `squid-logs-${timestamp}`);
+
+      // Preserve agent logs before cleanup
       const agentLogsDir = path.join(workDir, 'agent-logs');
       if (fs.existsSync(agentLogsDir) && fs.readdirSync(agentLogsDir).length > 0) {
-        const preservedLogsDir = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
         try {
-          fs.renameSync(agentLogsDir, preservedLogsDir);
-          logger.info(`Agent logs preserved at: ${preservedLogsDir}`);
+          if (logsDir) {
+            // Create parent directory if needed and copy
+            fs.mkdirSync(agentLogsDestination, { recursive: true });
+            fs.cpSync(agentLogsDir, agentLogsDestination, { recursive: true });
+          } else {
+            // Default: move to timestamped directory
+            fs.renameSync(agentLogsDir, agentLogsDestination);
+          }
+          logger.info(`Agent logs preserved at: ${agentLogsDestination}`);
         } catch (error) {
           logger.debug('Could not preserve agent logs:', error);
         }
       }
 
-      // Preserve squid logs before cleanup by moving them to /tmp
+      // Preserve squid logs before cleanup
       const squidLogsDir = path.join(workDir, 'squid-logs');
       if (fs.existsSync(squidLogsDir) && fs.readdirSync(squidLogsDir).length > 0) {
-        const preservedSquidLogsDir = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
         try {
-          fs.renameSync(squidLogsDir, preservedSquidLogsDir);
+          if (logsDir) {
+            // Create parent directory if needed and copy
+            fs.mkdirSync(squidLogsDestination, { recursive: true });
+            fs.cpSync(squidLogsDir, squidLogsDestination, { recursive: true });
+          } else {
+            // Default: move to timestamped directory
+            fs.renameSync(squidLogsDir, squidLogsDestination);
+          }
 
           // Make logs readable by GitHub Actions runner for artifact upload
           // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
           // chmod a+rX sets read for all users, and execute for dirs (capital X)
-          execa.sync('chmod', ['-R', 'a+rX', preservedSquidLogsDir]);
+          execa.sync('chmod', ['-R', 'a+rX', squidLogsDestination]);
 
-          logger.info(`Squid logs preserved at: ${preservedSquidLogsDir}`);
+          logger.info(`Squid logs preserved at: ${squidLogsDestination}`);
         } catch (error) {
           logger.debug('Could not preserve squid logs:', error);
         }

@@ -353,6 +353,99 @@ docker logs awf-squid
 # /tmp/awf-<timestamp>/squid-logs/
 ```
 
+## Viewing Logs with `awf logs`
+
+The `awf logs` command provides an easy way to view Squid proxy logs from current or previous runs.
+
+### Basic Usage
+
+```bash
+# View recent logs with pretty formatting (default)
+awf logs
+
+# Follow logs in real-time (like tail -f)
+awf logs -f
+```
+
+### Output Formats
+
+The command supports three output formats:
+
+```bash
+# Pretty: colorized, human-readable output (default)
+awf logs --format pretty
+
+# Raw: logs as-is without parsing or colorization
+awf logs --format raw
+
+# JSON: structured output for programmatic consumption
+awf logs --format json
+```
+
+Example JSON output:
+```json
+{"timestamp":1760987995.318,"clientIp":"172.20.98.20","clientPort":"55960","domain":"example.com","destIp":"-","destPort":"-","httpVersion":"1.1","method":"CONNECT","statusCode":403,"decision":"TCP_DENIED:HIER_NONE","url":"example.com:443","userAgent":"curl/7.81.0","isAllowed":false}
+```
+
+### Log Source Discovery
+
+The command auto-discovers log sources in this order:
+1. Running `awf-squid` container (live logs)
+2. `AWF_LOGS_DIR` environment variable (if set)
+3. Preserved log directories in `/tmp/squid-logs-<timestamp>`
+
+```bash
+# List all available log sources
+awf logs --list
+
+# Output example:
+# Available log sources:
+#   [running] awf-squid (live container)
+#   [preserved] /tmp/squid-logs-1760987995318 (11/27/2024, 12:30:00 PM)
+#   [preserved] /tmp/squid-logs-1760987890000 (11/27/2024, 12:28:10 PM)
+```
+
+### Using Specific Log Sources
+
+```bash
+# Stream from a running container
+awf logs --source running -f
+
+# Use a specific preserved log directory
+awf logs --source /tmp/squid-logs-1760987995318
+
+# Use logs from AWF_LOGS_DIR
+export AWF_LOGS_DIR=/path/to/logs
+awf logs
+```
+
+### Combining Options
+
+```bash
+# Follow live logs in JSON format
+awf logs -f --format json
+
+# View specific logs in raw format
+awf logs --source /tmp/squid-logs-1760987995318 --format raw
+```
+
+### Troubleshooting with Logs
+
+**Find blocked requests:**
+```bash
+awf logs --format json | jq 'select(.isAllowed == false)'
+```
+
+**Filter by domain:**
+```bash
+awf logs --format json | jq 'select(.domain | contains("github"))'
+```
+
+**Count blocked vs allowed:**
+```bash
+awf logs --format json | jq -s 'group_by(.isAllowed) | map({allowed: .[0].isAllowed, count: length})'
+```
+
 ## Log Analysis
 
 Find all blocked domains:

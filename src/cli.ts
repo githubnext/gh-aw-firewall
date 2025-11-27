@@ -20,6 +20,7 @@ import {
 } from './host-iptables';
 import { runMainWorkflow } from './cli-workflow';
 import { redactSecrets } from './redact-secrets';
+import { OutputFormat } from './types';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
@@ -309,6 +310,10 @@ program
     '--container-workdir <dir>',
     'Working directory inside the container (should match GITHUB_WORKSPACE for path consistency)'
   )
+  .option(
+    '--logs-dir <path>',
+    'Directory to save logs to (creates squid-logs/ and agent-logs/ subdirs)'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -420,6 +425,7 @@ program
       envAll: options.envAll,
       volumeMounts,
       containerWorkDir: options.containerWorkdir,
+      logsDir: options.logsDir,
     };
 
     // Warn if --env-all is used
@@ -455,7 +461,7 @@ program
       }
 
       if (!config.keepContainers) {
-        await cleanup(config.workDir, false);
+        await cleanup(config.workDir, false, config.logsDir);
         // Note: We don't remove the firewall network here since it can be reused
         // across multiple runs. Cleanup script will handle removal if needed.
       } else {
@@ -505,6 +511,36 @@ program
       await performCleanup();
       process.exit(1);
     }
+  });
+
+// Logs subcommand - view Squid proxy logs
+program
+  .command('logs')
+  .description('View Squid proxy logs from current or previous runs')
+  .option('-f, --follow', 'Follow log output in real-time (like tail -f)', false)
+  .option(
+    '--format <format>',
+    'Output format: raw (as-is), pretty (colorized), json (structured)',
+    'pretty'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .option('--list', 'List available log sources', false)
+  .action(async (options) => {
+    // Validate format option
+    const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
+    if (!validFormats.includes(options.format)) {
+      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
+      process.exit(1);
+    }
+
+    // Dynamic import to avoid circular dependencies
+    const { logsCommand } = await import('./commands/logs');
+    await logsCommand({
+      follow: options.follow,
+      format: options.format as OutputFormat,
+      source: options.source,
+      list: options.list,
+    });
   });
 
 // Only parse arguments if this file is run directly (not imported as a module)
