@@ -11,6 +11,24 @@ is_ipv6() {
   [[ "$ip" == *:* ]]
 }
 
+# Function to check if ip6tables is available and functional
+has_ip6tables() {
+  if command -v ip6tables &>/dev/null && ip6tables -L -n &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Check ip6tables availability once at the start
+IP6TABLES_AVAILABLE=false
+if has_ip6tables; then
+  IP6TABLES_AVAILABLE=true
+  echo "[iptables] ip6tables is available"
+else
+  echo "[iptables] WARNING: ip6tables is not available, IPv6 rules will be skipped"
+fi
+
 # Get Squid proxy configuration from environment
 SQUID_HOST="${SQUID_PROXY_HOST:-squid-proxy}"
 SQUID_PORT="${SQUID_PROXY_PORT:-3128}"
@@ -27,14 +45,18 @@ echo "[iptables] Squid IP resolved to: $SQUID_IP"
 
 # Clear existing NAT rules (both IPv4 and IPv6)
 iptables -t nat -F OUTPUT 2>/dev/null || true
-ip6tables -t nat -F OUTPUT 2>/dev/null || true
+if [ "$IP6TABLES_AVAILABLE" = true ]; then
+  ip6tables -t nat -F OUTPUT 2>/dev/null || true
+fi
 
 # Allow localhost traffic (for stdio MCP servers)
 echo "[iptables] Allow localhost traffic..."
 iptables -t nat -A OUTPUT -o lo -j RETURN
 iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
-ip6tables -t nat -A OUTPUT -o lo -j RETURN
-ip6tables -t nat -A OUTPUT -d ::1/128 -j RETURN
+if [ "$IP6TABLES_AVAILABLE" = true ]; then
+  ip6tables -t nat -A OUTPUT -o lo -j RETURN
+  ip6tables -t nat -A OUTPUT -d ::1/128 -j RETURN
+fi
 
 # Get DNS servers from environment (default to Google DNS)
 DNS_SERVERS="${AWF_DNS_SERVERS:-8.8.8.8,8.8.4.4}"
@@ -66,11 +88,15 @@ for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
 done
 
 # Allow DNS queries ONLY to trusted IPv6 DNS servers
-for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
-  echo "[iptables] Allow DNS to trusted IPv6 server: $dns_server"
-  ip6tables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
-  ip6tables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
-done
+if [ "$IP6TABLES_AVAILABLE" = true ]; then
+  for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
+    echo "[iptables] Allow DNS to trusted IPv6 server: $dns_server"
+    ip6tables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
+    ip6tables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
+  done
+elif [ ${#IPV6_DNS_SERVERS[@]} -gt 0 ]; then
+  echo "[iptables] WARNING: IPv6 DNS servers configured but ip6tables not available"
+fi
 
 # Allow DNS to Docker's embedded DNS server (127.0.0.11) for container name resolution
 echo "[iptables] Allow DNS to Docker embedded DNS (127.0.0.11)..."
@@ -84,9 +110,11 @@ for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
 done
 
 # Allow return traffic to trusted IPv6 DNS servers
-for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
-  ip6tables -t nat -A OUTPUT -d "$dns_server" -j RETURN
-done
+if [ "$IP6TABLES_AVAILABLE" = true ]; then
+  for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
+    ip6tables -t nat -A OUTPUT -d "$dns_server" -j RETURN
+  done
+fi
 
 # Allow traffic to Squid proxy itself
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
@@ -103,5 +131,9 @@ iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination "${SQUID_I
 echo "[iptables] NAT rules applied successfully"
 echo "[iptables] Current IPv4 NAT OUTPUT rules:"
 iptables -t nat -L OUTPUT -n -v
-echo "[iptables] Current IPv6 NAT OUTPUT rules:"
-ip6tables -t nat -L OUTPUT -n -v 2>/dev/null || echo "[iptables] (ip6tables NAT not available)"
+if [ "$IP6TABLES_AVAILABLE" = true ]; then
+  echo "[iptables] Current IPv6 NAT OUTPUT rules:"
+  ip6tables -t nat -L OUTPUT -n -v
+else
+  echo "[iptables] (ip6tables NAT not available)"
+fi
