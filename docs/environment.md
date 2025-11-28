@@ -51,6 +51,20 @@ sudo -E awf --allow-domains github.com 'copilot --prompt "..."'
 - Working with untrusted code
 - In production/CI environments
 
+## Internal Environment Variables
+
+The following environment variables are set internally by the firewall and used by container scripts:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `AWF_DNS_SERVERS` | Comma-separated list of trusted DNS servers | `8.8.8.8,8.8.4.4` |
+| `HTTP_PROXY` | Squid proxy URL for HTTP traffic | `http://172.30.0.10:3128` |
+| `HTTPS_PROXY` | Squid proxy URL for HTTPS traffic | `http://172.30.0.10:3128` |
+| `SQUID_PROXY_HOST` | Squid container hostname | `squid-proxy` |
+| `SQUID_PROXY_PORT` | Squid proxy port | `3128` |
+
+**Note:** These are set automatically based on CLI options and should not be overridden manually.
+
 ## Troubleshooting
 
 **Variable not accessible:** Use `sudo -E` or pass explicitly with `--env VAR="$VAR"`

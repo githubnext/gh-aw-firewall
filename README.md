@@ -116,7 +116,20 @@ sudo awf \
 ### What This Protects Against
 - Unauthorized egress to non-whitelisted domains
 - Data exfiltration via HTTP/HTTPS
+- DNS-based data exfiltration to unauthorized DNS servers
 - MCP servers accessing unexpected endpoints
+
+### DNS Server Restriction
+
+DNS traffic is restricted to trusted servers only (default: Google DNS 8.8.8.8, 8.8.4.4). This prevents DNS-based data exfiltration attacks where an attacker encodes data in DNS queries to a malicious DNS server.
+
+```bash
+# Use custom DNS servers
+sudo awf \
+  --allow-domains github.com \
+  --dns-servers 1.1.1.1,1.0.0.1 \
+  -- curl https://api.github.com
+```
 
 ## Development & Testing
 

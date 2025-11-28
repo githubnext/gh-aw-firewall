@@ -32,6 +32,7 @@ awf [options] -- <command>
 | `--env-all` | flag | `false` | Pass all host environment variables |
 | `-v, --mount <host:container[:mode]>` | string | `[]` | Volume mount (repeatable) |
 | `--container-workdir <dir>` | string | User home | Working directory inside container |
+| `--dns-servers <servers>` | string | `8.8.8.8,8.8.4.4` | Trusted DNS servers (comma-separated) |
 | `-V, --version` | flag | — | Display version |
 | `-h, --help` | flag | — | Display help |
 
@@ -129,6 +130,22 @@ Mount host directories into container. Format: `host_path:container_path[:ro|rw]
 ### `--container-workdir <dir>`
 
 Working directory inside the container.
+
+### `--dns-servers <servers>`
+
+Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to these servers, preventing DNS-based data exfiltration. Both IPv4 and IPv6 addresses are supported.
+
+```bash
+# Use Cloudflare DNS
+--dns-servers 1.1.1.1,1.0.0.1
+
+# Use Google DNS with IPv6
+--dns-servers 8.8.8.8,2001:4860:4860::8888
+```
+
+:::note
+Docker's embedded DNS (127.0.0.11) is always allowed for container name resolution, regardless of this setting.
+:::
 
 ## Exit Codes
 
