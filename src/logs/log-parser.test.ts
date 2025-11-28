@@ -1,0 +1,153 @@
+/**
+ * Unit tests for log-parser.ts
+ */
+
+import { parseLogLine, extractDomain, extractPort } from './log-parser';
+
+describe('log-parser', () => {
+  describe('parseLogLine', () => {
+    it('should parse a valid CONNECT (HTTPS) log line', () => {
+      const line =
+        '1761074374.646 172.30.0.20:39748 api.github.com:443 140.82.114.22:443 1.1 CONNECT 200 TCP_TUNNEL:HIER_DIRECT api.github.com:443 "-"';
+      const result = parseLogLine(line);
+
+      expect(result).not.toBeNull();
+      expect(result!.timestamp).toBe(1761074374.646);
+      expect(result!.clientIp).toBe('172.30.0.20');
+      expect(result!.clientPort).toBe('39748');
+      expect(result!.host).toBe('api.github.com:443');
+      expect(result!.destIp).toBe('140.82.114.22');
+      expect(result!.destPort).toBe('443');
+      expect(result!.protocol).toBe('1.1');
+      expect(result!.method).toBe('CONNECT');
+      expect(result!.statusCode).toBe(200);
+      expect(result!.decision).toBe('TCP_TUNNEL:HIER_DIRECT');
+      expect(result!.url).toBe('api.github.com:443');
+      expect(result!.userAgent).toBe('-');
+      expect(result!.domain).toBe('api.github.com');
+      expect(result!.isAllowed).toBe(true);
+      expect(result!.isHttps).toBe(true);
+    });
+
+    it('should parse a denied CONNECT (HTTPS) log line', () => {
+      const line =
+        '1760994429.358 172.30.0.20:36274 github.com:8443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE github.com:8443 "curl/7.81.0"';
+      const result = parseLogLine(line);
+
+      expect(result).not.toBeNull();
+      expect(result!.timestamp).toBe(1760994429.358);
+      expect(result!.clientIp).toBe('172.30.0.20');
+      expect(result!.clientPort).toBe('36274');
+      expect(result!.host).toBe('github.com:8443');
+      expect(result!.destIp).toBe('-');
+      expect(result!.destPort).toBe('-');
+      expect(result!.protocol).toBe('1.1');
+      expect(result!.method).toBe('CONNECT');
+      expect(result!.statusCode).toBe(403);
+      expect(result!.decision).toBe('TCP_DENIED:HIER_NONE');
+      expect(result!.url).toBe('github.com:8443');
+      expect(result!.userAgent).toBe('curl/7.81.0');
+      expect(result!.domain).toBe('github.com');
+      expect(result!.isAllowed).toBe(false);
+      expect(result!.isHttps).toBe(true);
+    });
+
+    it('should parse a TCP_MISS log line as allowed', () => {
+      const line =
+        '1760994429.358 172.30.0.20:36274 example.com:80 93.184.216.34:80 1.1 GET 200 TCP_MISS:HIER_DIRECT http://example.com/ "Mozilla/5.0"';
+      const result = parseLogLine(line);
+
+      expect(result).not.toBeNull();
+      expect(result!.isAllowed).toBe(true);
+      expect(result!.isHttps).toBe(false);
+      expect(result!.method).toBe('GET');
+    });
+
+    it('should return null for empty line', () => {
+      expect(parseLogLine('')).toBeNull();
+      expect(parseLogLine('   ')).toBeNull();
+      expect(parseLogLine('\n')).toBeNull();
+    });
+
+    it('should return null for invalid log line', () => {
+      expect(parseLogLine('not a valid log line')).toBeNull();
+      expect(parseLogLine('1234567890 incomplete line')).toBeNull();
+    });
+
+    it('should handle whitespace in log line', () => {
+      const line =
+        '  1761074374.646 172.30.0.20:39748 api.github.com:443 140.82.114.22:443 1.1 CONNECT 200 TCP_TUNNEL:HIER_DIRECT api.github.com:443 "-"  ';
+      const result = parseLogLine(line);
+
+      expect(result).not.toBeNull();
+      expect(result!.domain).toBe('api.github.com');
+    });
+
+    it('should correctly identify HTTPS requests via CONNECT method', () => {
+      const httpsLine =
+        '1761074374.646 172.30.0.20:39748 api.github.com:443 140.82.114.22:443 1.1 CONNECT 200 TCP_TUNNEL:HIER_DIRECT api.github.com:443 "-"';
+      const httpLine =
+        '1761074374.646 172.30.0.20:39748 example.com:80 93.184.216.34:80 1.1 GET 200 TCP_MISS:HIER_DIRECT http://example.com/ "-"';
+
+      const httpsResult = parseLogLine(httpsLine);
+      const httpResult = parseLogLine(httpLine);
+
+      expect(httpsResult!.isHttps).toBe(true);
+      expect(httpResult!.isHttps).toBe(false);
+    });
+  });
+
+  describe('extractDomain', () => {
+    it('should extract domain from CONNECT URL with port', () => {
+      expect(extractDomain('api.github.com:443', 'host', 'CONNECT')).toBe('api.github.com');
+      expect(extractDomain('example.com:8443', 'host', 'CONNECT')).toBe('example.com');
+    });
+
+    it('should return URL as-is for CONNECT without port', () => {
+      expect(extractDomain('api.github.com', 'host', 'CONNECT')).toBe('api.github.com');
+    });
+
+    it('should extract domain from host header for non-CONNECT', () => {
+      expect(extractDomain('http://example.com/', 'example.com:80', 'GET')).toBe('example.com');
+      expect(extractDomain('http://test.com/path', 'test.com', 'GET')).toBe('test.com');
+    });
+
+    it('should handle host header without port for non-CONNECT', () => {
+      expect(extractDomain('http://example.com/', 'example.com', 'GET')).toBe('example.com');
+    });
+
+    it('should fallback to URL parsing when host is empty or dash', () => {
+      expect(extractDomain('http://example.com/', '-', 'GET')).toBe('example.com');
+      expect(extractDomain('http://example.com/path', '', 'GET')).toBe('example.com');
+    });
+
+    it('should handle URL without protocol in fallback', () => {
+      expect(extractDomain('example.com/path', '-', 'GET')).toBe('example.com');
+    });
+
+    it('should return original URL if parsing fails', () => {
+      // Invalid URL that can't be parsed
+      expect(extractDomain(':::invalid', '-', 'GET')).toBe(':::invalid');
+    });
+  });
+
+  describe('extractPort', () => {
+    it('should extract port from CONNECT URL', () => {
+      expect(extractPort('api.github.com:443', 'CONNECT')).toBe('443');
+      expect(extractPort('example.com:8080', 'CONNECT')).toBe('8080');
+    });
+
+    it('should return undefined for CONNECT URL without port', () => {
+      expect(extractPort('api.github.com', 'CONNECT')).toBeUndefined();
+    });
+
+    it('should return undefined for non-CONNECT methods', () => {
+      expect(extractPort('http://example.com:80/', 'GET')).toBeUndefined();
+      expect(extractPort('http://example.com/', 'POST')).toBeUndefined();
+    });
+
+    it('should not extract non-numeric port', () => {
+      expect(extractPort('api.github.com:abc', 'CONNECT')).toBeUndefined();
+    });
+  });
+});
