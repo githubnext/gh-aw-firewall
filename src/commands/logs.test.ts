@@ -6,6 +6,7 @@ import { logsCommand } from './logs';
 import * as logDiscovery from '../logs/log-discovery';
 import * as logStreamer from '../logs/log-streamer';
 import { LogSource } from '../types';
+import { logger } from '../logger';
 
 // Mock the log modules
 jest.mock('../logs/log-discovery');
@@ -21,6 +22,7 @@ jest.mock('../logger', () => ({
 
 const mockedDiscovery = logDiscovery as jest.Mocked<typeof logDiscovery>;
 const mockedStreamer = logStreamer as jest.Mocked<typeof logStreamer>;
+const mockedLogger = logger as jest.Mocked<typeof logger>;
 
 describe('logsCommand', () => {
   let consoleLogSpy: jest.SpyInstance;
@@ -204,12 +206,9 @@ describe('logsCommand', () => {
       mockedDiscovery.discoverLogSources.mockResolvedValue([source]);
       mockedDiscovery.selectMostRecent.mockReturnValue(source);
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { logger } = require('../logger');
-
       await logsCommand({ format: 'pretty' });
 
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(mockedLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('awf-squid')
       );
     });
@@ -223,13 +222,10 @@ describe('logsCommand', () => {
       mockedDiscovery.discoverLogSources.mockResolvedValue([source]);
       mockedDiscovery.selectMostRecent.mockReturnValue(source);
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { logger } = require('../logger');
-
       await logsCommand({ format: 'pretty' });
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/tmp/logs'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('2023-01-01'));
+      expect(mockedLogger.info).toHaveBeenCalledWith(expect.stringContaining('/tmp/logs'));
+      expect(mockedLogger.info).toHaveBeenCalledWith(expect.stringContaining('2023-01-01'));
     });
 
     it('should skip date log when dateStr is not present', async () => {
@@ -240,15 +236,12 @@ describe('logsCommand', () => {
       mockedDiscovery.discoverLogSources.mockResolvedValue([source]);
       mockedDiscovery.selectMostRecent.mockReturnValue(source);
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { logger } = require('../logger');
-
       await logsCommand({ format: 'pretty' });
 
       // Should log path but not timestamp
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/tmp/logs'));
+      expect(mockedLogger.info).toHaveBeenCalledWith(expect.stringContaining('/tmp/logs'));
       // Check that we don't call with "Log timestamp" when dateStr is undefined
-      const timestampCalls = logger.info.mock.calls.filter((call: unknown[]) =>
+      const timestampCalls = (mockedLogger.info as jest.Mock).mock.calls.filter((call: unknown[]) =>
         (call[0] as string).includes('Log timestamp')
       );
       expect(timestampCalls).toHaveLength(0);
