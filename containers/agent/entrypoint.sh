@@ -41,6 +41,12 @@ if [ -S /var/run/docker.sock ]; then
   echo "[entrypoint] Docker socket configured (GID: $DOCKER_GID)"
 fi
 
+# Configure git to trust mounted directories
+# Required for Copilot CLI to detect git repository root for instruction discovery
+# Without this, git refuses to recognize mounted directories due to ownership mismatch
+echo "[entrypoint] Configuring git safe directories..."
+git config --global --add safe.directory '*'
+
 # Setup iptables rules
 /usr/local/bin/setup-iptables.sh
 
