@@ -376,10 +376,11 @@ program
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
 
-    // Log warning if no domains specified
+    // Warn if no domains specified (security risk)
     if (allowedDomains.length === 0) {
-      logger.warn('⚠️  No domains specified - all domains will be allowed');
-      logger.warn('   This provides no network filtering. Use --allow-domains or --allow-domains-file to restrict access');
+      logger.warn('⚠️  WARNING: No domains specified - all outbound traffic will be allowed');
+      logger.warn('   This disables network filtering and may pose security risks');
+      logger.warn('   Use --allow-domains or --allow-domains-file to restrict network access');
     }
 
     // Parse additional environment variables from --env flags

@@ -32,7 +32,7 @@ export function generateSquidConfig(config: SquidConfig): string {
           return `acl allowed_domains dstdomain ${domainPattern}`;
         })
         .join('\n')
-    : '# No domain restrictions - all domains allowed';
+    : '# WARNING: No domain restrictions configured - all outbound traffic allowed';
 
   // Construct access rules - conditionally include domain filtering
   const domainFilterRule = uniqueDomains.length > 0
@@ -42,7 +42,7 @@ export function generateSquidConfig(config: SquidConfig): string {
 http_access deny !allowed_domains
 `
     : `
-# No domain filtering - all domains allowed
+# WARNING: No domain filtering configured - all outbound connections allowed
 `;
 
   return `# Squid configuration for egress traffic control

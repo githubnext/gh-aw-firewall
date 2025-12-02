@@ -15,8 +15,8 @@ describe('generateSquidConfig', () => {
       // Should not contain any domain ACL definitions
       expect(result).not.toContain('acl allowed_domains dstdomain');
       
-      // Should contain comment indicating all domains are allowed
-      expect(result).toContain('# No domain restrictions - all domains allowed');
+      // Should contain warning indicating all domains are allowed
+      expect(result).toContain('# WARNING: No domain restrictions configured - all outbound traffic allowed');
       
       // Should NOT contain the domain filtering rule
       expect(result).not.toContain('http_access deny !allowed_domains');
@@ -27,15 +27,15 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('http_access allow localhost');
     });
 
-    it('should include comment about no domain filtering when empty', () => {
+    it('should include warning about no domain filtering when empty', () => {
       const config: SquidConfig = {
         domains: [],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
       
-      // Should have a comment indicating no domain filtering
-      expect(result).toContain('# No domain filtering - all domains allowed');
+      // Should have a warning indicating no domain filtering
+      expect(result).toContain('# WARNING: No domain filtering configured - all outbound connections allowed');
     });
   });
 
