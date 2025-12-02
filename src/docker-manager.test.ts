@@ -121,10 +121,9 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      expect(volumes).toContain('/:/host:rw');
-      expect(volumes).toContain('/tmp:/tmp:rw');
+      // Only Docker socket is mounted by default
       expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
-      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+      expect(volumes).toHaveLength(1);
     });
 
     it('should use custom volume mounts when specified', () => {
@@ -136,26 +135,23 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should NOT include blanket /:/host:rw mount
-      expect(volumes).not.toContain('/:/host:rw');
-
       // Should include custom mounts
       expect(volumes).toContain('/workspace:/workspace:ro');
       expect(volumes).toContain('/data:/data:rw');
 
-      // Should still include essential mounts
-      expect(volumes).toContain('/tmp:/tmp:rw');
+      // Should still include Docker socket
       expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
-      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+      expect(volumes).toHaveLength(3);
     });
 
-    it('should use blanket mount when no custom mounts specified', () => {
+    it('should only mount docker socket when no custom mounts specified', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should include blanket /:/host:rw mount
-      expect(volumes).toContain('/:/host:rw');
+      // Should only include Docker socket mount
+      expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
+      expect(volumes).toHaveLength(1);
     });
 
     it('should set agent to depend on healthy squid', () => {
