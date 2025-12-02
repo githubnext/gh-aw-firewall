@@ -373,14 +373,14 @@ program
       }
     }
 
-    // Ensure at least one domain is specified
-    if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
-      process.exit(1);
-    }
-
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
+
+    // Log warning if no domains specified
+    if (allowedDomains.length === 0) {
+      logger.warn('⚠️  No domains specified - all domains will be allowed');
+      logger.warn('   This provides no network filtering. Use --allow-domains or --allow-domains-file to restrict access');
+    }
 
     // Parse additional environment variables from --env flags
     let additionalEnv: Record<string, string> = {};
@@ -434,7 +434,11 @@ program
       agentCommand: redactSecrets(config.agentCommand),
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
-    logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
+    if (allowedDomains.length > 0) {
+      logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
+    } else {
+      logger.info('Allowed domains: (all domains allowed)');
+    }
 
     let exitCode = 0;
     let containersStarted = false;
