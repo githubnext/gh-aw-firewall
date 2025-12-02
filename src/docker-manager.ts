@@ -210,30 +210,16 @@ export function generateDockerCompose(
 
   // Build volumes list for agent execution container
   const agentVolumes: string[] = [
-    // Essential mounts that are always included
-    '/tmp:/tmp:rw',
-    `${process.env.HOME}:${process.env.HOME}:rw`,
-    // Mount Docker socket for MCP servers that need to run containers
+    // Only essential mount - Docker socket for MCP servers
     '/var/run/docker.sock:/var/run/docker.sock:rw',
-    // Mount clean Docker config to override host's context
-    `${config.workDir}/.docker:/workspace/.docker:rw`,
-    // Override host's .docker directory with clean config to prevent Docker CLI
-    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
-    // Mount agent logs directory to workDir for persistence
-    `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
 
-  // Add custom volume mounts if specified
+  // Add user-specified custom mounts
   if (config.volumeMounts && config.volumeMounts.length > 0) {
     logger.debug(`Adding ${config.volumeMounts.length} custom volume mount(s)`);
     config.volumeMounts.forEach(mount => {
       agentVolumes.push(mount);
     });
-  } else {
-    // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
-    logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
-    agentVolumes.unshift('/:/host:rw');
   }
 
   // Agent service configuration
