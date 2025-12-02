@@ -21,6 +21,7 @@ import {
 } from './host-iptables';
 import { runMainWorkflow } from './cli-workflow';
 import { redactSecrets } from './redact-secrets';
+import { validateDomainOrPattern } from './domain-patterns';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
@@ -297,7 +298,10 @@ program
   .version('0.1.0')
   .option(
     '--allow-domains <domains>',
-    'Comma-separated list of allowed domains (e.g., github.com,api.github.com)'
+    'Comma-separated list of allowed domains. Supports wildcards:\n' +
+    '                                   github.com        - exact domain + subdomains\n' +
+    '                                   *.github.com      - any subdomain of github.com\n' +
+    '                                   api-*.example.com - api-* subdomains'
   )
   .option(
     '--allow-domains-file <path>',
@@ -436,6 +440,16 @@ program
 
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
+
+    // Validate all domains and patterns
+    for (const domain of allowedDomains) {
+      try {
+        validateDomainOrPattern(domain);
+      } catch (error) {
+        logger.error(`Invalid domain or pattern: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
 
     // Parse additional environment variables from --env flags
     let additionalEnv: Record<string, string> = {};
