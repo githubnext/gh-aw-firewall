@@ -16,7 +16,7 @@ describe('generateSquidConfig', () => {
       expect(result).not.toContain('acl allowed_domains dstdomain');
       
       // Should contain warning indicating all domains are allowed
-      expect(result).toContain('# WARNING: No domain restrictions configured - all outbound traffic allowed');
+      expect(result).toContain('# WARNING: No domain restrictions configured - all outbound traffic is allowed');
       
       // Should NOT contain the domain filtering rule
       expect(result).not.toContain('http_access deny !allowed_domains');
@@ -35,7 +35,7 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       
       // Should have a warning indicating no domain filtering
-      expect(result).toContain('# WARNING: No domain filtering configured - all outbound connections allowed');
+      expect(result).toContain('# WARNING: No domain filtering configured - all outbound connections are allowed');
     });
   });
 
