@@ -1,9 +1,9 @@
 FROM ubuntu:22.04
 
 # Install required packages and Node.js 22
-# Runtime dependencies: iptables, ca-certificates, git, curl, nodejs, docker-ce-cli
+# This layer installs: iptables, ca-certificates, git, curl, gnupg, nodejs
+# Docker CLI is installed later after adding Docker repository
 # Removed unused packages: dnsutils, net-tools, netcat-openbsd
-# Note: curl and gnupg kept for stability (used during image build and minimal size impact)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     iptables \
