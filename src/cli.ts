@@ -517,7 +517,7 @@ program
     if (allowedDomains.length > 0) {
       logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
     } else {
-      logger.info('Allowed domains: (all domains allowed)');
+      logger.info('Allowed domains: (none specified - all traffic allowed)');
     }
     logger.debug(`DNS servers: ${dnsServers.join(', ')}`);
 
