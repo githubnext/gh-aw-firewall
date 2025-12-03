@@ -23,6 +23,7 @@ import { runMainWorkflow } from './cli-workflow';
 import { redactSecrets } from './redact-secrets';
 import { validateDomainOrPattern } from './domain-patterns';
 import { OutputFormat } from './types';
+import { version } from '../package.json';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
@@ -296,7 +297,7 @@ const program = new Command();
 program
   .name('awf')
   .description('Network firewall for agentic workflows with domain whitelisting')
-  .version('0.1.0')
+  .version(version)
   .option(
     '--allow-domains <domains>',
     'Comma-separated list of allowed domains. Supports wildcards:\n' +
