@@ -76,13 +76,15 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
 
-      - name: Generate and attest SBOM for Squid image
+      - name: Generate SBOM for Squid image
+        uses: anchore/sbom-action@v0.17.10
+        with:
+          image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+          format: spdx-json
+          output-file: squid-sbom.spdx.json
+
+      - name: Attest SBOM for Squid image
         run: |
-          # Generate SBOM using syft
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }} -o spdx-json > squid-sbom.spdx.json
-          
-          # Attest SBOM with cosign
           cosign attest --yes \
             --predicate squid-sbom.spdx.json \
             --type spdxjson \
@@ -105,12 +107,15 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
-      - name: Generate and attest SBOM for Agent image
+      - name: Generate SBOM for Agent image
+        uses: anchore/sbom-action@v0.17.10
+        with:
+          image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+          format: spdx-json
+          output-file: agent-sbom.spdx.json
+
+      - name: Attest SBOM for Agent image
         run: |
-          # Generate SBOM using syft
-          syft ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }} -o spdx-json > agent-sbom.spdx.json
-          
-          # Attest SBOM with cosign
           cosign attest --yes \
             --predicate agent-sbom.spdx.json \
             --type spdxjson \
