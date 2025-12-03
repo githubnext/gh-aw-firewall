@@ -156,6 +156,59 @@ Docker's embedded DNS (127.0.0.11) is always allowed for container name resoluti
 | `130` | Interrupted by SIGINT (Ctrl+C) |
 | `143` | Terminated by SIGTERM |
 
+## Subcommands
+
+### `awf logs`
+
+View Squid proxy logs from current or previous runs.
+
+```bash
+awf logs [options]
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `-f, --follow` | flag | `false` | Follow log output in real-time |
+| `--format <format>` | string | `pretty` | Output format: `raw`, `pretty`, `json` |
+| `--source <path>` | string | auto | Path to log directory or `running` for live container |
+| `--list` | flag | `false` | List available log sources |
+
+#### Output Formats
+
+| Format | Description |
+|--------|-------------|
+| `pretty` | Colorized, human-readable output (default) |
+| `raw` | Logs as-is without parsing |
+| `json` | Structured JSON for scripting |
+
+#### Examples
+
+```bash
+# View recent logs with pretty formatting
+awf logs
+
+# Follow logs in real-time
+awf logs -f
+
+# View logs in JSON format
+awf logs --format json
+
+# List available log sources
+awf logs --list
+
+# Use a specific log directory
+awf logs --source /tmp/squid-logs-1234567890
+
+# Stream from running container
+awf logs --source running -f
+```
+
+:::note
+Log sources are auto-discovered in this order: running containers, `AWF_LOGS_DIR` environment variable, then preserved log directories in `/tmp/squid-logs-*`.
+:::
+
 ## See Also
 
 - [Quick Start Guide](/gh-aw-firewall/quickstart) - Getting started with examples

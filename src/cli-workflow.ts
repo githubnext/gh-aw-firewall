@@ -4,10 +4,11 @@ export interface WorkflowDependencies {
   ensureFirewallNetwork: () => Promise<{ squidIp: string }>;
   setupHostIptables: (squidIp: string, port: number, dnsServers: string[]) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
-  startContainers: (workDir: string, allowedDomains: string[]) => Promise<void>;
+  startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string) => Promise<void>;
   runAgentCommand: (
     workDir: string,
-    allowedDomains: string[]
+    allowedDomains: string[],
+    proxyLogsDir?: string
   ) => Promise<{ exitCode: number }>;
 }
 
@@ -50,11 +51,11 @@ export async function runMainWorkflow(
   await dependencies.writeConfigs(config);
 
   // Step 2: Start containers
-  await dependencies.startContainers(config.workDir, config.allowedDomains);
+  await dependencies.startContainers(config.workDir, config.allowedDomains, config.proxyLogsDir);
   onContainersStarted?.();
 
   // Step 3: Wait for agent to complete
-  const result = await dependencies.runAgentCommand(config.workDir, config.allowedDomains);
+  const result = await dependencies.runAgentCommand(config.workDir, config.allowedDomains, config.proxyLogsDir);
 
   // Step 4: Cleanup (logs will be preserved automatically if they exist)
   await performCleanup();

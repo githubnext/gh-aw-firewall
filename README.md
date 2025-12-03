@@ -52,6 +52,24 @@ sudo awf \
 
 **Note:** Always use the `--` separator to pass commands and arguments. This ensures proper argument handling and avoids shell escaping issues.
 
+### Log Viewing
+
+View Squid proxy logs from current or previous runs:
+
+```bash
+# View recent logs with pretty formatting
+awf logs
+
+# Follow logs in real-time
+awf logs -f
+
+# View logs in JSON format for scripting
+awf logs --format json
+
+# List all available log sources
+awf logs --list
+```
+
 ## Domain Whitelisting
 
 Domains automatically match all subdomains:
