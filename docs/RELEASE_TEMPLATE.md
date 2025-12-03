@@ -83,3 +83,28 @@ Published to GitHub Container Registry:
 - `ghcr.io/{{REPOSITORY}}/agent:{{VERSION_NUMBER}}`
 - `ghcr.io/{{REPOSITORY}}/squid:latest`
 - `ghcr.io/{{REPOSITORY}}/agent:latest`
+
+### Image Verification
+
+All container images are signed with [cosign](https://github.com/sigstore/cosign) for authenticity and integrity verification:
+
+```bash
+# Install cosign
+curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
+chmod +x cosign && sudo mv cosign /usr/local/bin/
+
+# Verify image signature (example for squid image)
+cosign verify \
+  --certificate-identity-regexp 'https://github.com/{{REPOSITORY}}/.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}
+
+# Verify SBOM attestation
+cosign verify-attestation \
+  --certificate-identity-regexp 'https://github.com/{{REPOSITORY}}/.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  --type spdxjson \
+  ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}
+```
+
+Images are signed using keyless signing with GitHub Actions OIDC tokens, ensuring they come from the official repository.
