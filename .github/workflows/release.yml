@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write   # Required for creating releases
   packages: write   # Required for pushing to GHCR
+  id-token: write   # Required for cosign keyless signing
 
 jobs:
   build-and-release:
@@ -55,7 +56,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
       - name: Build and push Squid image
+        id: build_squid
         uses: docker/build-push-action@v5
         with:
           context: ./containers/squid
@@ -66,7 +71,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Sign Squid image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
+      - name: Generate and attest SBOM for Squid image
+        run: |
+          # Generate SBOM using syft
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }} -o spdx-json > squid-sbom.spdx.json
+          
+          # Attest SBOM with cosign
+          cosign attest --yes \
+            --predicate squid-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
       - name: Build and push Agent image
+        id: build_agent
         uses: docker/build-push-action@v5
         with:
           context: ./containers/agent
@@ -76,6 +99,22 @@ jobs:
             ghcr.io/${{ github.repository }}/agent:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sign Agent image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+
+      - name: Generate and attest SBOM for Agent image
+        run: |
+          # Generate SBOM using syft
+          syft ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }} -o spdx-json > agent-sbom.spdx.json
+          
+          # Attest SBOM with cosign
+          cosign attest --yes \
+            --predicate agent-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
       - name: Install pkg for binary creation
         run: npm install -g pkg
