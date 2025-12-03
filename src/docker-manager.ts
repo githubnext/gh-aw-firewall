@@ -10,6 +10,28 @@ import { generateSquidConfig } from './squid-config';
 const SQUID_PORT = 3128;
 
 /**
+ * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
+ * When running with sudo, process.getuid() returns 0 (root), but we want the
+ * container user to be non-root for security. Default to 1000 in this case.
+ */
+function getSafeHostUid(): string {
+  const uid = process.getuid?.();
+  // Use 1000 if undefined or 0 (root)
+  return (uid && uid !== 0) ? uid.toString() : '1000';
+}
+
+/**
+ * Gets the host user's GID, with fallback to 1000 if unavailable or root (0).
+ * When running with sudo, process.getgid() returns 0 (root), but we want the
+ * container user to be non-root for security. Default to 1000 in this case.
+ */
+function getSafeHostGid(): string {
+  const gid = process.getgid?.();
+  // Use 1000 if undefined or 0 (root)
+  return (gid && gid !== 0) ? gid.toString() : '1000';
+}
+
+/**
  * Gets existing Docker network subnets to avoid conflicts
  */
 async function getExistingDockerSubnets(): Promise<string[]> {
@@ -217,8 +239,12 @@ export function generateDockerCompose(
 
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
-  environment.AWF_USER_UID = process.getuid ? process.getuid().toString() : '1000';
-  environment.AWF_USER_GID = process.getgid ? process.getgid().toString() : '1000';
+  environment.AWF_USER_UID = getSafeHostUid();
+  environment.AWF_USER_GID = getSafeHostGid();
+  logger.debug(`Using container user UID:GID = ${environment.AWF_USER_UID}:${environment.AWF_USER_GID}`);
+  if (process.getuid?.() === 0) {
+    logger.debug('Running as root (sudo detected), using default UID:GID 1000:1000 for container user');
+  }
 
   // Build volumes list for agent execution container
   const agentVolumes: string[] = [
@@ -288,8 +314,8 @@ export function generateDockerCompose(
       args: {
         // Pass host UID/GID to match file ownership in container
         // This prevents permission issues with mounted volumes
-        USER_UID: process.getuid ? process.getuid().toString() : '1000',
-        USER_GID: process.getgid ? process.getgid().toString() : '1000',
+        USER_UID: getSafeHostUid(),
+        USER_GID: getSafeHostGid(),
       },
     };
   }
