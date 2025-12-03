@@ -36,7 +36,14 @@ sudo awf --help
 All published Docker images are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing. You can verify the signatures to ensure image authenticity and integrity:
 
 ```bash
-# Install cosign
+# Install cosign (using package manager is recommended for security)
+# Option 1: Using apt (Debian/Ubuntu)
+# Add Sigstore repository and install
+# curl -fsSL https://sigstore.dev/pubkey.asc | sudo apt-key add -
+# echo "deb [arch=amd64] https://dl.sigstore.dev/apt stable main" | sudo tee /etc/apt/sources.list.d/sigstore.list
+# sudo apt update && sudo apt install -y cosign
+
+# Option 2: Direct download (verify checksums from release page)
 curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
 chmod +x cosign
 sudo mv cosign /usr/local/bin/

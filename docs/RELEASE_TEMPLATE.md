@@ -89,7 +89,10 @@ Published to GitHub Container Registry:
 All container images are signed with [cosign](https://github.com/sigstore/cosign) for authenticity and integrity verification:
 
 ```bash
-# Install cosign
+# Install cosign (using package manager is recommended)
+# See https://docs.sigstore.dev/cosign/installation/ for installation options
+
+# Quick install (verify checksums from release page for production use)
 curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
 chmod +x cosign && sudo mv cosign /usr/local/bin/
 
