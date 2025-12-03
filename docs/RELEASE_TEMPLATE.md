@@ -86,32 +86,14 @@ Published to GitHub Container Registry:
 
 ### Image Verification
 
-All container images are signed with [cosign](https://github.com/sigstore/cosign) for authenticity and integrity verification:
+All container images are cryptographically signed with [cosign](https://github.com/sigstore/cosign) for authenticity verification.
 
 ```bash
-# Install cosign (recommended: use package manager)
-# See https://docs.sigstore.dev/cosign/installation/
-
-# Homebrew: brew install cosign
-# Debian/Ubuntu: sudo apt install cosign
-# For other options, see the official documentation
-
-# Direct download (⚠️ Verify checksums from GitHub release page for production use)
-curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
-chmod +x cosign && sudo mv cosign /usr/local/bin/
-
-# Verify image signature (example for squid image)
+# Verify image signature
 cosign verify \
   --certificate-identity-regexp 'https://github.com/{{REPOSITORY}}/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}
-
-# Verify SBOM attestation
-cosign verify-attestation \
-  --certificate-identity-regexp 'https://github.com/{{REPOSITORY}}/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --type spdxjson \
-  ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}
 ```
 
-Images are signed using keyless signing with GitHub Actions OIDC tokens, ensuring they come from the official repository.
+For detailed instructions including SBOM verification, see [docs/image-verification.md](https://github.com/{{REPOSITORY}}/blob/{{VERSION}}/docs/image-verification.md).

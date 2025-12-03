@@ -31,46 +31,7 @@ sudo awf --help
 
 **Note:** Verify checksums after download by downloading `checksums.txt` from the release page.
 
-### Docker Image Verification
-
-All published Docker images are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing. You can verify the signatures to ensure image authenticity and integrity:
-
-```bash
-# Install cosign (recommended: use package manager)
-# See https://docs.sigstore.dev/cosign/installation/ for all installation options
-
-# Homebrew (macOS/Linux)
-# brew install cosign
-
-# Debian/Ubuntu (via official package repository)
-# sudo apt update && sudo apt install -y cosign
-
-# Quick install for testing (verify checksums from GitHub release page for production)
-curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
-chmod +x cosign
-sudo mv cosign /usr/local/bin/
-
-# Verify Squid image signature
-cosign verify \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  ghcr.io/githubnext/gh-aw-firewall/squid:latest
-
-# Verify Agent image signature
-cosign verify \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  ghcr.io/githubnext/gh-aw-firewall/agent:latest
-
-# Verify SBOM attestation
-cosign verify-attestation \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --type spdxjson \
-  ghcr.io/githubnext/gh-aw-firewall/squid:latest
-```
-
-The images are signed during the release process using GitHub Actions OIDC tokens, ensuring they come from the official repository.
+**Docker Image Verification:** All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
 
 ### Basic Usage
 
