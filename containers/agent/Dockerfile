@@ -10,7 +10,8 @@ RUN apt-get update && \
     gnupg \
     dnsutils \
     net-tools \
-    netcat-openbsd && \
+    netcat-openbsd \
+    gosu && \
     # Install Node.js 22 from NodeSource
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
@@ -22,6 +23,17 @@ RUN apt-get update && \
     apt-get update && \
     apt-get install -y docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
+
+# Create non-root user with UID/GID matching host user
+# This allows the user command to run with appropriate permissions
+# and prevents file ownership issues with mounted volumes
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd -g ${USER_GID} awfuser && \
+    useradd -u ${USER_UID} -g ${USER_GID} -m -s /bin/bash awfuser && \
+    # Create directories for awfuser
+    mkdir -p /home/awfuser/.copilot/logs && \
+    chown -R awfuser:awfuser /home/awfuser
 
 # Copy iptables setup script and docker wrapper
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh

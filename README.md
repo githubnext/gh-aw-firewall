@@ -169,6 +169,17 @@ sudo awf \
 - DNS-based data exfiltration to unauthorized DNS servers
 - MCP servers accessing unexpected endpoints
 
+### Agent Container Security (User Mode)
+
+The agent container runs user commands as a **non-root user** (`awfuser`) for enhanced security:
+
+- **Privilege Separation**: Privileged operations (iptables setup, DNS configuration) run as root in the entrypoint, then privileges are dropped before executing user commands
+- **UID/GID Matching**: The `awfuser` UID/GID is automatically adjusted to match the host user's UID/GID, ensuring correct file ownership for mounted volumes
+- **Reduced Attack Surface**: If a user command is compromised, it cannot modify system files or escape the container's security boundaries
+- **Docker Access**: The `awfuser` is added to the docker group, allowing MCP servers to spawn containers while still running as non-root
+
+**Note:** The `awf` CLI itself requires `sudo` for host-level iptables configuration (DOCKER-USER chain), but the agent processes (GitHub Copilot CLI, etc.) run without root privileges inside the container.
+
 ### DNS Server Restriction
 
 DNS traffic is restricted to trusted servers only (default: Google DNS 8.8.8.8, 8.8.4.4). This prevents DNS-based data exfiltration attacks where an attacker encodes data in DNS queries to a malicious DNS server.

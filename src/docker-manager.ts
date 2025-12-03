@@ -215,6 +215,11 @@ export function generateDockerCompose(
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
   environment.AWF_DNS_SERVERS = dnsServers.join(',');
 
+  // Pass host UID/GID for runtime user adjustment in entrypoint
+  // This ensures awfuser UID/GID matches host user for correct file ownership
+  environment.AWF_USER_UID = process.getuid ? process.getuid().toString() : '1000';
+  environment.AWF_USER_GID = process.getgid ? process.getgid().toString() : '1000';
+
   // Build volumes list for agent execution container
   const agentVolumes: string[] = [
     // Essential mounts that are always included
@@ -280,6 +285,12 @@ export function generateDockerCompose(
     agentService.build = {
       context: path.join(projectRoot, 'containers/agent'),
       dockerfile: 'Dockerfile',
+      args: {
+        // Pass host UID/GID to match file ownership in container
+        // This prevents permission issues with mounted volumes
+        USER_UID: process.getuid ? process.getuid().toString() : '1000',
+        USER_GID: process.getgid ? process.getgid().toString() : '1000',
+      },
     };
   }
 

@@ -4,6 +4,24 @@ set -e
 echo "[entrypoint] Agentic Workflow Firewall - Agent Container"
 echo "[entrypoint] =================================="
 
+# Adjust awfuser UID/GID to match host user at runtime
+# This ensures file ownership is correct regardless of whether using GHCR images or local builds
+HOST_UID=${AWF_USER_UID:-$(id -u awfuser)}
+HOST_GID=${AWF_USER_GID:-$(id -g awfuser)}
+CURRENT_UID=$(id -u awfuser)
+CURRENT_GID=$(id -g awfuser)
+
+if [ "$CURRENT_UID" != "$HOST_UID" ] || [ "$CURRENT_GID" != "$HOST_GID" ]; then
+  echo "[entrypoint] Adjusting awfuser UID:GID from $CURRENT_UID:$CURRENT_GID to $HOST_UID:$HOST_GID"
+  # Change GID first (must be done before UID change)
+  groupmod -g "$HOST_GID" awfuser 2>/dev/null || true
+  # Change UID
+  usermod -u "$HOST_UID" awfuser 2>/dev/null || true
+  # Fix ownership of awfuser's home directory
+  chown -R awfuser:awfuser /home/awfuser 2>/dev/null || true
+  echo "[entrypoint] UID/GID adjustment complete"
+fi
+
 # Fix DNS configuration - ensure external DNS works alongside Docker's embedded DNS
 # Docker's embedded DNS (127.0.0.11) is used for service name resolution (e.g., squid-proxy)
 # Trusted external DNS servers are used for internet domain resolution
@@ -70,9 +88,26 @@ echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
 echo "[entrypoint] Network information:"
 echo "[entrypoint]   IP address: $(hostname -I)"
 echo "[entrypoint]   Hostname: $(hostname)"
+
+# Add awfuser to docker group for Docker socket access
+# This must be done after the docker group is created
+if [ -S /var/run/docker.sock ]; then
+  DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+  if getent group docker > /dev/null 2>&1; then
+    usermod -aG docker awfuser 2>/dev/null || true
+    echo "[entrypoint] Added awfuser to docker group (GID: $DOCKER_GID)"
+  fi
+fi
+
+# Configure git safe directories for awfuser
+# Use runuser instead of su to avoid PAM session issues
+runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
+
 echo "[entrypoint] =================================="
+echo "[entrypoint] Dropping privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Execute the provided command
-exec "$@"
+# Drop privileges and execute the provided command as awfuser
+# Using gosu instead of su/sudo for cleaner signal handling
+exec gosu awfuser "$@"
