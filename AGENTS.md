@@ -204,7 +204,8 @@ The codebase follows a modular architecture with clear separation of concerns:
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
 **Agent Execution Container** (`containers/agent/`)
-- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
+- Based on `ubuntu:22.04` with minimal dependencies: iptables, ca-certificates, git, nodejs/npm, docker-cli
+- Note: curl and gnupg also included (build-time dependencies, minimal size impact)
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
 - `NET_ADMIN` capability required for iptables manipulation

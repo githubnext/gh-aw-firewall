@@ -1,16 +1,16 @@
 FROM ubuntu:22.04
 
 # Install required packages and Node.js 22
+# Runtime dependencies: iptables, ca-certificates, git, curl, nodejs, docker-ce-cli
+# Removed unused packages: dnsutils, net-tools, netcat-openbsd
+# Note: curl and gnupg kept for stability (used during image build and minimal size impact)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     iptables \
     curl \
     ca-certificates \
     git \
-    gnupg \
-    dnsutils \
-    net-tools \
-    netcat-openbsd && \
+    gnupg && \
     # Install Node.js 22 from NodeSource
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
