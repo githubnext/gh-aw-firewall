@@ -220,6 +220,31 @@ export interface WrapperConfig {
    * @example '/tmp/my-proxy-logs'
    */
   proxyLogsDir?: string;
+
+  /**
+   * Enable SSL bumping (HTTPS payload interception) for debugging
+   *
+   * When true, Squid proxy will perform man-in-the-middle SSL/TLS
+   * interception to decrypt and inspect HTTPS traffic. This allows
+   * logging of full HTTP headers, URLs, and payloads inside encrypted
+   * TLS connections.
+   *
+   * **SECURITY WARNING:**
+   * - Generates an ephemeral CA certificate that must be trusted
+   * - Performs active man-in-the-middle interception of encrypted traffic
+   * - Breaks certificate pinning for all clients
+   * - May expose sensitive data in logs
+   * - Should ONLY be used for debugging/investigation purposes
+   * - NOT recommended for production use
+   *
+   * The generated CA certificate is ephemeral (created at runtime) and
+   * stored in the work directory. When --keep-containers is not specified,
+   * the certificate is deleted after execution.
+   *
+   * @default false
+   * @example true
+   */
+  sslBump?: boolean;
 }
 
 /**
@@ -260,6 +285,23 @@ export interface SquidConfig {
    * @default 3128
    */
   port: number;
+
+  /**
+   * Enable SSL bumping (HTTPS payload interception)
+   * 
+   * When true, Squid will perform man-in-the-middle SSL/TLS interception
+   * to decrypt and inspect HTTPS traffic. This allows logging of full
+   * HTTP headers, URLs, and payloads inside TLS connections.
+   * 
+   * **WARNING: Security Implications**
+   * - Requires generating and trusting a CA certificate
+   * - Breaks certificate pinning for clients
+   * - May violate privacy expectations
+   * - Should only be used for debugging/investigation
+   * 
+   * @default false
+   */
+  sslBump?: boolean;
 }
 
 /**

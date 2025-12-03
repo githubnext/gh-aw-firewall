@@ -181,6 +181,36 @@ sudo awf \
   -- curl https://api.github.com
 ```
 
+## Advanced Features
+
+### HTTPS Payload Interception (SSL Bumping)
+
+For debugging purposes, awf can intercept and decrypt HTTPS traffic to log full request/response details.
+
+⚠️ **WARNING**: SSL bumping performs man-in-the-middle interception and should **ONLY** be used for debugging.
+
+```bash
+# Enable SSL bumping to see full HTTPS payloads
+sudo awf \
+  --allow-domains github.com \
+  --ssl-bump \
+  -- curl https://api.github.com/zen
+```
+
+**With SSL bumping enabled, you can see:**
+- Complete URLs inside HTTPS requests (not just domain names)
+- HTTP headers (User-Agent, Authorization, etc.)
+- Request/response bodies (requires additional Squid config)
+
+**Security implications:**
+- Generates ephemeral CA certificate
+- Performs active man-in-the-middle interception
+- Breaks certificate pinning
+- May expose sensitive data in logs
+- Should NOT be used in production
+
+See [docs/ssl-bumping-investigation.md](docs/ssl-bumping-investigation.md) for detailed information.
+
 ## Development & Testing
 
 ### Running Tests

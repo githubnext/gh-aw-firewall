@@ -373,6 +373,13 @@ program
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
+  .option(
+    '--ssl-bump',
+    'Enable SSL bumping (HTTPS payload interception) for debugging.\n' +
+    '                                   WARNING: Performs man-in-the-middle interception of HTTPS traffic.\n' +
+    '                                   Generates ephemeral CA certificate. Use only for debugging.',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -505,12 +512,21 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      sslBump: options.sslBump || false,
     };
 
     // Warn if --env-all is used
     if (config.envAll) {
       logger.warn('⚠️  Using --env-all: All host environment variables will be passed to container');
       logger.warn('   This may expose sensitive credentials if logs or configs are shared');
+    }
+
+    // Warn if SSL bumping is enabled
+    if (config.sslBump) {
+      logger.warn('⚠️  SSL BUMPING ENABLED: HTTPS traffic will be intercepted and decrypted');
+      logger.warn('   This performs man-in-the-middle interception of encrypted connections');
+      logger.warn('   An ephemeral CA certificate will be generated for this session');
+      logger.warn('   Use only for debugging/investigation purposes');
     }
 
     // Log config with redacted secrets

@@ -355,10 +355,15 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const squidConfig = generateSquidConfig({
     domains: config.allowedDomains,
     port: SQUID_PORT,
+    sslBump: config.sslBump,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);
   logger.debug(`Squid config written to: ${squidConfigPath}`);
+  
+  if (config.sslBump) {
+    logger.info('SSL bumping enabled - Squid will intercept HTTPS traffic');
+  }
 
   // Write Docker Compose config
   const dockerCompose = generateDockerCompose(config, networkConfig);
