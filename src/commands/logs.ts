@@ -21,8 +21,6 @@ export interface LogsCommandOptions {
   follow?: boolean;
   /** Output format: raw, pretty, json */
   format: OutputFormat;
-  /** Use the most recent log source (default behavior) */
-  latest?: boolean;
   /** Specific path to log directory or "running" for live container */
   source?: string;
   /** List available log sources without streaming */

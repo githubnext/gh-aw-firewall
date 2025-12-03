@@ -370,8 +370,8 @@ program
     '8.8.8.8,8.8.4.4'
   )
   .option(
-    '--logs-dir <path>',
-    'Directory to save logs to (creates squid-logs/ and agent-logs/ subdirs)'
+    '--proxy-logs-dir <path>',
+    'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
@@ -504,7 +504,7 @@ program
       volumeMounts,
       containerWorkDir: options.containerWorkdir,
       dnsServers,
-      logsDir: options.logsDir,
+      proxyLogsDir: options.proxyLogsDir,
     };
 
     // Warn if --env-all is used
@@ -541,7 +541,7 @@ program
       }
 
       if (!config.keepContainers) {
-        await cleanup(config.workDir, false, config.logsDir);
+        await cleanup(config.workDir, false, config.proxyLogsDir);
         // Note: We don't remove the firewall network here since it can be reused
         // across multiple runs. Cleanup script will handle removal if needed.
       } else {

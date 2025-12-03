@@ -37,22 +37,41 @@ export async function discoverLogSources(): Promise<LogSource[]> {
   }
 
   // Check AWF_LOGS_DIR environment variable
+  // Supports two layouts:
+  // 1. Direct: AWF_LOGS_DIR/access.log (when --proxy-logs-dir is used)
+  // 2. Nested: AWF_LOGS_DIR/squid-logs/access.log (legacy format)
   const envLogsDir = process.env.AWF_LOGS_DIR;
   if (envLogsDir) {
-    const squidLogsPath = path.join(envLogsDir, 'squid-logs');
-    const accessLogPath = path.join(squidLogsPath, 'access.log');
-    if (fs.existsSync(accessLogPath)) {
-      // Get file modification time for sorting
-      const stat = fs.statSync(accessLogPath);
+    // First check for direct access.log (from --proxy-logs-dir)
+    const directAccessLogPath = path.join(envLogsDir, 'access.log');
+    // Then check for nested squid-logs/access.log (legacy format)
+    const nestedSquidLogsPath = path.join(envLogsDir, 'squid-logs');
+    const nestedAccessLogPath = path.join(nestedSquidLogsPath, 'access.log');
+
+    if (fs.existsSync(directAccessLogPath)) {
+      // Direct layout: logs are in AWF_LOGS_DIR directly
+      const stat = fs.statSync(directAccessLogPath);
       const timestamp = stat.mtimeMs;
       const date = new Date(timestamp);
       sources.push({
         type: 'preserved',
-        path: squidLogsPath,
+        path: envLogsDir,
         timestamp,
         dateStr: date.toLocaleString(),
       });
-      logger.debug(`Found logs from AWF_LOGS_DIR: ${squidLogsPath}`);
+      logger.debug(`Found logs from AWF_LOGS_DIR (direct): ${envLogsDir}`);
+    } else if (fs.existsSync(nestedAccessLogPath)) {
+      // Nested layout: logs are in AWF_LOGS_DIR/squid-logs/
+      const stat = fs.statSync(nestedAccessLogPath);
+      const timestamp = stat.mtimeMs;
+      const date = new Date(timestamp);
+      sources.push({
+        type: 'preserved',
+        path: nestedSquidLogsPath,
+        timestamp,
+        dateStr: date.toLocaleString(),
+      });
+      logger.debug(`Found logs from AWF_LOGS_DIR (nested): ${nestedSquidLogsPath}`);
     }
   }
 

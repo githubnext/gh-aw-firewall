@@ -138,18 +138,34 @@ describe('log-discovery', () => {
       expect(sources).toEqual([]);
     });
 
-    it('should include logs from AWF_LOGS_DIR env var', async () => {
+    it('should include logs from AWF_LOGS_DIR env var (nested layout)', async () => {
       const logsDir = '/custom/logs/dir';
       const squidLogsPath = path.join(logsDir, 'squid-logs');
       const accessLogPath = path.join(squidLogsPath, 'access.log');
 
       process.env.AWF_LOGS_DIR = logsDir;
+      // Only nested access.log exists (not direct)
       mockedFs.existsSync.mockImplementation((p) => p === accessLogPath);
       mockedFs.statSync.mockReturnValue({ mtimeMs: Date.now() } as fs.Stats);
 
       const sources = await discoverLogSources();
 
       expect(sources.some((s) => s.path === squidLogsPath)).toBe(true);
+    });
+
+    it('should include logs from AWF_LOGS_DIR env var (direct layout from --proxy-logs-dir)', async () => {
+      const logsDir = '/custom/proxy-logs';
+      const directAccessLogPath = path.join(logsDir, 'access.log');
+
+      process.env.AWF_LOGS_DIR = logsDir;
+      // Direct access.log exists in AWF_LOGS_DIR
+      mockedFs.existsSync.mockImplementation((p) => p === directAccessLogPath);
+      mockedFs.statSync.mockReturnValue({ mtimeMs: Date.now() } as fs.Stats);
+
+      const sources = await discoverLogSources();
+
+      // Should use logsDir directly (not squid-logs subdir)
+      expect(sources.some((s) => s.path === logsDir)).toBe(true);
     });
 
     it('should put running container first, then preserved logs sorted by timestamp', async () => {

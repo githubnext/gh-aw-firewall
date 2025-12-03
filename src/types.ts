@@ -203,16 +203,23 @@ export interface WrapperConfig {
   dnsServers?: string[];
 
   /**
-   * Custom directory for preserving logs after execution
+   * Custom directory for Squid proxy logs (written directly during runtime)
    *
-   * When specified, Squid and agent logs are copied to this directory
-   * instead of the default timestamped /tmp locations. The directory
-   * is created if it doesn't exist. Subdirectories squid-logs/ and
-   * agent-logs/ will be created within it.
+   * When specified, Squid proxy logs (access.log, cache.log) are written
+   * directly to this directory during execution via Docker volume mount.
+   * This is timeout-safe: logs are available immediately and survive
+   * unexpected termination (SIGKILL).
    *
-   * @example '/tmp/my-project-logs'
+   * When not specified, logs are written to ${workDir}/squid-logs during
+   * runtime and moved to /tmp/squid-logs-<timestamp> after cleanup.
+   *
+   * Note: This only affects Squid proxy logs. Agent logs (e.g., from
+   * Copilot CLI --log-dir) are handled separately and always preserved
+   * to /tmp/awf-agent-logs-<timestamp>.
+   *
+   * @example '/tmp/my-proxy-logs'
    */
-  logsDir?: string;
+  proxyLogsDir?: string;
 }
 
 /**

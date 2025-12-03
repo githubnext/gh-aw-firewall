@@ -123,6 +123,9 @@ export function generateDockerCompose(
   const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
   const tag = config.imageTag || 'latest';
 
+  // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
+  const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
+
   // Squid service configuration
   const squidService: any = {
     container_name: 'awf-squid',
@@ -133,7 +136,7 @@ export function generateDockerCompose(
     },
     volumes: [
       `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
-      `${config.workDir}/squid-logs:/var/log/squid:rw`,
+      `${squidLogsPath}:/var/log/squid:rw`,
     ],
     healthcheck: {
       test: ['CMD', 'nc', '-z', 'localhost', '3128'],
@@ -330,9 +333,11 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   logger.debug(`Agent logs directory created at: ${agentLogsDir}`);
 
   // Create squid logs directory for persistence
+  // If proxyLogsDir is specified, write directly there (timeout-safe)
+  // Otherwise, use workDir/squid-logs (will be moved to /tmp after cleanup)
   // Note: Squid runs as user 'proxy' (UID 13, GID 13 in ubuntu/squid image)
   // We need to make the directory writable by the proxy user
-  const squidLogsDir = path.join(config.workDir, 'squid-logs');
+  const squidLogsDir = config.proxyLogsDir || path.join(config.workDir, 'squid-logs');
   if (!fs.existsSync(squidLogsDir)) {
     fs.mkdirSync(squidLogsDir, { recursive: true, mode: 0o777 });
   }
@@ -364,11 +369,15 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
 /**
  * Checks Squid logs for access denials to provide better error context
+ * @param workDir - Working directory containing configs
+ * @param proxyLogsDir - Optional custom directory where proxy logs are written
  */
-async function checkSquidLogs(workDir: string): Promise<{ hasDenials: boolean; blockedTargets: BlockedTarget[] }> {
+async function checkSquidLogs(workDir: string, proxyLogsDir?: string): Promise<{ hasDenials: boolean; blockedTargets: BlockedTarget[] }> {
   try {
     // Read from the access.log file (Squid doesn't write access logs to stdout)
-    const accessLogPath = path.join(workDir, 'squid-logs', 'access.log');
+    // If proxyLogsDir is specified, logs are written directly there
+    const squidLogsDir = proxyLogsDir || path.join(workDir, 'squid-logs');
+    const accessLogPath = path.join(squidLogsDir, 'access.log');
     let logContent = '';
 
     if (fs.existsSync(accessLogPath)) {
@@ -428,7 +437,7 @@ async function checkSquidLogs(workDir: string): Promise<{ hasDenials: boolean; b
 /**
  * Starts Docker Compose services
  */
-export async function startContainers(workDir: string, allowedDomains: string[]): Promise<void> {
+export async function startContainers(workDir: string, allowedDomains: string[], proxyLogsDir?: string): Promise<void> {
   logger.info('Starting containers...');
 
   // Force remove any existing containers with these names to avoid conflicts
@@ -454,7 +463,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
     const errorMsg = error instanceof Error ? error.message : String(error);
     if (errorMsg.includes('is unhealthy') || errorMsg.includes('dependency failed')) {
       // Check Squid logs to see if it's actually working and blocking traffic
-      const { hasDenials, blockedTargets } = await checkSquidLogs(workDir);
+      const { hasDenials, blockedTargets } = await checkSquidLogs(workDir, proxyLogsDir);
 
       if (hasDenials) {
         logger.error('Firewall blocked domains during startup:');
@@ -510,7 +519,7 @@ export async function startContainers(workDir: string, allowedDomains: string[])
 /**
  * Runs the agent command in the container and reports any blocked domains
  */
-export async function runAgentCommand(workDir: string, allowedDomains: string[]): Promise<{ exitCode: number; blockedDomains: string[] }> {
+export async function runAgentCommand(workDir: string, allowedDomains: string[], proxyLogsDir?: string): Promise<{ exitCode: number; blockedDomains: string[] }> {
   logger.info('Executing agent command...');
 
   try {
@@ -538,7 +547,7 @@ export async function runAgentCommand(workDir: string, allowedDomains: string[])
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Check Squid logs to see if any domains were blocked (do this BEFORE cleanup)
-    const { hasDenials, blockedTargets } = await checkSquidLogs(workDir);
+    const { hasDenials, blockedTargets } = await checkSquidLogs(workDir, proxyLogsDir);
 
     // If command failed (non-zero exit) and domains were blocked, show a warning
     if (exitCode !== 0 && hasDenials) {
@@ -614,9 +623,9 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
  * Preserves agent logs by moving them to a persistent location before cleanup
  * @param workDir - Working directory containing configs and logs
  * @param keepFiles - If true, skip cleanup and keep files
- * @param logsDir - Optional custom directory to copy logs to (creates subdirs)
+ * @param proxyLogsDir - Optional custom directory where Squid proxy logs were written directly
  */
-export async function cleanup(workDir: string, keepFiles: boolean, logsDir?: string): Promise<void> {
+export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?: string): Promise<void> {
   if (keepFiles) {
     logger.debug(`Keeping temporary files in: ${workDir}`);
     return;
@@ -627,54 +636,50 @@ export async function cleanup(workDir: string, keepFiles: boolean, logsDir?: str
     if (fs.existsSync(workDir)) {
       const timestamp = path.basename(workDir).replace('awf-', '');
 
-      // Determine log destination based on logsDir option
-      // If logsDir is specified, use it; otherwise fall back to timestamped /tmp directories
-      const agentLogsDestination = logsDir
-        ? path.join(logsDir, 'agent-logs')
-        : path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
-      const squidLogsDestination = logsDir
-        ? path.join(logsDir, 'squid-logs')
-        : path.join(os.tmpdir(), `squid-logs-${timestamp}`);
+      // Agent logs always go to timestamped /tmp directory
+      // (separate from proxyLogsDir which only affects Squid logs)
+      const agentLogsDestination = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
 
       // Preserve agent logs before cleanup
       const agentLogsDir = path.join(workDir, 'agent-logs');
       if (fs.existsSync(agentLogsDir) && fs.readdirSync(agentLogsDir).length > 0) {
         try {
-          if (logsDir) {
-            // Create parent directory if needed and copy
-            fs.mkdirSync(agentLogsDestination, { recursive: true });
-            fs.cpSync(agentLogsDir, agentLogsDestination, { recursive: true });
-          } else {
-            // Default: move to timestamped directory
-            fs.renameSync(agentLogsDir, agentLogsDestination);
-          }
+          // Always move agent logs to timestamped directory
+          fs.renameSync(agentLogsDir, agentLogsDestination);
           logger.info(`Agent logs preserved at: ${agentLogsDestination}`);
         } catch (error) {
           logger.debug('Could not preserve agent logs:', error);
         }
       }
 
-      // Preserve squid logs before cleanup
-      const squidLogsDir = path.join(workDir, 'squid-logs');
-      if (fs.existsSync(squidLogsDir) && fs.readdirSync(squidLogsDir).length > 0) {
+      // Handle squid logs
+      if (proxyLogsDir) {
+        // Logs were written directly to proxyLogsDir during runtime (timeout-safe)
+        // Just fix permissions so they're readable
         try {
-          if (logsDir) {
-            // Create parent directory if needed and copy
-            fs.mkdirSync(squidLogsDestination, { recursive: true });
-            fs.cpSync(squidLogsDir, squidLogsDestination, { recursive: true });
-          } else {
-            // Default: move to timestamped directory
-            fs.renameSync(squidLogsDir, squidLogsDestination);
-          }
-
-          // Make logs readable by GitHub Actions runner for artifact upload
-          // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
-          // chmod a+rX sets read for all users, and execute for dirs (capital X)
-          execa.sync('chmod', ['-R', 'a+rX', squidLogsDestination]);
-
-          logger.info(`Squid logs preserved at: ${squidLogsDestination}`);
+          execa.sync('chmod', ['-R', 'a+rX', proxyLogsDir]);
+          logger.info(`Squid logs available at: ${proxyLogsDir}`);
         } catch (error) {
-          logger.debug('Could not preserve squid logs:', error);
+          logger.debug('Could not fix squid log permissions:', error);
+        }
+      } else {
+        // Default behavior: move from workDir/squid-logs to timestamped /tmp directory
+        const squidLogsDir = path.join(workDir, 'squid-logs');
+        const squidLogsDestination = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
+
+        if (fs.existsSync(squidLogsDir) && fs.readdirSync(squidLogsDir).length > 0) {
+          try {
+            fs.renameSync(squidLogsDir, squidLogsDestination);
+
+            // Make logs readable by GitHub Actions runner for artifact upload
+            // Squid creates logs as 'proxy' user (UID 13) which runner cannot read
+            // chmod a+rX sets read for all users, and execute for dirs (capital X)
+            execa.sync('chmod', ['-R', 'a+rX', squidLogsDestination]);
+
+            logger.info(`Squid logs preserved at: ${squidLogsDestination}`);
+          } catch (error) {
+            logger.debug('Could not preserve squid logs:', error);
+          }
         }
       }
 
