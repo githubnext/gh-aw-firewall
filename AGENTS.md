@@ -87,6 +87,7 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - Header (entire commit message first line) max 72 characters
 - `scope` is optional but can help clarify the area of change
 - Both commit messages AND PR titles must follow this format
+- PR descriptions should be 1-2 sentences max
 
 **Common types:**
 - `feat`: New feature
