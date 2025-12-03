@@ -61,6 +61,34 @@ Domains automatically match all subdomains:
 sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
 ```
 
+### Wildcard Patterns
+
+You can use wildcard patterns with `*` to match multiple domains:
+
+```bash
+# Match any subdomain of github.com
+--allow-domains '*.github.com'
+
+# Match api-v1.example.com, api-v2.example.com, etc.
+--allow-domains 'api-*.example.com'
+
+# Combine plain domains and wildcards
+--allow-domains 'github.com,*.googleapis.com,api-*.example.com'
+```
+
+**Pattern rules:**
+- `*` matches any characters (converted to regex `.*`)
+- Patterns are case-insensitive (DNS is case-insensitive)
+- Overly broad patterns like `*`, `*.*`, or `*.*.*` are rejected for security
+- Use quotes around patterns to prevent shell expansion
+
+**Examples:**
+| Pattern | Matches | Does Not Match |
+|---------|---------|----------------|
+| `*.github.com` | `api.github.com`, `raw.github.com` | `github.com` |
+| `api-*.example.com` | `api-v1.example.com`, `api-test.example.com` | `api.example.com` |
+| `github.com` | `github.com`, `api.github.com` | `notgithub.com` |
+
 ### Using Command-Line Flag
 
 Common domain lists:
@@ -87,6 +115,9 @@ api.github.com
 # NPM registry
 npmjs.org, registry.npmjs.org
 
+# Wildcard patterns
+*.googleapis.com
+
 # Example with inline comment
 example.com # Example domain
 EOF
@@ -100,6 +131,7 @@ sudo awf --allow-domains-file allowed-domains.txt -- curl https://api.github.com
 - Comments start with `#` (full line or inline)
 - Empty lines are ignored
 - Whitespace is trimmed
+- Wildcard patterns are supported
 
 **Combining both methods:**
 ```bash
@@ -116,7 +148,20 @@ sudo awf \
 ### What This Protects Against
 - Unauthorized egress to non-whitelisted domains
 - Data exfiltration via HTTP/HTTPS
+- DNS-based data exfiltration to unauthorized DNS servers
 - MCP servers accessing unexpected endpoints
+
+### DNS Server Restriction
+
+DNS traffic is restricted to trusted servers only (default: Google DNS 8.8.8.8, 8.8.4.4). This prevents DNS-based data exfiltration attacks where an attacker encodes data in DNS queries to a malicious DNS server.
+
+```bash
+# Use custom DNS servers
+sudo awf \
+  --allow-domains github.com \
+  --dns-servers 1.1.1.1,1.0.0.1 \
+  -- curl https://api.github.com
+```
 
 ## Development & Testing
 

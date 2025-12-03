@@ -592,4 +592,139 @@ describe('generateSquidConfig', () => {
       expect(result).not.toContain('cdnjs.cloudflare.com');
     });
   });
+
+  describe('Wildcard Pattern Support', () => {
+    it('should generate dstdom_regex for wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.github\\.com$');
+    });
+
+    it('should use separate ACLs for plain and pattern domains', () => {
+      const config: SquidConfig = {
+        domains: ['example.com', '*.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain .example.com');
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.github\\.com$');
+    });
+
+    it('should combine ACLs in http_access rule when both present', () => {
+      const config: SquidConfig = {
+        domains: ['example.com', '*.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_access deny !allowed_domains !allowed_domains_regex');
+    });
+
+    it('should handle only plain domains (backward compatibility)', () => {
+      const config: SquidConfig = {
+        domains: ['github.com', 'example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain');
+      expect(result).not.toContain('dstdom_regex');
+      expect(result).toContain('http_access deny !allowed_domains');
+      expect(result).not.toContain('allowed_domains_regex');
+    });
+
+    it('should handle only pattern domains', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com', '*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex');
+      expect(result).not.toContain('acl allowed_domains dstdomain');
+      expect(result).toContain('http_access deny !allowed_domains_regex');
+    });
+
+    it('should remove plain subdomain when covered by pattern', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com', 'api.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // api.github.com should be removed since *.github.com covers it
+      expect(result).not.toContain('acl allowed_domains dstdomain .api.github.com');
+      expect(result).toContain('^.*\\.github\\.com$');
+    });
+
+    it('should handle middle wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['api-*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('^api-.*\\.example\\.com$');
+    });
+
+    it('should handle multiple wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com', '*.gitlab.com', 'api-*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('^.*\\.github\\.com$');
+      expect(result).toContain('^.*\\.gitlab\\.com$');
+      expect(result).toContain('^api-.*\\.example\\.com$');
+      // Should only have regex ACLs
+      expect(result).not.toContain('acl allowed_domains dstdomain');
+    });
+
+    it('should use case-insensitive matching for patterns (-i flag)', () => {
+      const config: SquidConfig = {
+        domains: ['*.GitHub.COM'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // The -i flag makes matching case-insensitive
+      expect(result).toContain('dstdom_regex -i');
+    });
+
+    it('should keep plain domain if not matched by pattern', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com', 'gitlab.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // gitlab.com should be kept as a plain domain
+      expect(result).toContain('acl allowed_domains dstdomain .gitlab.com');
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex');
+    });
+
+    it('should throw error for overly broad patterns', () => {
+      const config: SquidConfig = {
+        domains: ['*'],
+        port: defaultPort,
+      };
+      expect(() => generateSquidConfig(config)).toThrow();
+    });
+
+    it('should throw error for *.*', () => {
+      const config: SquidConfig = {
+        domains: ['*.*'],
+        port: defaultPort,
+      };
+      expect(() => generateSquidConfig(config)).toThrow();
+    });
+
+    it('should include ACL section comments', () => {
+      const config: SquidConfig = {
+        domains: ['example.com', '*.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('# ACL definitions for allowed domains');
+      expect(result).toContain('# ACL definitions for allowed domain patterns');
+    });
+  });
 });

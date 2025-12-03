@@ -90,7 +90,7 @@ describe('host-iptables', () => {
         // Mock iptables -L DOCKER-USER (permission check)
         .mockRejectedValueOnce(permissionError);
 
-      await expect(setupHostIptables('172.30.0.10', 3128)).rejects.toThrow(
+      await expect(setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4'])).rejects.toThrow(
         'Permission denied: iptables commands require root privileges'
       );
     });
@@ -121,7 +121,7 @@ describe('host-iptables', () => {
         exitCode: 0,
       } as any);
 
-      await setupHostIptables('172.30.0.10', 3128);
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
 
       // Verify chain was created
       expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'filter', '-N', 'FW_WRAPPER']);
@@ -140,16 +140,35 @@ describe('host-iptables', () => {
         '-j', 'ACCEPT',
       ]);
 
-      // Verify DNS rules
+      // Verify DNS rules for trusted servers only
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
         '-t', 'filter', '-A', 'FW_WRAPPER',
-        '-p', 'udp', '--dport', '53',
+        '-p', 'udp', '-d', '8.8.8.8', '--dport', '53',
         '-j', 'ACCEPT',
       ]);
 
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
         '-t', 'filter', '-A', 'FW_WRAPPER',
-        '-p', 'tcp', '--dport', '53',
+        '-p', 'tcp', '-d', '8.8.8.8', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'udp', '-d', '8.8.4.4', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'tcp', '-d', '8.8.4.4', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      // Verify Docker embedded DNS is allowed
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'udp', '-d', '127.0.0.11', '--dport', '53',
         '-j', 'ACCEPT',
       ]);
 
@@ -211,7 +230,7 @@ describe('host-iptables', () => {
         exitCode: 0,
       } as any);
 
-      await setupHostIptables('172.30.0.10', 3128);
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
 
       // Should delete reference from DOCKER-USER
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
@@ -259,7 +278,7 @@ describe('host-iptables', () => {
         exitCode: 0,
       } as any);
 
-      await setupHostIptables('172.30.0.10', 3128);
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
 
       // Verify localhost rules
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
@@ -300,7 +319,7 @@ describe('host-iptables', () => {
         exitCode: 0,
       } as any);
 
-      await setupHostIptables('172.30.0.10', 3128);
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
 
       // Verify multicast block
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
@@ -324,7 +343,7 @@ describe('host-iptables', () => {
       ]);
     });
 
-    it('should log and block UDP traffic (except DNS)', async () => {
+    it('should log and block all UDP traffic (DNS to non-whitelisted servers gets blocked)', async () => {
       mockedExeca
         // Mock getNetworkBridgeName
         .mockResolvedValueOnce({
@@ -349,52 +368,136 @@ describe('host-iptables', () => {
         exitCode: 0,
       } as any);
 
-      await setupHostIptables('172.30.0.10', 3128);
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
 
-      // Verify UDP logging
+      // Verify UDP logging (all UDP, DNS to whitelisted servers is allowed earlier in chain)
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
         '-t', 'filter', '-A', 'FW_WRAPPER',
-        '-p', 'udp', '!', '--dport', '53',
+        '-p', 'udp',
         '-j', 'LOG', '--log-prefix', '[FW_BLOCKED_UDP] ', '--log-level', '4',
       ]);
 
       // Verify UDP rejection
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
         '-t', 'filter', '-A', 'FW_WRAPPER',
-        '-p', 'udp', '!', '--dport', '53',
+        '-p', 'udp',
         '-j', 'REJECT', '--reject-with', 'icmp-port-unreachable',
       ]);
+    });
+
+    it('should use ip6tables for IPv6 DNS servers', async () => {
+      mockedExeca
+        // Mock getNetworkBridgeName
+        .mockResolvedValueOnce({
+          stdout: 'fw-bridge',
+          stderr: '',
+          exitCode: 0,
+        } as any)
+        // Mock iptables -L DOCKER-USER (permission check)
+        .mockResolvedValueOnce({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        } as any)
+        // Mock chain existence check (IPv4 chain doesn't exist)
+        .mockResolvedValueOnce({
+          exitCode: 1,
+        } as any);
+
+      mockedExeca.mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '2001:4860:4860::8888']);
+
+      // Verify IPv4 DNS rule uses iptables
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'udp', '-d', '8.8.8.8', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      // Verify IPv6 DNS rule uses ip6tables
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'udp', '-d', '2001:4860:4860::8888', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'tcp', '-d', '2001:4860:4860::8888', '--dport', '53',
+        '-j', 'ACCEPT',
+      ]);
+
+      // Verify IPv6 chain was created
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', ['-t', 'filter', '-N', 'FW_WRAPPER_V6']);
+
+      // Verify IPv6 UDP block rules
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'udp',
+        '-j', 'LOG', '--log-prefix', '[FW_BLOCKED_UDP6] ', '--log-level', '4',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'udp',
+        '-j', 'REJECT', '--reject-with', 'icmp6-port-unreachable',
+      ]);
+    });
+
+    it('should not create IPv6 chain when no IPv6 DNS servers', async () => {
+      mockedExeca
+        // Mock getNetworkBridgeName
+        .mockResolvedValueOnce({
+          stdout: 'fw-bridge',
+          stderr: '',
+          exitCode: 0,
+        } as any)
+        // Mock iptables -L DOCKER-USER (permission check)
+        .mockResolvedValueOnce({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        } as any)
+        // Mock chain existence check
+        .mockResolvedValueOnce({
+          exitCode: 1,
+        } as any);
+
+      mockedExeca.mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4']);
+
+      // Verify IPv6 chain was NOT created
+      expect(mockedExeca).not.toHaveBeenCalledWith('ip6tables', ['-t', 'filter', '-N', 'FW_WRAPPER_V6']);
     });
   });
 
   describe('cleanupHostIptables', () => {
-    it('should flush and delete FW_WRAPPER chain', async () => {
-      // Mock getNetworkBridgeName to return null (network bridge not found)
-      // This tests the simpler path where we just flush and delete the chain
-      mockedExeca
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: '',
-          exitCode: 0,
-        } as any)
-        // Mock iptables -F FW_WRAPPER
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: '',
-          exitCode: 0,
-        } as any)
-        // Mock iptables -X FW_WRAPPER
-        .mockResolvedValueOnce({
-          stdout: '',
-          stderr: '',
-          exitCode: 0,
-        } as any);
+    it('should flush and delete both FW_WRAPPER and FW_WRAPPER_V6 chains', async () => {
+      mockedExeca.mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as any);
 
       await cleanupHostIptables();
 
-      // Verify chain cleanup operations
+      // Verify IPv4 chain cleanup operations
       expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'filter', '-F', 'FW_WRAPPER'], { reject: false });
       expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'filter', '-X', 'FW_WRAPPER'], { reject: false });
+
+      // Verify IPv6 chain cleanup operations
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', ['-t', 'filter', '-F', 'FW_WRAPPER_V6'], { reject: false });
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', ['-t', 'filter', '-X', 'FW_WRAPPER_V6'], { reject: false });
     });
 
     it('should not throw on errors (best-effort cleanup)', async () => {
