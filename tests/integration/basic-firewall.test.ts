@@ -162,4 +162,26 @@ describe('Basic Firewall Functionality', () => {
     await docker.rm('awf-squid', true);
     await docker.rm('awf-agent', true);
   }, 120000);
+
+  test('Test 10: Exit code written to stderr (success)', async () => {
+    const result = await runner.runWithSudo('exit 0', {
+      allowDomains: ['github.com'],
+      logLevel: 'debug',
+      timeout: 30000,
+    });
+
+    expect(result).toExitWithCode(0);
+    expect(result.stderr).toContain('Process exiting with code: 0');
+  }, 120000);
+
+  test('Test 11: Exit code written to stderr (failure)', async () => {
+    const result = await runner.runWithSudo('exit 42', {
+      allowDomains: ['github.com'],
+      logLevel: 'debug',
+      timeout: 30000,
+    });
+
+    expect(result).toExitWithCode(42);
+    expect(result.stderr).toContain('Process exiting with code: 42');
+  }, 120000);
 });
