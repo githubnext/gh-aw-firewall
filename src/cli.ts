@@ -555,11 +555,13 @@ program
     // Register signal handlers
     process.on('SIGINT', async () => {
       await performCleanup('SIGINT');
+      console.error(`Process exiting with code: 130`);
       process.exit(130); // Standard exit code for SIGINT
     });
 
     process.on('SIGTERM', async () => {
       await performCleanup('SIGTERM');
+      console.error(`Process exiting with code: 143`);
       process.exit(143); // Standard exit code for SIGTERM
     });
 
@@ -585,10 +587,12 @@ program
         }
       );
 
+      console.error(`Process exiting with code: ${exitCode}`);
       process.exit(exitCode);
     } catch (error) {
       logger.error('Fatal error:', error);
       await performCleanup();
+      console.error(`Process exiting with code: 1`);
       process.exit(1);
     }
   });
