@@ -257,10 +257,7 @@ export function generateDockerCompose(
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();
   environment.AWF_USER_GID = getSafeHostGid();
-  logger.debug(`Using container user UID:GID = ${environment.AWF_USER_UID}:${environment.AWF_USER_GID}`);
-  if (process.getuid?.() === 0) {
-    logger.debug('Running as root (sudo detected), using default UID:GID 1000:1000 for container user');
-  }
+  // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
   // Build volumes list for agent execution container
   const agentVolumes: string[] = [
