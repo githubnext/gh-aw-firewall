@@ -261,6 +261,21 @@ export function generateDockerCompose(
       },
     },
     cap_add: ['NET_ADMIN'], // Required for iptables
+    // Drop capabilities to reduce attack surface (security hardening)
+    cap_drop: [
+      'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
+      'SYS_PTRACE',   // Prevents process inspection/debugging (container escape vector)
+      'SYS_MODULE',   // Prevents kernel module loading
+      'SYS_RAWIO',    // Prevents raw I/O access
+      'MKNOD',        // Prevents device node creation
+    ],
+    // Apply seccomp profile to restrict dangerous syscalls
+    security_opt: [`seccomp=${config.workDir}/seccomp-profile.json`],
+    // Resource limits to prevent DoS attacks (conservative defaults)
+    mem_limit: '4g',           // 4GB memory limit
+    memswap_limit: '4g',       // No swap (same as mem_limit)
+    pids_limit: 1000,          // Max 1000 processes
+    cpu_shares: 1024,          // Default CPU share
     stdin_open: true,
     tty: config.tty || false, // Use --tty flag, default to false for clean logs
     // Escape $ with $$ for Docker Compose variable interpolation
@@ -350,6 +365,23 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     agentIp: '172.30.0.20',
   };
   logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp})`);
+
+  // Copy seccomp profile to work directory for container security
+  const seccompSourcePath = path.join(__dirname, '..', 'containers', 'agent', 'seccomp-profile.json');
+  const seccompDestPath = path.join(config.workDir, 'seccomp-profile.json');
+  if (fs.existsSync(seccompSourcePath)) {
+    fs.copyFileSync(seccompSourcePath, seccompDestPath);
+    logger.debug(`Seccomp profile written to: ${seccompDestPath}`);
+  } else {
+    // If running from dist, try relative to dist
+    const altSeccompPath = path.join(__dirname, '..', '..', 'containers', 'agent', 'seccomp-profile.json');
+    if (fs.existsSync(altSeccompPath)) {
+      fs.copyFileSync(altSeccompPath, seccompDestPath);
+      logger.debug(`Seccomp profile written to: ${seccompDestPath}`);
+    } else {
+      logger.warn(`Seccomp profile not found at ${seccompSourcePath} or ${altSeccompPath}`);
+    }
+  }
 
   // Write Squid config
   const squidConfig = generateSquidConfig({
