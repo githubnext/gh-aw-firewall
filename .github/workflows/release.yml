@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write   # Required for creating releases
   packages: write   # Required for pushing to GHCR
+  id-token: write   # Required for cosign keyless signing
 
 jobs:
   build-and-release:
@@ -55,7 +56,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+
       - name: Build and push Squid image
+        id: build_squid
         uses: docker/build-push-action@v5
         with:
           context: ./containers/squid
@@ -66,7 +71,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Sign Squid image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
+      - name: Generate SBOM for Squid image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+          format: spdx-json
+          output-file: squid-sbom.spdx.json
+
+      - name: Attest SBOM for Squid image
+        run: |
+          cosign attest --yes \
+            --predicate squid-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
       - name: Build and push Agent image
+        id: build_agent
         uses: docker/build-push-action@v5
         with:
           context: ./containers/agent
@@ -76,6 +101,25 @@ jobs:
             ghcr.io/${{ github.repository }}/agent:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sign Agent image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+
+      - name: Generate SBOM for Agent image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+          format: spdx-json
+          output-file: agent-sbom.spdx.json
+
+      - name: Attest SBOM for Agent image
+        run: |
+          cosign attest --yes \
+            --predicate agent-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
       - name: Install pkg for binary creation
         run: npm install -g pkg

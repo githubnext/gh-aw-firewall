@@ -31,6 +31,8 @@ sudo awf --help
 
 **Note:** Verify checksums after download by downloading `checksums.txt` from the release page.
 
+**Docker Image Verification:** All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
+
 ### Basic Usage
 
 ```bash

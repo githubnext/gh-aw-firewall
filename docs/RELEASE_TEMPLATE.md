@@ -83,3 +83,17 @@ Published to GitHub Container Registry:
 - `ghcr.io/{{REPOSITORY}}/agent:{{VERSION_NUMBER}}`
 - `ghcr.io/{{REPOSITORY}}/squid:latest`
 - `ghcr.io/{{REPOSITORY}}/agent:latest`
+
+### Image Verification
+
+All container images are cryptographically signed with [cosign](https://github.com/sigstore/cosign) for authenticity verification.
+
+```bash
+# Verify image signature
+cosign verify \
+  --certificate-identity-regexp 'https://github.com/{{REPOSITORY}}/.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  ghcr.io/{{REPOSITORY}}/squid:{{VERSION_NUMBER}}
+```
+
+For detailed instructions including SBOM verification, see [docs/image-verification.md](https://github.com/{{REPOSITORY}}/blob/{{VERSION}}/docs/image-verification.md).
