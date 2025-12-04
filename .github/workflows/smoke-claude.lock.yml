@@ -2050,6 +2050,7 @@ jobs:
       - name: Install awf binary
         run: |
           echo "Installing awf from source"
+          npm ci
           npm run build
           npm link
           which awf
