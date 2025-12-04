@@ -4,6 +4,67 @@ set -e
 echo "[entrypoint] Agentic Workflow Firewall - Agent Container"
 echo "[entrypoint] =================================="
 
+# Adjust awfuser UID/GID to match host user at runtime
+# This ensures file ownership is correct regardless of whether using GHCR images or local builds
+HOST_UID=${AWF_USER_UID:-$(id -u awfuser)}
+HOST_GID=${AWF_USER_GID:-$(id -g awfuser)}
+CURRENT_UID=$(id -u awfuser)
+CURRENT_GID=$(id -g awfuser)
+
+# Validate UID/GID values to prevent security issues
+if ! [[ "$HOST_UID" =~ ^[0-9]+$ ]]; then
+  echo "[entrypoint][ERROR] Invalid AWF_USER_UID: must be numeric"
+  exit 1
+fi
+
+if ! [[ "$HOST_GID" =~ ^[0-9]+$ ]]; then
+  echo "[entrypoint][ERROR] Invalid AWF_USER_GID: must be numeric"
+  exit 1
+fi
+
+# Prevent setting UID/GID to 0 (root) which defeats the privilege drop
+if [ "$HOST_UID" -eq 0 ]; then
+  echo "[entrypoint][ERROR] Invalid AWF_USER_UID: cannot be 0 (root)"
+  exit 1
+fi
+
+if [ "$HOST_GID" -eq 0 ]; then
+  echo "[entrypoint][ERROR] Invalid AWF_USER_GID: cannot be 0 (root)"
+  exit 1
+fi
+
+if [ "$CURRENT_UID" != "$HOST_UID" ] || [ "$CURRENT_GID" != "$HOST_GID" ]; then
+  echo "[entrypoint] Adjusting awfuser UID:GID from $CURRENT_UID:$CURRENT_GID to $HOST_UID:$HOST_GID"
+  
+  # Check if target GID is already in use by another group
+  EXISTING_GROUP=$(getent group "$HOST_GID" 2>/dev/null | cut -d: -f1 || true)
+  if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "awfuser" ]; then
+    echo "[entrypoint][WARN] Target GID $HOST_GID is already used by group '$EXISTING_GROUP'. Skipping GID change."
+  else
+    # Change GID first (must be done before UID change)
+    if ! groupmod -g "$HOST_GID" awfuser 2>/dev/null; then
+      echo "[entrypoint][ERROR] Failed to change GID of awfuser to $HOST_GID"
+      exit 1
+    fi
+  fi
+  
+  # Check if target UID is already in use by another user
+  EXISTING_USER=$(getent passwd "$HOST_UID" 2>/dev/null | cut -d: -f1 || true)
+  if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "awfuser" ]; then
+    echo "[entrypoint][WARN] Target UID $HOST_UID is already used by user '$EXISTING_USER'. Skipping UID change."
+  else
+    # Change UID
+    if ! usermod -u "$HOST_UID" awfuser 2>/dev/null; then
+      echo "[entrypoint][ERROR] Failed to change UID of awfuser to $HOST_UID"
+      exit 1
+    fi
+  fi
+  
+  # Fix ownership of awfuser's home directory
+  chown -R awfuser:awfuser /home/awfuser 2>/dev/null || true
+  echo "[entrypoint] UID/GID adjustment complete"
+fi
+
 # Fix DNS configuration - ensure external DNS works alongside Docker's embedded DNS
 # Docker's embedded DNS (127.0.0.11) is used for service name resolution (e.g., squid-proxy)
 # Trusted external DNS servers are used for internet domain resolution
@@ -39,24 +100,18 @@ fi
 
 # Setup Docker socket permissions if Docker socket is mounted
 # This allows MCP servers that run as Docker containers to work
+# Store DOCKER_GID once to avoid redundant stat calls
+DOCKER_GID=""
 if [ -S /var/run/docker.sock ]; then
   echo "[entrypoint] Configuring Docker socket access..."
-  # Get the GID of the docker socket
+  # Get the GID of the docker socket (store once)
   DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
   # Create docker group with same GID as host's docker socket
   if ! getent group docker > /dev/null 2>&1; then
     groupadd -g "$DOCKER_GID" docker || true
   fi
-  # Add root user to docker group
-  usermod -aG docker root 2>/dev/null || true
   echo "[entrypoint] Docker socket configured (GID: $DOCKER_GID)"
 fi
-
-# Configure git to trust mounted directories
-# Required for Copilot CLI to detect git repository root for instruction discovery
-# Without this, git refuses to recognize mounted directories due to ownership mismatch
-echo "[entrypoint] Configuring git safe directories..."
-git config --global --add safe.directory '*'
 
 # Setup iptables rules
 /usr/local/bin/setup-iptables.sh
@@ -70,9 +125,34 @@ echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
 echo "[entrypoint] Network information:"
 echo "[entrypoint]   IP address: $(hostname -I)"
 echo "[entrypoint]   Hostname: $(hostname)"
+
+# Add awfuser to docker group for Docker socket access
+# This must be done after the docker group is created
+# Security note: This grants awfuser access to the Docker daemon, which provides
+# significant privileges. To disable this for untrusted workloads, set DISABLE_DOCKER_ACCESS=true
+if [ "${DISABLE_DOCKER_ACCESS}" = "true" ]; then
+  if [ -S /var/run/docker.sock ]; then
+    echo "[entrypoint] Docker socket detected, but DISABLE_DOCKER_ACCESS is set to 'true'. Skipping docker group addition for awfuser."
+  fi
+else
+  if [ -S /var/run/docker.sock ] && [ -n "$DOCKER_GID" ]; then
+    if getent group docker > /dev/null 2>&1; then
+      usermod -aG docker awfuser 2>/dev/null || true
+      echo "[entrypoint] Added awfuser to docker group (GID: $DOCKER_GID)"
+      echo "[entrypoint] NOTE: awfuser has Docker socket access. Set DISABLE_DOCKER_ACCESS=true to prevent this."
+    fi
+  fi
+fi
+
+# Configure git safe directories for awfuser
+# Use runuser instead of su to avoid PAM session issues
+runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
+
 echo "[entrypoint] =================================="
+echo "[entrypoint] Dropping privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Execute the provided command
-exec "$@"
+# Drop privileges and execute the provided command as awfuser
+# Using gosu instead of su/sudo for cleaner signal handling
+exec gosu awfuser "$@"
