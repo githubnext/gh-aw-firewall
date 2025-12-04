@@ -4,8 +4,8 @@ import { SquidConfig } from './types';
 describe('generateSquidConfig', () => {
   const defaultPort = 3128;
 
-  describe('Empty Domains (Allow All)', () => {
-    it('should allow all domains when domains array is empty', () => {
+  describe('Empty Domains (Block All)', () => {
+    it('should block all domains when domains array is empty', () => {
       const config: SquidConfig = {
         domains: [],
         port: defaultPort,
@@ -15,27 +15,25 @@ describe('generateSquidConfig', () => {
       // Should not contain any domain ACL definitions
       expect(result).not.toContain('acl allowed_domains dstdomain');
       
-      // Should contain warning indicating all domains are allowed
-      expect(result).toContain('# WARNING: No domain restrictions configured - all outbound traffic is allowed');
+      // Should contain comment indicating no domains configured
+      expect(result).toContain('# No domains configured');
       
-      // Should NOT contain the domain filtering rule
-      expect(result).not.toContain('http_access deny !allowed_domains');
+      // Should contain deny all rule
+      expect(result).toContain('http_access deny all');
       
       // Should still contain basic access rules
       expect(result).toContain('http_access deny !Safe_ports');
-      expect(result).toContain('http_access allow localnet');
-      expect(result).toContain('http_access allow localhost');
     });
 
-    it('should include warning about no domain filtering when empty', () => {
+    it('should have deny all as the domain filtering rule when empty', () => {
       const config: SquidConfig = {
         domains: [],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
       
-      // Should have a warning indicating no domain filtering
-      expect(result).toContain('# WARNING: No domain filtering configured - all outbound connections are allowed');
+      // Should deny all traffic when no domains are configured
+      expect(result).toContain('http_access deny all');
     });
   });
 

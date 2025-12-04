@@ -22,6 +22,7 @@ import {
 import { runMainWorkflow } from './cli-workflow';
 import { redactSecrets } from './redact-secrets';
 import { validateDomainOrPattern } from './domain-patterns';
+import { OutputFormat } from './types';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
@@ -368,6 +369,10 @@ program
     'Comma-separated list of trusted DNS servers. DNS traffic is ONLY allowed to these servers (default: 8.8.8.8,8.8.4.4)',
     '8.8.8.8,8.8.4.4'
   )
+  .option(
+    '--proxy-logs-dir <path>',
+    'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -435,11 +440,10 @@ program
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
 
-    // Warn if no domains specified (security risk)
+    // Warn if no domains specified (all traffic will be blocked)
     if (allowedDomains.length === 0) {
-      logger.warn('⚠️  WARNING: No domains specified - all outbound traffic will be allowed');
-      logger.warn('   This disables network filtering and may pose security risks');
-      logger.warn('   Use --allow-domains or --allow-domains-file to restrict network access');
+      logger.warn('⚠️  WARNING: No domains specified - all outbound traffic will be BLOCKED');
+      logger.warn('   Use --allow-domains or --allow-domains-file to allow specific domains');
     } else {
       // Validate all domains and patterns (only if domains are specified)
       for (const domain of allowedDomains) {
@@ -500,6 +504,7 @@ program
       volumeMounts,
       containerWorkDir: options.containerWorkdir,
       dnsServers,
+      proxyLogsDir: options.proxyLogsDir,
     };
 
     // Warn if --env-all is used
@@ -514,10 +519,11 @@ program
       agentCommand: redactSecrets(config.agentCommand),
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
+    
     if (allowedDomains.length > 0) {
       logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
     } else {
-      logger.info('Allowed domains: (none specified - all traffic allowed)');
+      logger.info('Allowed domains: (none specified - all traffic blocked)');
     }
     logger.debug(`DNS servers: ${dnsServers.join(', ')}`);
 
@@ -540,7 +546,7 @@ program
       }
 
       if (!config.keepContainers) {
-        await cleanup(config.workDir, false);
+        await cleanup(config.workDir, false, config.proxyLogsDir);
         // Note: We don't remove the firewall network here since it can be reused
         // across multiple runs. Cleanup script will handle removal if needed.
       } else {
@@ -590,6 +596,36 @@ program
       await performCleanup();
       process.exit(1);
     }
+  });
+
+// Logs subcommand - view Squid proxy logs
+program
+  .command('logs')
+  .description('View Squid proxy logs from current or previous runs')
+  .option('-f, --follow', 'Follow log output in real-time (like tail -f)', false)
+  .option(
+    '--format <format>',
+    'Output format: raw (as-is), pretty (colorized), json (structured)',
+    'pretty'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .option('--list', 'List available log sources', false)
+  .action(async (options) => {
+    // Validate format option
+    const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
+    if (!validFormats.includes(options.format)) {
+      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
+      process.exit(1);
+    }
+
+    // Dynamic import to avoid circular dependencies
+    const { logsCommand } = await import('./commands/logs');
+    await logsCommand({
+      follow: options.follow,
+      format: options.format as OutputFormat,
+      source: options.source,
+      list: options.list,
+    });
   });
 
 // Only parse arguments if this file is run directly (not imported as a module)
