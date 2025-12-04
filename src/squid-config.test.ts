@@ -692,4 +692,136 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('# ACL definitions for allowed domain patterns');
     });
   });
+
+  describe('SSL Bumping Configuration', () => {
+    it('should generate standard http_port config when sslBump is false', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: false,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128');
+      expect(result).not.toContain('https_port');
+      expect(result).not.toContain('ssl_bump');
+      expect(result).not.toContain('SSL BUMPING ENABLED');
+    });
+
+    it('should generate standard http_port config when sslBump is undefined', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128');
+      expect(result).not.toContain('https_port');
+      expect(result).not.toContain('ssl_bump');
+    });
+
+    it('should generate https_port config when sslBump is true', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('# SSL BUMPING ENABLED');
+      expect(result).toContain('https_port 3128 intercept ssl-bump');
+      expect(result).toContain('cert=/etc/squid/ssl_cert/squid.pem');
+      expect(result).toContain('key=/etc/squid/ssl_cert/squid.pem');
+      expect(result).not.toContain('http_port 3128');
+    });
+
+    it('should include ssl_bump directives when enabled', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump peek step1');
+      expect(result).toContain('ssl_bump bump step2');
+      expect(result).toContain('ssl_bump terminate step2');
+    });
+
+    it('should include SSL certificate generation configuration', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('generate-host-certificates=on');
+      expect(result).toContain('dynamic_cert_mem_cache_size=4MB');
+      expect(result).toContain('sslcrtd_program');
+      expect(result).toContain('security_file_certgen');
+    });
+
+    it('should reference allowed domains in ssl_bump rules for plain domains', () => {
+      const config: SquidConfig = {
+        domains: ['github.com', 'example.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump step2 allowed_domains');
+      // Should not reference regex ACL when only plain domains
+      expect(result).not.toContain('allowed_domains_regex');
+    });
+
+    it('should reference both plain and regex ACLs in ssl_bump rules when patterns exist', () => {
+      const config: SquidConfig = {
+        domains: ['github.com', '*.example.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump step2 allowed_domains allowed_domains_regex');
+    });
+
+    it('should reference only regex ACL in ssl_bump rules when only patterns exist', () => {
+      const config: SquidConfig = {
+        domains: ['*.github.com', '*.example.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump step2');
+      expect(result).toContain('allowed_domains_regex');
+      // Shouldn't reference plain domains ACL
+      expect(result).not.toContain('ssl_bump bump step2 allowed_domains allowed_domains_regex');
+    });
+
+    it('should include SSL step ACLs', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl step1 at_step SslBump1');
+      expect(result).toContain('acl step2 at_step SslBump2');
+      expect(result).toContain('acl step3 at_step SslBump3');
+    });
+
+    it('should include enhanced logging comment for SSL bumping', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('With SSL bumping: Full HTTP URLs inside HTTPS are visible');
+    });
+
+    it('should work with custom port when SSL bumping is enabled', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: 8080,
+        sslBump: true,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('https_port 8080 intercept ssl-bump');
+    });
+  });
 });
