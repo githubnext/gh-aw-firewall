@@ -11,24 +11,40 @@ const SQUID_PORT = 3128;
 
 /**
  * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
- * When running with sudo, process.getuid() returns 0 (root), but we want the
- * container user to be non-root for security. Default to 1000 in this case.
+ * When running with sudo, uses SUDO_UID to get the actual user's UID.
  */
 function getSafeHostUid(): string {
   const uid = process.getuid?.();
-  // Use 1000 if undefined or 0 (root)
-  return (uid && uid !== 0) ? uid.toString() : '1000';
+  
+  // When running as root (sudo), try to get the original user's UID
+  if (!uid || uid === 0) {
+    const sudoUid = process.env.SUDO_UID;
+    if (sudoUid && sudoUid !== '0') {
+      return sudoUid;
+    }
+    return '1000';
+  }
+  
+  return uid.toString();
 }
 
 /**
  * Gets the host user's GID, with fallback to 1000 if unavailable or root (0).
- * When running with sudo, process.getgid() returns 0 (root), but we want the
- * container user to be non-root for security. Default to 1000 in this case.
+ * When running with sudo, uses SUDO_GID to get the actual user's GID.
  */
 function getSafeHostGid(): string {
   const gid = process.getgid?.();
-  // Use 1000 if undefined or 0 (root)
-  return (gid && gid !== 0) ? gid.toString() : '1000';
+  
+  // When running as root (sudo), try to get the original user's GID
+  if (!gid || gid === 0) {
+    const sudoGid = process.env.SUDO_GID;
+    if (sudoGid && sudoGid !== '0') {
+      return sudoGid;
+    }
+    return '1000';
+  }
+  
+  return gid.toString();
 }
 
 /**
