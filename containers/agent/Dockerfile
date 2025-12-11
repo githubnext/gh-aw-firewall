@@ -24,7 +24,16 @@ RUN set -e; \
     }; \
     # Install base packages with retry
     retry_command "apt-get update" && \
-    retry_command "apt-get install -y --no-install-recommends iptables curl ca-certificates git gnupg dnsutils net-tools netcat-openbsd gosu" && \
+    retry_command "apt-get install -y --no-install-recommends \
+        iptables \
+        curl \
+        ca-certificates \
+        git \
+        gnupg \
+        dnsutils \
+        net-tools \
+        netcat-openbsd \
+        gosu" && \
     # Install Node.js 22 from NodeSource with retry
     retry_command "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -" && \
     retry_command "apt-get install -y nodejs" && \

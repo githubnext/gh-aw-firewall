@@ -24,7 +24,11 @@ RUN set -e; \
     }; \
     # Install packages with retry
     retry_command "apt-get update" && \
-    retry_command "apt-get install -y --no-install-recommends curl dnsutils net-tools netcat-openbsd" && \
+    retry_command "apt-get install -y --no-install-recommends \
+        curl \
+        dnsutils \
+        net-tools \
+        netcat-openbsd" && \
     rm -rf /var/lib/apt/lists/*
 
 # Create log directory
