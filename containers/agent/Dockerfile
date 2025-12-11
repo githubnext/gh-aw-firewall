@@ -1,27 +1,40 @@
 FROM ubuntu:22.04
 
 # Install required packages and Node.js 22
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    iptables \
-    curl \
-    ca-certificates \
-    git \
-    gnupg \
-    dnsutils \
-    net-tools \
-    netcat-openbsd \
-    gosu && \
-    # Install Node.js 22 from NodeSource
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
+RUN set -e; \
+    # Retry logic for apt-get and curl commands
+    retry_command() { \
+        local max_attempts=5; \
+        local attempt=1; \
+        local delay=2; \
+        while [ $attempt -le $max_attempts ]; do \
+            if eval "$@"; then \
+                return 0; \
+            fi; \
+            echo "Command failed (attempt $attempt/$max_attempts)"; \
+            if [ $attempt -lt $max_attempts ]; then \
+                echo "Retrying in ${delay}s..."; \
+                sleep $delay; \
+                delay=$((delay * 2)); \
+            fi; \
+            attempt=$((attempt + 1)); \
+        done; \
+        echo "Command failed after $max_attempts attempts"; \
+        return 1; \
+    }; \
+    # Install base packages with retry
+    retry_command "apt-get update" && \
+    retry_command "apt-get install -y --no-install-recommends iptables curl ca-certificates git gnupg dnsutils net-tools netcat-openbsd gosu" && \
+    # Install Node.js 22 from NodeSource with retry
+    retry_command "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -" && \
+    retry_command "apt-get install -y nodejs" && \
     # Install Docker CLI for MCP servers that run as containers
     install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+    retry_command "curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc" && \
     chmod a+r /etc/apt/keyrings/docker.asc && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt-get update && \
-    apt-get install -y docker-ce-cli && \
+    retry_command "apt-get update" && \
+    retry_command "apt-get install -y docker-ce-cli" && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with UID/GID matching host user
