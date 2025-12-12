@@ -29,11 +29,31 @@ Everything below the `---` separator becomes the release notes.
 
 ## Installation
 
-### Binary Installation (Recommended)
+### One-Line Installer (Recommended)
+
+**Linux (x64) with automatic SHA verification:**
+```bash
+curl -sSL https://raw.githubusercontent.com/{{REPOSITORY}}/main/install.sh | sudo bash
+```
+
+This installer:
+- Downloads the latest release binary
+- Verifies SHA256 checksum against `checksums.txt`
+- Validates the file is a valid ELF executable
+- Installs to `/usr/local/bin/awf`
+
+### Manual Binary Installation (Alternative)
 
 **Linux (x64):**
 ```bash
-curl -L https://github.com/{{REPOSITORY}}/releases/download/{{VERSION}}/awf-linux-x64 -o awf
+# Download binary and checksums
+curl -fL https://github.com/{{REPOSITORY}}/releases/download/{{VERSION}}/awf-linux-x64 -o awf
+curl -fL https://github.com/{{REPOSITORY}}/releases/download/{{VERSION}}/checksums.txt -o checksums.txt
+
+# Verify checksum
+sha256sum -c checksums.txt --ignore-missing
+
+# Install
 chmod +x awf
 sudo mv awf /usr/local/bin/
 ```
@@ -43,19 +63,6 @@ sudo mv awf /usr/local/bin/
 ```bash
 # Install from tarball
 npm install -g https://github.com/{{REPOSITORY}}/releases/download/{{VERSION}}/awf.tgz
-```
-
-### Requirements
-
-- Docker and Docker Compose must be installed
-- For iptables manipulation, run with sudo: `sudo awf ...`
-- Container images will be pulled automatically from GHCR on first run
-
-## Verification
-
-Verify checksums after download:
-```bash
-sha256sum -c checksums.txt
 ```
 
 ## Quick Start

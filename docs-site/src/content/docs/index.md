@@ -41,8 +41,13 @@ When AI agents like GitHub Copilot CLI run with access to tools and MCP servers,
 Download the latest release binary:
 
 ```bash
-# Linux (x64)
-curl -L https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+# One-line installer with SHA verification (recommended)
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+
+# Or manual installation
+curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
+sha256sum -c checksums.txt --ignore-missing
 chmod +x awf
 sudo mv awf /usr/local/bin/
 
@@ -50,8 +55,8 @@ sudo mv awf /usr/local/bin/
 sudo awf --version
 ```
 
-:::note
-Verify checksums after download by checking `checksums.txt` from the release page.
+:::tip[Automatic SHA Verification]
+The one-line installer automatically verifies the SHA256 checksum to protect against corrupted or tampered downloads.
 :::
 
 ### Your First Command
