@@ -77,11 +77,12 @@ check_requirements() {
 get_latest_version() {
     info "Fetching latest release version..."
     
-    # Try GitHub API first
-    VERSION=$(curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    # Try GitHub API with -f to fail on HTTP errors
+    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     
     if [ -z "$VERSION" ]; then
         error "Failed to fetch latest version from GitHub API"
+        error "Please check your internet connection and try again"
         exit 1
     fi
     
@@ -126,10 +127,17 @@ verify_checksum() {
     info "Verifying SHA256 checksum..."
     
     # Extract the checksum for our binary from checksums.txt
-    local expected_sum=$(grep "$BINARY_NAME" "$checksums_file" | awk '{print $1}')
+    # Format: "checksum  filename" (two spaces) - use exact filename match at end of line
+    local expected_sum=$(awk -v fname="$BINARY_NAME" '$2 == fname {print $1; exit}' "$checksums_file")
     
     if [ -z "$expected_sum" ]; then
         error "Could not find checksum for $BINARY_NAME in checksums.txt"
+        exit 1
+    fi
+    
+    # Validate checksum format (64 hex characters)
+    if ! echo "$expected_sum" | grep -qE '^[a-f0-9]{64}$'; then
+        error "Invalid checksum format: $expected_sum"
         exit 1
     fi
     
@@ -158,9 +166,27 @@ main() {
     # Get version
     get_latest_version
     
-    # Create temp directory
+    # Create temp directory with safety checks
     TEMP_DIR=$(mktemp -d)
-    trap "rm -rf $TEMP_DIR" EXIT
+    
+    # Validate temp directory was created and is safe
+    if [ -z "$TEMP_DIR" ] || [ ! -d "$TEMP_DIR" ]; then
+        error "Failed to create temporary directory"
+        exit 1
+    fi
+    
+    # Ensure it's actually in /tmp for safety
+    case "$TEMP_DIR" in
+        /tmp/*) ;; # OK
+        *)
+            error "Temporary directory is not in /tmp (got: $TEMP_DIR)"
+            rm -rf "$TEMP_DIR" 2>/dev/null || true
+            exit 1
+            ;;
+    esac
+    
+    # Set up cleanup trap
+    trap "rm -rf '$TEMP_DIR'" EXIT
     
     # Download URLs
     BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
