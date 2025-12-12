@@ -19,17 +19,31 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 ### Installation
 
+**Recommended: One-line installer with SHA verification**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+```
+
+**Alternative: Manual installation**
+
 ```bash
 # Download the latest release binary
-curl -L https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+
+# Download checksums for verification
+curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
+
+# Verify SHA256 checksum
+sha256sum -c checksums.txt --ignore-missing
+
+# Install
 chmod +x awf
 sudo mv awf /usr/local/bin/
 
 # Verify installation
 sudo awf --help
 ```
-
-**Note:** Verify checksums after download by downloading `checksums.txt` from the release page.
 
 **Docker Image Verification:** All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
 
