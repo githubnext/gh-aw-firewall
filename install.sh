@@ -135,8 +135,8 @@ verify_checksum() {
         exit 1
     fi
     
-    # Validate checksum format (64 hex characters)
-    if ! echo "$expected_sum" | grep -qE '^[a-f0-9]{64}$'; then
+    # Validate checksum format (64 hex characters, case-insensitive)
+    if ! echo "$expected_sum" | grep -qE '^[a-fA-F0-9]{64}$'; then
         error "Invalid checksum format: $expected_sum"
         exit 1
     fi
@@ -166,26 +166,17 @@ main() {
     # Get version
     get_latest_version
     
-    # Create temp directory with safety checks
-    TEMP_DIR=$(mktemp -d)
+    # Create temp directory with prefix for identification
+    # mktemp creates secure temporary directories with proper permissions (0700)
+    TEMP_DIR=$(mktemp -d -t awf-install.XXXXXX)
     
-    # Validate temp directory was created and is safe
+    # Validate temp directory was created
     if [ -z "$TEMP_DIR" ] || [ ! -d "$TEMP_DIR" ]; then
         error "Failed to create temporary directory"
         exit 1
     fi
     
-    # Ensure it's actually in /tmp for safety
-    case "$TEMP_DIR" in
-        /tmp/*) ;; # OK
-        *)
-            error "Temporary directory is not in /tmp (got: $TEMP_DIR)"
-            rm -rf "$TEMP_DIR" 2>/dev/null || true
-            exit 1
-            ;;
-    esac
-    
-    # Set up cleanup trap
+    # Set up cleanup trap (mktemp already ensures secure location)
     trap "rm -rf '$TEMP_DIR'" EXIT
     
     # Download URLs
