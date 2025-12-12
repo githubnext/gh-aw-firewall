@@ -2,7 +2,27 @@
 set -e
 
 # Install script for awf (Agentic Workflow Firewall)
-# This script downloads, verifies, and installs the awf binary
+# 
+# This script downloads, verifies, and installs the awf binary with SHA256 validation
+# to protect against corrupted or tampered downloads.
+#
+# Usage:
+#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+#
+# Security features:
+#   - Uses curl -f to fail on HTTP errors (404, 403, etc.)
+#   - Verifies SHA256 checksum from official checksums.txt
+#   - Validates downloaded file is a valid ELF executable
+#   - Detects HTML error pages that may slip through
+#
+# Requirements:
+#   - curl
+#   - sha256sum
+#   - file
+#   - sudo/root access
+#
+# Repository: https://github.com/githubnext/gh-aw-firewall
+# Issue #107: https://github.com/githubnext/gh-aw-firewall/issues/107
 
 REPO="githubnext/gh-aw-firewall"
 BINARY_NAME="awf-linux-x64"
@@ -40,7 +60,7 @@ check_sudo() {
 check_requirements() {
     local missing=()
     
-    for cmd in curl sha256sum; do
+    for cmd in curl sha256sum file; do
         if ! command -v "$cmd" &> /dev/null; then
             missing+=("$cmd")
         fi

@@ -25,6 +25,13 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
 ```
 
+This installer automatically:
+- Downloads the latest release binary
+- Verifies SHA256 checksum to detect corruption or tampering
+- Validates the file is a valid Linux executable
+- Protects against 404 error pages being saved as binaries
+- Installs to `/usr/local/bin/awf`
+
 **Alternative: Manual installation**
 
 ```bash
