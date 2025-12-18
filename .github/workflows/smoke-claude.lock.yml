@@ -3314,19 +3314,6 @@ jobs:
                   "GITHUB_REPOSITORY": "$GITHUB_REPOSITORY",
                   "GITHUB_SERVER_URL": "$GITHUB_SERVER_URL"
                 }
-              },
-              "serena": {
-                "command": "uvx",
-                "args": [
-                  "--from",
-                  "git+https://github.com/oraios/serena",
-                  "serena",
-                  "start-mcp-server",
-                  "--context",
-                  "codex",
-                  "--project",
-                  "${{ github.workspace }}"
-                ]
               }
             }
           }
