@@ -140,6 +140,12 @@ jobs:
           test -f release/awf-linux-x64 && echo "✓ Binary exists at release/awf-linux-x64" || echo "✗ Binary NOT found!"
           file release/awf-linux-x64
 
+      - name: Smoke test binary
+        run: |
+          npx tsx scripts/ci/smoke-test-binary.ts \
+            release/awf-linux-x64 \
+            ${{ steps.version_early.outputs.version_number }}
+
       - name: Create tarball for npm package
         run: |
           npm pack
