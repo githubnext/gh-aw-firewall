@@ -12,7 +12,7 @@
  * Example: npx tsx scripts/ci/smoke-test-binary.ts release/awf-linux-x64 0.7.0
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -76,7 +76,8 @@ function main() {
   // Test 3: --version works and returns expected version
   results.push(
     runTest('--version works', () => {
-      const output = execSync(`${binaryPath} --version`, {
+      // Use execFileSync to avoid shell injection vulnerabilities
+      const output = execFileSync(binaryPath, ['--version'], {
         encoding: 'utf-8',
         timeout: 10000,
       }).trim();
@@ -92,7 +93,8 @@ function main() {
   // Test 4: --help works and contains expected sections
   results.push(
     runTest('--help works', () => {
-      const output = execSync(`${binaryPath} --help`, {
+      // Use execFileSync to avoid shell injection vulnerabilities
+      const output = execFileSync(binaryPath, ['--help'], {
         encoding: 'utf-8',
         timeout: 10000,
       });
