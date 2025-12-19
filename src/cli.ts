@@ -351,8 +351,8 @@ program
   )
   .option(
     '--image-tag <tag>',
-    'Container image tag',
-    'latest'
+    'Container image tag (defaults to CLI version for compatibility)',
+    version
   )
   .option(
     '-e, --env <KEY=VALUE>',

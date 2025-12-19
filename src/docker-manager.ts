@@ -6,6 +6,7 @@ import execa from 'execa';
 import { DockerComposeConfig, WrapperConfig, BlockedTarget } from './types';
 import { logger } from './logger';
 import { generateSquidConfig } from './squid-config';
+import { version } from '../package.json';
 
 const SQUID_PORT = 3128;
 
@@ -159,7 +160,7 @@ export function generateDockerCompose(
   // Default to GHCR images unless buildLocal is explicitly set
   const useGHCR = !config.buildLocal;
   const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
-  const tag = config.imageTag || 'latest';
+  const tag = config.imageTag || version;
 
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;

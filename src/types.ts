@@ -130,9 +130,10 @@ export interface WrapperConfig {
   /**
    * Docker image tag to use for container images
    * 
-   * @default 'latest'
+   * @default CLI version (e.g., '0.7.0') for compatibility
    * @example 'v0.1.0'
    * @example 'dev'
+   * @example 'latest'
    */
   imageTag?: string;
 
