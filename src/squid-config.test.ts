@@ -4,25 +4,51 @@ import { SquidConfig } from './types';
 describe('generateSquidConfig', () => {
   const defaultPort = 3128;
 
-  describe('Domain Normalization', () => {
-    it('should remove http:// protocol prefix', () => {
+  describe('Protocol-Specific Domain Handling', () => {
+    it('should treat http:// prefix as HTTP-only domain', () => {
       const config: SquidConfig = {
         domains: ['http://github.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('acl allowed_http_only dstdomain .github.com');
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only');
       expect(result).not.toContain('http://');
     });
 
-    it('should remove https:// protocol prefix', () => {
+    it('should treat https:// prefix as HTTPS-only domain', () => {
       const config: SquidConfig = {
         domains: ['https://api.github.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .api.github.com');
+      expect(result).toContain('acl allowed_https_only dstdomain .api.github.com');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only');
       expect(result).not.toContain('https://');
+    });
+
+    it('should treat domain without prefix as allowing both protocols', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('http_access deny !allowed_domains');
+    });
+
+    it('should handle mixed protocol domains', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.httponly.com', 'https://secure.httpsonly.com', 'both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // HTTP-only domain
+      expect(result).toContain('acl allowed_http_only dstdomain .api.httponly.com');
+      // HTTPS-only domain
+      expect(result).toContain('acl allowed_https_only dstdomain .secure.httpsonly.com');
+      // Both protocols domain
+      expect(result).toContain('acl allowed_domains dstdomain .both.com');
     });
 
     it('should remove trailing slash', () => {
@@ -35,13 +61,13 @@ describe('generateSquidConfig', () => {
       expect(result).not.toMatch(/github\.com\//);
     });
 
-    it('should remove both protocol and trailing slash', () => {
+    it('should remove trailing slash with protocol prefix', () => {
       const config: SquidConfig = {
         domains: ['https://example.com/'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .example.com');
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
       expect(result).not.toContain('https://');
       expect(result).not.toMatch(/example\.com\//);
     });
@@ -62,8 +88,8 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      // Path should be preserved (Squid handles domain matching)
-      expect(result).toContain('acl allowed_domains dstdomain .api.github.com/v3/users');
+      // Path should be preserved (Squid handles domain matching), as HTTPS-only
+      expect(result).toContain('acl allowed_https_only dstdomain .api.github.com/v3/users');
     });
   });
 
@@ -690,6 +716,107 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('# ACL definitions for allowed domains');
       expect(result).toContain('# ACL definitions for allowed domain patterns');
+    });
+  });
+
+  describe('Protocol-Specific Wildcard Patterns', () => {
+    it('should handle HTTP-only wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['http://*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.example\\.com$');
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only_regex');
+    });
+
+    it('should handle HTTPS-only wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['https://*.secure.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.secure\\.com$');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only_regex');
+    });
+
+    it('should handle mixed protocol wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['http://*.api.com', 'https://*.secure.com', '*.both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // HTTP-only pattern
+      expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i ^.*\\.api\\.com$');
+      // HTTPS-only pattern
+      expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i ^.*\\.secure\\.com$');
+      // Both protocols pattern
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex -i ^.*\\.both\\.com$');
+    });
+  });
+
+  describe('Protocol Access Rules Order', () => {
+    it('should put protocol-specific allow rules before deny rule', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.example.com', 'both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      const allowIndex = result.indexOf('http_access allow !CONNECT allowed_http_only');
+      const denyIndex = result.indexOf('http_access deny !allowed_domains');
+      expect(allowIndex).toBeGreaterThan(-1);
+      expect(denyIndex).toBeGreaterThan(-1);
+      expect(allowIndex).toBeLessThan(denyIndex);
+    });
+
+    it('should deny all when only protocol-specific domains are configured', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.example.com', 'https://secure.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Should have deny all since no 'both' domains
+      expect(result).toContain('http_access deny all');
+      // But should have allow rules for specific protocols
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only');
+    });
+  });
+
+  describe('Protocol-Specific Subdomain Handling', () => {
+    it('should not remove http-only subdomain when parent has https-only', () => {
+      const config: SquidConfig = {
+        domains: ['https://example.com', 'http://api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both should be present since protocols are different
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
+      expect(result).toContain('acl allowed_http_only dstdomain .api.example.com');
+    });
+
+    it('should remove subdomain when parent has "both" protocol', () => {
+      const config: SquidConfig = {
+        domains: ['example.com', 'http://api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // api.example.com should be removed since example.com with 'both' covers it
+      expect(result).toContain('acl allowed_domains dstdomain .example.com');
+      expect(result).not.toContain('api.example.com');
+    });
+
+    it('should not remove "both" subdomain when parent has single protocol', () => {
+      const config: SquidConfig = {
+        domains: ['https://example.com', 'api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both should be present since api.example.com needs both protocols
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
+      expect(result).toContain('acl allowed_domains dstdomain .api.example.com');
     });
   });
 
