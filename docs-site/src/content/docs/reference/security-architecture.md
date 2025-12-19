@@ -95,7 +95,13 @@ graph TB
 
 **Container iptables (NAT table)** — Inside the agent container, NAT rules intercept outbound HTTP (port 80) and HTTPS (port 443) traffic, rewriting the destination to Squid at `172.30.0.10:3128`. This handles traffic from the agent process itself and any child processes (including stdio MCP servers).
 
-**Squid ACL** — The primary control point. Squid receives CONNECT requests, extracts the target domain from SNI (for HTTPS) or Host header (for HTTP), and checks against the allowlist. Unlisted domains get `403 Forbidden`. No SSL inspection—we read SNI from the TLS ClientHello without decrypting traffic.
+**Squid ACL** — The primary control point. Squid receives CONNECT requests, extracts the target domain from SNI (for HTTPS) or Host header (for HTTP), and checks against the allowlist and blocklist. The evaluation order is:
+
+1. **Blocklist check first**: If domain matches a blocked pattern, deny immediately
+2. **Allowlist check second**: If domain matches an allowed pattern, permit
+3. **Default deny**: All other domains get `403 Forbidden`
+
+This allows fine-grained control like allowing `*.example.com` while blocking `internal.example.com`. No SSL inspection—we read SNI from the TLS ClientHello without decrypting traffic.
 
 ---
 
@@ -117,9 +123,13 @@ sequenceDiagram
     NAT->>Squid: TCP to proxy port
 
     Squid->>Squid: Parse CONNECT api.github.com:443
-    Squid->>Squid: Check domain against ACL
+    Squid->>Squid: Check blocklist first
+    Squid->>Squid: Check allowlist second
 
-    alt api.github.com in allowlist
+    alt Domain in blocklist
+        Squid-->>Agent: HTTP 403 Forbidden
+        Note over Agent: Blocked by blocklist
+    else Domain in allowlist
         Squid->>Host: Outbound to api.github.com:443
         Note over Host: Source is Squid IP (172.30.0.10)<br/>→ ACCEPT (unrestricted)
         Host->>Net: TCP connection
@@ -128,7 +138,7 @@ sequenceDiagram
         Note over Agent,Net: End-to-end encrypted tunnel
     else Domain not in allowlist
         Squid-->>Agent: HTTP 403 Forbidden
-        Note over Agent: Connection refused
+        Note over Agent: Not in allowlist
     end
 ```
 
@@ -305,6 +315,5 @@ Use `sudo -E` to preserve environment variables (like `GITHUB_TOKEN`) through su
 
 ## Related Documentation
 
-- [Architecture Overview](/reference/architecture) — Component details and code structure
-- [CLI Reference](/reference/cli-options) — Complete command-line options
-- [Logging](/guides/logging) — Audit trail configuration and analysis
+- [Domain Filtering](/gh-aw-firewall/guides/domain-filtering/) — Allowlists, blocklists, and wildcard patterns
+- [CLI Reference](/gh-aw-firewall/reference/cli-reference/) — Complete command-line options

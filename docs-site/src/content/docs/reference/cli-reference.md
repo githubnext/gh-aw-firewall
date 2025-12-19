@@ -367,7 +367,5 @@ awf logs summary --format pretty
 
 ## See Also
 
-- [Quick Start Guide](/gh-aw-firewall/quickstart) - Getting started with examples
-- [Usage Guide](/gh-aw-firewall/usage) - Detailed usage patterns and examples
-- [Troubleshooting](/gh-aw-firewall/troubleshooting) - Common issues and solutions
+- [Domain Filtering Guide](/gh-aw-firewall/guides/domain-filtering) - Allowlists, blocklists, and wildcards
 - [Security Architecture](/gh-aw-firewall/reference/security-architecture) - How the firewall works internally
