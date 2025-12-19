@@ -968,7 +968,7 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('HTTPS traffic will be intercepted');
     });
 
-    it('should configure HTTPS port with SSL Bump', () => {
+    it('should configure HTTP port with SSL Bump', () => {
       const config: SquidConfig = {
         domains: ['github.com'],
         port: defaultPort,
@@ -980,7 +980,7 @@ describe('generateSquidConfig', () => {
         sslDbPath: '/tmp/test/ssl_db',
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('https_port 3129 intercept ssl-bump');
+      expect(result).toContain('http_port 3128 ssl-bump');
     });
 
     it('should include CA certificate path', () => {

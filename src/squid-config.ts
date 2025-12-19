@@ -104,19 +104,18 @@ function generateSslBumpSection(
 # WARNING: This enables TLS interception - traffic is decrypted for inspection
 # A per-session CA certificate is used for dynamic certificate generation
 
-# HTTP port for transparent proxy
-http_port 3128
-
-# HTTPS port with SSL Bump for interception
-https_port 3129 intercept ssl-bump \\
+# HTTP port with SSL Bump enabled for HTTPS interception
+# This handles both HTTP requests and HTTPS CONNECT requests
+http_port 3128 ssl-bump \\
   cert=${caFiles.certPath} \\
   key=${caFiles.keyPath} \\
   generate-host-certificates=on \\
-  dynamic_cert_mem_cache_size=4MB \\
+  dynamic_cert_mem_cache_size=16MB \\
   options=NO_SSLv3,NO_TLSv1,NO_TLSv1_1
 
 # SSL certificate database for dynamic certificate generation
-sslcrtd_program /usr/lib/squid/security_file_certgen -s ${sslDbPath} -M 4MB
+# Using 16MB for certificate cache (sufficient for typical AI agent sessions)
+sslcrtd_program /usr/lib/squid/security_file_certgen -s ${sslDbPath} -M 16MB
 sslcrtd_children 5
 
 # SSL Bump ACL steps:
