@@ -161,6 +161,8 @@ export function generateDockerCompose(
   const useGHCR = !config.buildLocal;
   const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
   const tag = config.imageTag || version;
+  
+  logger.debug(`Using container images: ${registry}/*:${tag}`);
 
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
