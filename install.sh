@@ -104,7 +104,7 @@ check_platform() {
 # Validate version format (should be like v1.0.0, v1.2.3, etc.)
 validate_version() {
     local version="$1"
-    if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+    if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
         error "Invalid version format: $version"
         error "Version should be in format: v1.0.0"
         exit 1
