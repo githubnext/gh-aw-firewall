@@ -22,22 +22,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { PidTrackResult } from './types';
 
-/**
- * Result of PID tracking operation
- */
-export interface PidTrackResult {
-  /** Process ID that owns the socket, or -1 if not found */
-  pid: number;
-  /** Full command line of the process, or 'unknown' if not found */
-  cmdline: string;
-  /** Short command name (from /proc/[pid]/comm), or 'unknown' if not found */
-  comm: string;
-  /** Socket inode number, or undefined if not found */
-  inode?: string;
-  /** Error message if tracking failed, or undefined on success */
-  error?: string;
-}
+// Re-export PidTrackResult for convenience
+export { PidTrackResult } from './types';
 
 /**
  * Parsed entry from /proc/net/tcp

@@ -41,24 +41,33 @@ hex_to_ip() {
 # Function to find inode for a given port
 find_inode_for_port() {
   local target_port="$1"
-  local inode=""
   
   # Skip header line and parse each connection
-  tail -n +2 /proc/net/tcp 2>/dev/null | while read -r line; do
-    # Parse local address (field 2, format: ADDR:PORT)
-    local local_addr
-    local_addr=$(echo "$line" | awk '{print $2}')
-    local port_hex
-    port_hex=$(echo "$local_addr" | cut -d: -f2)
-    local port_dec
-    port_dec=$(hex_to_dec "$port_hex")
-    
-    if [ "$port_dec" -eq "$target_port" ]; then
-      # Get inode (field 10)
-      echo "$line" | awk '{print $10}'
-      return 0
-    fi
-  done
+  # Use awk to avoid subshell issues with while loops
+  awk -v target="$target_port" '
+    NR > 1 {
+      # Parse local address (field 2, format: ADDR:PORT)
+      split($2, addr_parts, ":")
+      port_hex = addr_parts[2]
+      # Convert hex port to decimal
+      port_dec = 0
+      for (i = 1; i <= length(port_hex); i++) {
+        c = substr(port_hex, i, 1)
+        if (c ~ /[0-9]/) {
+          port_dec = port_dec * 16 + (c - 0)
+        } else if (c ~ /[a-f]/) {
+          port_dec = port_dec * 16 + (10 + index("abcdef", c) - 1)
+        } else if (c ~ /[A-F]/) {
+          port_dec = port_dec * 16 + (10 + index("ABCDEF", c) - 1)
+        }
+      }
+      if (port_dec == target) {
+        # Print inode (field 10)
+        print $10
+        exit 0
+      }
+    }
+  ' /proc/net/tcp 2>/dev/null
 }
 
 # Function to find process owning a socket inode
@@ -159,6 +168,12 @@ main() {
   # Validate port is numeric
   if ! [[ "$src_port" =~ ^[0-9]+$ ]]; then
     output_json "$src_port" -1 "unknown" "unknown" "" "Invalid port: must be numeric"
+    exit 1
+  fi
+  
+  # Validate port range (1-65535)
+  if [ "$src_port" -lt 1 ] || [ "$src_port" -gt 65535 ]; then
+    output_json "$src_port" -1 "unknown" "unknown" "" "Invalid port: must be in range 1-65535"
     exit 1
   fi
   
