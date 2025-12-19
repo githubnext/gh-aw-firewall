@@ -24,6 +24,7 @@ import { redactSecrets } from './redact-secrets';
 import { validateDomainOrPattern } from './domain-patterns';
 import { OutputFormat } from './types';
 import { version } from '../package.json';
+import { loadRuleSet, mergeRuleSets } from './rules';
 
 /**
  * Parses a comma-separated list of domains into an array of trimmed, non-empty domain strings
@@ -310,6 +311,12 @@ program
     'Path to file containing allowed domains (one per line or comma-separated, supports # comments)'
   )
   .option(
+    '--ruleset-file <path>',
+    'Path to YAML rule configuration file (can be specified multiple times)',
+    (value, previous: string[] = []) => [...previous, value],
+    []
+  )
+  .option(
     '--log-level <level>',
     'Log level: debug, info, warn, error',
     'info'
@@ -419,7 +426,7 @@ program
 
     logger.setLevel(logLevel);
 
-    // Parse domains from both --allow-domains flag and --allow-domains-file
+    // Parse domains from --allow-domains, --allow-domains-file, and --ruleset-file
     let allowedDomains: string[] = [];
 
     // Parse domains from command-line flag if provided
@@ -438,9 +445,25 @@ program
       }
     }
 
+    // Parse domains from YAML ruleset files (can be multiple)
+    if (options.rulesetFile && Array.isArray(options.rulesetFile)) {
+      try {
+        const ruleSets = options.rulesetFile.map((filePath: string) => loadRuleSet(filePath));
+        const ruleDomains = mergeRuleSets(ruleSets);
+        allowedDomains.push(...ruleDomains);
+      } catch (error) {
+        logger.error(
+          `Failed to load ruleset: ${error instanceof Error ? error.message : String(error)}`
+        );
+        process.exit(1);
+      }
+    }
+
     // Ensure at least one domain is specified
     if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
+      logger.error(
+        'At least one domain must be specified with --allow-domains, --allow-domains-file, or --ruleset-file'
+      );
       process.exit(1);
     }
 
