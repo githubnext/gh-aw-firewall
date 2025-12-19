@@ -352,7 +352,7 @@ describe('Docker Container Egress Tests', () => {
       // This test verifies that child containers have NAT rules applied via docker-wrapper.sh
       // Even if an application ignores HTTP_PROXY env vars, traffic is still redirected to Squid
       const result = await runner.runWithSudo(
-        `docker run --rm alpine:latest sh -c 'apk add --no-cache curl >/dev/null 2>&1 && unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy && curl -f https://example.com --max-time 10'`,
+        `docker run --rm alpine:latest sh -c 'apk add --no-cache curl iptables >/dev/null 2>&1 && unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy && curl -f https://example.com --max-time 10'`,
         {
           allowDomains: ['github.com'],
           logLevel: 'warn',
@@ -367,7 +367,7 @@ describe('Docker Container Egress Tests', () => {
     test('Container: NAT rules applied - allows whitelisted domains even when proxy env vars are ignored', async () => {
       // Verify that allowed domains still work even when proxy env vars are unset
       const result = await runner.runWithSudo(
-        `docker run --rm alpine:latest sh -c 'apk add --no-cache curl >/dev/null 2>&1 && unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy && curl -fsS https://api.github.com/zen --max-time 30'`,
+        `docker run --rm alpine:latest sh -c 'apk add --no-cache curl iptables >/dev/null 2>&1 && unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy && curl -fsS https://api.github.com/zen --max-time 30'`,
         {
           allowDomains: ['api.github.com'],
           logLevel: 'warn',
@@ -382,7 +382,7 @@ describe('Docker Container Egress Tests', () => {
     test('Container: wget --no-proxy blocked by NAT rules', async () => {
       // wget --no-proxy explicitly ignores proxy settings, but NAT rules should still work
       const result = await runner.runWithSudo(
-        `docker run --rm alpine:latest sh -c 'apk add --no-cache wget >/dev/null 2>&1 && wget --no-proxy -q -O- https://example.com --timeout=10'`,
+        `docker run --rm alpine:latest sh -c 'apk add --no-cache wget iptables >/dev/null 2>&1 && wget --no-proxy -q -O- https://example.com --timeout=10'`,
         {
           allowDomains: ['github.com'],
           logLevel: 'warn',
@@ -410,5 +410,20 @@ describe('Docker Container Egress Tests', () => {
       expect(result.stdout).toContain('DNAT');
       expect(result.stdout).toContain('172.30.0.10:3128');
     }, 180000);
+
+    test('Container: Images without iptables still work via HTTP_PROXY', async () => {
+      // Containers without iptables should still be able to access allowed domains via HTTP_PROXY
+      const result = await runner.runWithSudo(
+        'docker run --rm curlimages/curl:latest -fsS https://api.github.com/zen',
+        {
+          allowDomains: ['api.github.com'],
+          logLevel: 'warn',
+          timeout: 30000,
+        }
+      );
+
+      // Should succeed via HTTP_PROXY (NAT rules won't apply without iptables)
+      expect(result).toSucceed();
+    }, 120000);
   });
 });
