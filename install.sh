@@ -7,7 +7,14 @@ set -e
 # to protect against corrupted or tampered downloads.
 #
 # Usage:
+#   # Install latest version
 #   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+#
+#   # Install specific version
+#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
+#
+#   # Or with environment variable
+#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
 #
 # Security features:
 #   - Uses curl -f to fail on HTTP errors (404, 403, etc.)
@@ -94,6 +101,16 @@ check_platform() {
     esac
 }
 
+# Validate version format (should be like v1.0.0, v1.2.3, etc.)
+validate_version() {
+    local version="$1"
+    if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+        error "Invalid version format: $version"
+        error "Version should be in format: v1.0.0"
+        exit 1
+    fi
+}
+
 # Get latest release version
 get_latest_version() {
     info "Fetching latest release version..."
@@ -108,6 +125,22 @@ get_latest_version() {
     fi
     
     info "Latest version: $VERSION"
+}
+
+# Set version from argument, environment variable, or fetch latest
+set_version() {
+    # Priority: argument > environment variable > fetch latest
+    if [ -n "$1" ]; then
+        VERSION="$1"
+        validate_version "$VERSION"
+        info "Using specified version: $VERSION"
+    elif [ -n "$AWF_VERSION" ]; then
+        VERSION="$AWF_VERSION"
+        validate_version "$VERSION"
+        info "Using version from AWF_VERSION: $VERSION"
+    else
+        get_latest_version
+    fi
 }
 
 # Download file
@@ -190,8 +223,8 @@ main() {
     check_requirements
     check_platform
     
-    # Get version
-    get_latest_version
+    # Get version (from argument, env var, or fetch latest)
+    set_version "$1"
     
     # Create temp directory with prefix for identification
     # mktemp creates secure temporary directories with proper permissions (0700)
@@ -243,5 +276,5 @@ main() {
     fi
 }
 
-# Run main function
-main
+# Run main function with all arguments
+main "$@"

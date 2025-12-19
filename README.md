@@ -22,11 +22,18 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 **Recommended: One-line installer with SHA verification**
 
 ```bash
+# Install latest version
 curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+
+# Install a specific version
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
+
+# Or using environment variable
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
 ```
 
 This installer automatically:
-- Downloads the latest release binary
+- Downloads the latest release binary (or a specified version)
 - Verifies SHA256 checksum to detect corruption or tampering
 - Validates the file is a valid Linux executable
 - Protects against 404 error pages being saved as binaries
