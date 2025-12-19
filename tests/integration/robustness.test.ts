@@ -236,6 +236,40 @@ describe('Firewall Robustness Tests', () => {
 
       expect(result).toSucceed();
     }, 120000);
+
+    test('Block iptables manipulation (NET_ADMIN capability dropped)', async () => {
+      // After PR #133, CAP_NET_ADMIN is dropped after iptables setup
+      // User commands should not be able to modify iptables rules
+      const result = await runner.runWithSudo(
+        'iptables -t nat -L OUTPUT 2>&1 || echo "iptables command failed as expected"',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'warn',
+        }
+      );
+
+      // The command should succeed (the echo runs when iptables fails)
+      expect(result).toSucceed();
+      // iptables should fail due to lack of CAP_NET_ADMIN
+      expect(result.stdout).toContain('iptables command failed as expected');
+    }, 120000);
+
+    test('Firewall remains effective after iptables bypass attempt', async () => {
+      // Attempt to flush iptables rules (should fail due to dropped NET_ADMIN)
+      // Then verify the firewall still blocks non-whitelisted domains
+      const result = await runner.runWithSudo(
+        `bash -c 'iptables -t nat -F OUTPUT 2>/dev/null; curl -f https://example.com --max-time 5'`,
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'warn',
+        }
+      );
+
+      // Should fail because:
+      // 1. iptables flush fails (no CAP_NET_ADMIN)
+      // 2. curl to example.com is blocked by Squid
+      expect(result).toFail();
+    }, 120000);
   });
 
   describe('9. Observability', () => {
