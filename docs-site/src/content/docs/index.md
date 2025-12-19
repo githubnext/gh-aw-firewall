@@ -206,6 +206,28 @@ Domains automatically match all subdomains:
 # ✗ example.com (not whitelisted)
 ```
 
+### Protocol-Specific Filtering
+
+Restrict domains to HTTP-only or HTTPS-only traffic:
+
+```bash
+# HTTPS only (secure endpoints)
+sudo awf --allow-domains 'https://secure.example.com' -- curl https://secure.example.com
+
+# HTTP only (legacy APIs)
+sudo awf --allow-domains 'http://legacy-api.example.com' -- curl http://legacy-api.example.com
+
+# Both protocols (default, backward compatible)
+sudo awf --allow-domains 'example.com' -- curl https://example.com
+
+# Mixed configuration
+sudo awf \
+  --allow-domains 'example.com,https://secure.example.com,http://legacy.example.com' \
+  -- your-command
+```
+
+Works with wildcards: `https://*.secure.example.com`
+
 ### Host-Level Enforcement
 
 The firewall uses Docker's **DOCKER-USER iptables chain** to enforce rules at the host level. This means:

@@ -42,12 +42,37 @@ awf [options] -- <command>
 
 ### `--allow-domains <domains>`
 
-Comma-separated list of allowed domains. Domains automatically match all subdomains. Supports wildcard patterns.
+Comma-separated list of allowed domains. Domains automatically match all subdomains. Supports wildcard patterns and protocol-specific filtering.
 
 ```bash
 --allow-domains github.com,npmjs.org
 --allow-domains '*.github.com,api-*.example.com'
 ```
+
+#### Protocol-Specific Filtering
+
+Restrict domains to HTTP-only or HTTPS-only traffic by prefixing with the protocol:
+
+```bash
+# HTTPS only - blocks HTTP traffic to this domain
+--allow-domains 'https://secure.example.com'
+
+# HTTP only - blocks HTTPS traffic to this domain
+--allow-domains 'http://legacy-api.example.com'
+
+# Both protocols (default behavior, backward compatible)
+--allow-domains 'example.com'
+
+# Mixed configuration
+--allow-domains 'example.com,https://secure.example.com,http://legacy.example.com'
+```
+
+Works with wildcards: `--allow-domains 'https://*.secure.example.com'`
+
+**How it works:** The firewall generates separate Squid ACL rules:
+- `allowed_https_only` with `CONNECT` method for HTTPS-only domains
+- `allowed_http_only` with `!CONNECT` method for HTTP-only domains
+- `allowed_domains` for domains allowing both protocols
 
 ### `--allow-domains-file <path>`
 
