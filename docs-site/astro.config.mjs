@@ -11,9 +11,9 @@ export default defineConfig({
 		starlight({
 			title: 'Agentic Workflow Firewall',
 			description: 'Network firewall for agentic workflows with domain whitelisting',
-			social: {
-				github: 'https://github.com/githubnext/gh-aw-firewall',
-			},
+			social: [
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/githubnext/gh-aw-firewall' },
+			],
 			editLink: {
 				baseUrl: 'https://github.com/githubnext/gh-aw-firewall/edit/main/docs-site/',
 			},
