@@ -65,14 +65,10 @@ Restrict domains to HTTP-only or HTTPS-only traffic by prefixing with the protoc
 
 # Mixed configuration
 --allow-domains 'example.com,https://secure.example.com,http://legacy.example.com'
+
+# Works with wildcards
+--allow-domains 'https://*.secure.example.com'
 ```
-
-Works with wildcards: `--allow-domains 'https://*.secure.example.com'`
-
-**How it works:** The firewall generates separate Squid ACL rules:
-- `allowed_https_only` with `CONNECT` method for HTTPS-only domains
-- `allowed_http_only` with `!CONNECT` method for HTTP-only domains
-- `allowed_domains` for domains allowing both protocols
 
 ### `--allow-domains-file <path>`
 
