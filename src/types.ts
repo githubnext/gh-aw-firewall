@@ -220,6 +220,19 @@ export interface WrapperConfig {
    * @example '/tmp/my-proxy-logs'
    */
   proxyLogsDir?: string;
+
+  /**
+   * List of host directories containing binaries to make accessible in the container
+   *
+   * Each path is mounted into the container at the same location and added to the
+   * container's PATH. This allows host-installed toolchains (Go, Rust, Python, etc.)
+   * to be accessible within the firewall container.
+   *
+   * Paths must be absolute and exist on the host. They are mounted read-only.
+   *
+   * @example ['/usr/local/go/bin', '/home/user/.cargo/bin']
+   */
+  mountBinPaths?: string[];
 }
 
 /**

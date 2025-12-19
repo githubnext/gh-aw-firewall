@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, parseBinPaths } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -764,6 +764,128 @@ describe('cli', () => {
 
     it('should throw error if any server is invalid', () => {
       expect(() => parseDnsServers('8.8.8.8,invalid,1.1.1.1')).toThrow('Invalid DNS server IP address: invalid');
+    });
+  });
+
+  describe('bin paths parsing', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      // Create a temporary directory for testing
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-bin-test-'));
+    });
+
+    afterEach(() => {
+      // Clean up the test directory
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should parse valid bin path', () => {
+      const binDir = path.join(testDir, 'bin');
+      fs.mkdirSync(binDir);
+
+      const result = parseBinPaths(binDir);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.paths).toEqual([binDir]);
+      }
+    });
+
+    it('should parse multiple comma-separated bin paths', () => {
+      const binDir1 = path.join(testDir, 'bin1');
+      const binDir2 = path.join(testDir, 'bin2');
+      fs.mkdirSync(binDir1);
+      fs.mkdirSync(binDir2);
+
+      const result = parseBinPaths(`${binDir1},${binDir2}`);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.paths).toEqual([binDir1, binDir2]);
+      }
+    });
+
+    it('should trim whitespace from paths', () => {
+      const binDir = path.join(testDir, 'bin');
+      fs.mkdirSync(binDir);
+
+      const result = parseBinPaths(`  ${binDir}  `);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.paths).toEqual([binDir]);
+      }
+    });
+
+    it('should filter empty paths', () => {
+      const binDir = path.join(testDir, 'bin');
+      fs.mkdirSync(binDir);
+
+      const result = parseBinPaths(`${binDir},,`);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.paths).toEqual([binDir]);
+      }
+    });
+
+    it('should reject relative path', () => {
+      const result = parseBinPaths('relative/path');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidPath).toBe('relative/path');
+        expect(result.reason).toContain('Path must be absolute');
+      }
+    });
+
+    it('should reject non-existent path', () => {
+      const nonExistentPath = '/tmp/this-path-definitely-does-not-exist-67890';
+      const result = parseBinPaths(nonExistentPath);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidPath).toBe(nonExistentPath);
+        expect(result.reason).toContain('Path does not exist');
+      }
+    });
+
+    it('should reject path that is not a directory', () => {
+      const filePath = path.join(testDir, 'file.txt');
+      fs.writeFileSync(filePath, 'content');
+
+      const result = parseBinPaths(filePath);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidPath).toBe(filePath);
+        expect(result.reason).toContain('Path is not a directory');
+      }
+    });
+
+    it('should return empty paths for empty input', () => {
+      const result = parseBinPaths('');
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.paths).toEqual([]);
+      }
+    });
+
+    it('should return error on first invalid path', () => {
+      const binDir = path.join(testDir, 'bin');
+      fs.mkdirSync(binDir);
+      const invalidPath = '/nonexistent/path';
+
+      const result = parseBinPaths(`${binDir},${invalidPath}`);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.invalidPath).toBe(invalidPath);
+      }
     });
   });
 });

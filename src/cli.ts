@@ -292,6 +292,64 @@ export function parseVolumeMounts(mounts: string[]): ParseVolumeMountsResult | P
   return { success: true, mounts: result };
 }
 
+/**
+ * Result of parsing bin paths
+ */
+export interface ParseBinPathsResult {
+  success: true;
+  paths: string[];
+}
+
+export interface ParseBinPathsError {
+  success: false;
+  invalidPath: string;
+  reason: string;
+}
+
+/**
+ * Parses and validates bin paths from a comma-separated string
+ * @param input Comma-separated string of bin paths
+ * @returns ParseBinPathsResult on success, or ParseBinPathsError with details on failure
+ */
+export function parseBinPaths(input: string): ParseBinPathsResult | ParseBinPathsError {
+  const result: string[] = [];
+  const paths = input.split(',').map(p => p.trim()).filter(p => p.length > 0);
+
+  for (const binPath of paths) {
+    // Validate path is absolute
+    if (!binPath.startsWith('/')) {
+      return {
+        success: false,
+        invalidPath: binPath,
+        reason: 'Path must be absolute (start with /)'
+      };
+    }
+
+    // Validate path exists
+    if (!fs.existsSync(binPath)) {
+      return {
+        success: false,
+        invalidPath: binPath,
+        reason: `Path does not exist: ${binPath}`
+      };
+    }
+
+    // Validate path is a directory
+    const stat = fs.statSync(binPath);
+    if (!stat.isDirectory()) {
+      return {
+        success: false,
+        invalidPath: binPath,
+        reason: `Path is not a directory: ${binPath}`
+      };
+    }
+
+    result.push(binPath);
+  }
+
+  return { success: true, paths: result };
+}
+
 const program = new Command();
 
 program
@@ -373,6 +431,12 @@ program
   .option(
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
+  )
+  .option(
+    '--mount-bin-paths <paths>',
+    'Comma-separated list of host directories containing binaries to add to container PATH.\n' +
+    '                                   These paths are mounted read-only and added to PATH.\n' +
+    '                                   Example: /usr/local/go/bin,/home/user/.cargo/bin'
   )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
@@ -490,6 +554,19 @@ program
       process.exit(1);
     }
 
+    // Parse and validate bin paths from --mount-bin-paths flag
+    let mountBinPaths: string[] | undefined = undefined;
+    if (options.mountBinPaths) {
+      const parsed = parseBinPaths(options.mountBinPaths);
+      if (!parsed.success) {
+        logger.error(`Invalid bin path: ${parsed.invalidPath}`);
+        logger.error(`Reason: ${parsed.reason}`);
+        process.exit(1);
+      }
+      mountBinPaths = parsed.paths;
+      logger.debug(`Parsed ${mountBinPaths.length} bin path(s) to mount`);
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       agentCommand,
@@ -506,6 +583,7 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      mountBinPaths,
     };
 
     // Warn if --env-all is used

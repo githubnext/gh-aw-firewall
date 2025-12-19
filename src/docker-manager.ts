@@ -287,6 +287,19 @@ export function generateDockerCompose(
     agentVolumes.unshift('/:/host:rw');
   }
 
+  // Add bin paths mounts and update PATH if specified
+  if (config.mountBinPaths && config.mountBinPaths.length > 0) {
+    logger.debug(`Adding ${config.mountBinPaths.length} bin path mount(s)`);
+    config.mountBinPaths.forEach(binPath => {
+      // Mount each bin path at the same location, read-only
+      agentVolumes.push(`${binPath}:${binPath}:ro`);
+    });
+    // Prepend bin paths to PATH so they take precedence
+    const binPathsStr = config.mountBinPaths.join(':');
+    environment.PATH = `${binPathsStr}:${environment.PATH}`;
+    logger.debug(`Updated PATH to include bin paths: ${environment.PATH}`);
+  }
+
   // Agent service configuration
   const agentService: any = {
     container_name: 'awf-agent',

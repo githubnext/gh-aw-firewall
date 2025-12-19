@@ -375,5 +375,87 @@ describe('docker-manager', () => {
         expect(result.services.agent.working_dir).toBe('/var/lib/app/data');
       });
     });
+
+    describe('mountBinPaths option', () => {
+      it('should mount bin paths read-only when specified', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          mountBinPaths: ['/usr/local/go/bin', '/home/user/.cargo/bin'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const volumes = agent.volumes as string[];
+
+        expect(volumes).toContain('/usr/local/go/bin:/usr/local/go/bin:ro');
+        expect(volumes).toContain('/home/user/.cargo/bin:/home/user/.cargo/bin:ro');
+      });
+
+      it('should prepend bin paths to PATH environment variable', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          mountBinPaths: ['/usr/local/go/bin', '/home/user/.cargo/bin'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+
+        expect(env.PATH).toBe('/usr/local/go/bin:/home/user/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
+      });
+
+      it('should not modify PATH when no bin paths specified', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+
+        expect(env.PATH).toBe('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
+      });
+
+      it('should work with single bin path', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          mountBinPaths: ['/opt/bin'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        const volumes = agent.volumes as string[];
+
+        expect(volumes).toContain('/opt/bin:/opt/bin:ro');
+        expect(env.PATH).toBe('/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
+      });
+
+      it('should work alongside custom volume mounts', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          volumeMounts: ['/workspace:/workspace:ro'],
+          mountBinPaths: ['/usr/local/go/bin'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const volumes = agent.volumes as string[];
+        const env = agent.environment as Record<string, string>;
+
+        // Should NOT include blanket /:/host:rw mount (custom mounts specified)
+        expect(volumes).not.toContain('/:/host:rw');
+        // Should include custom mount
+        expect(volumes).toContain('/workspace:/workspace:ro');
+        // Should include bin path mount
+        expect(volumes).toContain('/usr/local/go/bin:/usr/local/go/bin:ro');
+        // PATH should be updated
+        expect(env.PATH).toBe('/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
+      });
+
+      it('should preserve bin path order in PATH', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          mountBinPaths: ['/first/bin', '/second/bin', '/third/bin'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+
+        expect(env.PATH).toBe('/first/bin:/second/bin:/third/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
+      });
+    });
   });
 });
