@@ -11,21 +11,12 @@ tools:
     toolsets: [repos]
   web-fetch:
   bash:
-    - "curl:*"
-    - "nslookup:*"
-    - "ls:*"
-    - "cat:*"
-    - "echo:*"
-    - "rm:*"
   cache-memory: true
 network:
   allowed:
     - github
-  firewall: true
 safe-outputs:
-  create-issue:
-    title-prefix: "[firewall-test] "
-    labels: [security, automated-test]
+  add-comment:
     max: 1
 timeout-minutes: 30
 ---
