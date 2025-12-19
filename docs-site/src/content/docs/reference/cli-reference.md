@@ -232,6 +232,118 @@ awf logs --source running -f
 Log sources are auto-discovered in this order: running containers, `AWF_LOGS_DIR` environment variable, then preserved log directories in `/tmp/squid-logs-*`.
 :::
 
+### `awf logs stats`
+
+Show aggregated statistics from firewall logs.
+
+```bash
+awf logs stats [options]
+```
+
+:::note[stats vs summary]
+Use `awf logs stats` for terminal output (defaults to colorized `pretty` format). Use `awf logs summary` for CI/CD integration (defaults to `markdown` format for `$GITHUB_STEP_SUMMARY`). Both commands provide the same data in different default formats.
+:::
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format <format>` | string | `pretty` | Output format: `json`, `markdown`, `pretty` |
+| `--source <path>` | string | auto | Path to log directory or `running` for live container |
+
+#### Output Formats
+
+| Format | Description |
+|--------|-------------|
+| `pretty` | Colorized terminal output with summary and domain breakdown (default) |
+| `markdown` | Markdown table format suitable for documentation |
+| `json` | Structured JSON for programmatic consumption |
+
+#### Examples
+
+```bash
+# Show stats with colorized terminal output
+awf logs stats
+
+# Get stats in JSON format for scripting
+awf logs stats --format json
+
+# Get stats in markdown format
+awf logs stats --format markdown
+
+# Use a specific log directory
+awf logs stats --source /tmp/squid-logs-1234567890
+```
+
+#### Example Output (Pretty)
+
+```
+Firewall Statistics
+────────────────────────────────────────
+
+Total Requests:  150
+Allowed:         145 (96.7%)
+Denied:          5 (3.3%)
+Unique Domains:  12
+
+Domains:
+  api.github.com       50 allowed, 0 denied
+  registry.npmjs.org   95 allowed, 0 denied
+  evil.com             0 allowed, 5 denied
+```
+
+### `awf logs summary`
+
+Generate summary report optimized for GitHub Actions step summaries.
+
+```bash
+awf logs summary [options]
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format <format>` | string | `markdown` | Output format: `json`, `markdown`, `pretty` |
+| `--source <path>` | string | auto | Path to log directory or `running` for live container |
+
+:::tip[GitHub Actions]
+The `summary` command defaults to markdown format, making it perfect for piping directly to `$GITHUB_STEP_SUMMARY`.
+:::
+
+#### Examples
+
+```bash
+# Generate markdown summary (default)
+awf logs summary
+
+# Add to GitHub Actions step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+
+# Get summary in JSON format
+awf logs summary --format json
+
+# Get summary with colorized terminal output
+awf logs summary --format pretty
+```
+
+#### Example Output (Markdown)
+
+```markdown
+### Firewall Activity
+
+<details>
+<summary>150 requests | 145 allowed | 5 blocked | 12 unique domains</summary>
+
+| Domain | Allowed | Denied |
+|--------|---------|--------|
+| api.github.com | 50 | 0 |
+| registry.npmjs.org | 95 | 0 |
+| evil.com | 0 | 5 |
+
+</details>
+```
+
 ## See Also
 
 - [Quick Start Guide](/gh-aw-firewall/quickstart) - Getting started with examples

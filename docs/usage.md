@@ -538,6 +538,52 @@ awf logs --format json | jq -s 'group_by(.isAllowed) | map({allowed: .[0].isAllo
 
 ## Log Analysis
 
+### Using `awf logs stats`
+
+Get aggregated statistics from firewall logs including total requests, allowed/denied counts, and per-domain breakdown:
+
+```bash
+# Pretty terminal output (default)
+awf logs stats
+
+# JSON format for scripting
+awf logs stats --format json
+
+# Markdown format
+awf logs stats --format markdown
+```
+
+Example output:
+```
+Firewall Statistics
+────────────────────────────────────────
+
+Total Requests:  150
+Allowed:         145 (96.7%)
+Denied:          5 (3.3%)
+Unique Domains:  12
+
+Domains:
+  api.github.com       50 allowed, 0 denied
+  registry.npmjs.org   95 allowed, 0 denied
+  evil.com             0 allowed, 5 denied
+```
+
+### Using `awf logs summary` (GitHub Actions)
+
+Generate a markdown summary optimized for GitHub Actions:
+
+```bash
+# Generate markdown summary and append to step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+This creates a collapsible summary in your GitHub Actions workflow output showing all allowed and blocked domains.
+
+### Manual Log Queries
+
+For more granular analysis, you can query the logs directly:
+
 Find all blocked domains:
 ```bash
 docker exec awf-squid grep "TCP_DENIED" /var/log/squid/access.log | awk '{print $3}' | sort -u

@@ -188,24 +188,50 @@ docker exec awf-squid grep "curl" /var/log/squid/access.log
 
 ## Statistics
 
-### Total Requests
+### Using `awf logs stats`
+
+Get aggregated statistics including total requests, allowed/denied counts, and per-domain breakdown:
+
+```bash
+# Pretty terminal output (default)
+awf logs stats
+
+# JSON format for scripting
+awf logs stats --format json
+
+# Markdown format
+awf logs stats --format markdown
+```
+
+### Using `awf logs summary` for GitHub Actions
+
+Generate a markdown summary optimized for GitHub Actions step summaries:
+
+```bash
+# Add summary to GitHub Actions step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+### Manual Statistics Queries
+
+#### Total Requests
 ```bash
 docker exec awf-squid wc -l /var/log/squid/access.log
 ```
 
-### Blocked vs Allowed Count
+#### Blocked vs Allowed Count
 ```bash
 echo "Blocked: $(docker exec awf-squid grep -c TCP_DENIED /var/log/squid/access.log)"
 echo "Allowed: $(docker exec awf-squid grep -cE 'TCP_TUNNEL|TCP_MISS' /var/log/squid/access.log)"
 ```
 
-### Top 10 Accessed Domains
+#### Top 10 Accessed Domains
 ```bash
 docker exec awf-squid awk '{print $3}' /var/log/squid/access.log | \
   sort | uniq -c | sort -rn | head -10
 ```
 
-### Unique Client IPs
+#### Unique Client IPs
 ```bash
 docker exec awf-squid awk '{split($2,a,":"); print a[1]}' /var/log/squid/access.log | sort -u
 ```
