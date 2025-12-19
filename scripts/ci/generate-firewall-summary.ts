@@ -42,6 +42,8 @@ function analyzeEntries(entries: ParsedLogEntry[]): FirewallAnalysis {
   for (const entry of entries) {
     // Skip entries with no domain (shouldn't happen, but just in case)
     if (!entry.domain || entry.domain === '-') {
+      // This shouldn't normally happen - if we see many of these,
+      // it might indicate an issue with the log parser
       continue;
     }
 
@@ -152,14 +154,19 @@ function main(): void {
     const filePath = path.join(logsDir, file);
     console.log(`Parsing firewall log: ${file}`);
 
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split('\n').filter(line => line.trim());
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim());
 
-    for (const line of lines) {
-      const entry = parseLogLine(line);
-      if (entry) {
-        entries.push(entry);
+      for (const line of lines) {
+        const entry = parseLogLine(line);
+        if (entry) {
+          entries.push(entry);
+        }
       }
+    } catch (error) {
+      console.error(`Warning: Failed to read ${file}: ${error instanceof Error ? error.message : error}`);
+      // Continue processing other files
     }
   }
 
@@ -172,8 +179,16 @@ function main(): void {
   // Write to GITHUB_STEP_SUMMARY or stdout
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (summaryPath) {
-    fs.appendFileSync(summaryPath, summary);
-    console.log('Firewall log summary generated successfully');
+    try {
+      fs.appendFileSync(summaryPath, summary);
+      console.log('Firewall log summary generated successfully');
+    } catch (error) {
+      console.error(`Warning: Failed to write to GITHUB_STEP_SUMMARY: ${error instanceof Error ? error.message : error}`);
+      // Fall back to stdout
+      console.log('');
+      console.log('--- Summary ---');
+      console.log(summary);
+    }
   } else {
     console.log('');
     console.log('--- Summary ---');
