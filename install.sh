@@ -73,6 +73,27 @@ check_requirements() {
     fi
 }
 
+# Check OS and architecture
+check_platform() {
+    local os arch
+    os=$(uname -s)
+    arch=$(uname -m)
+
+    if [ "$os" != "Linux" ]; then
+        error "Unsupported OS: $os (this installer supports Linux only)"
+        exit 1
+    fi
+
+    case "$arch" in
+        x86_64|amd64)
+            ;;
+        *)
+            error "Unsupported architecture: $arch (supported: x86_64)"
+            exit 1
+            ;;
+    esac
+}
+
 # Get latest release version
 get_latest_version() {
     info "Fetching latest release version..."
@@ -140,9 +161,12 @@ verify_checksum() {
         error "Invalid checksum format: $expected_sum"
         exit 1
     fi
+
+    # Normalize checksum case
+    expected_sum=$(echo "$expected_sum" | tr 'A-F' 'a-f')
     
     # Calculate actual checksum
-    local actual_sum=$(sha256sum "$file" | awk '{print $1}')
+    local actual_sum=$(sha256sum "$file" | awk '{print $1}' | tr 'A-F' 'a-f')
     
     if [ "$expected_sum" != "$actual_sum" ]; then
         error "Checksum verification failed!"
@@ -162,6 +186,7 @@ main() {
     # Check requirements
     check_sudo
     check_requirements
+    check_platform
     
     # Get version
     get_latest_version
