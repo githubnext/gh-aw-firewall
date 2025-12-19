@@ -149,10 +149,16 @@ fi
 runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
 
 echo "[entrypoint] =================================="
-echo "[entrypoint] Dropping privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
+echo "[entrypoint] Dropping CAP_NET_ADMIN capability and privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Drop privileges and execute the provided command as awfuser
-# Using gosu instead of su/sudo for cleaner signal handling
-exec gosu awfuser "$@"
+# Drop CAP_NET_ADMIN capability and privileges, then execute the user command
+# This prevents malicious code from modifying iptables rules to bypass the firewall
+# Security note: capsh --drop removes the capability from the bounding set,
+# preventing any process (even if it escalates to root) from acquiring it
+# The order of operations:
+# 1. capsh drops CAP_NET_ADMIN from the bounding set (cannot be regained)
+# 2. gosu switches to awfuser (drops root privileges)
+# 3. exec replaces the current process with the user command
+exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser $(printf '%q ' "$@")"

@@ -11,7 +11,8 @@ RUN apt-get update && \
     dnsutils \
     net-tools \
     netcat-openbsd \
-    gosu && \
+    gosu \
+    libcap2-bin && \
     # Install Node.js 22 from NodeSource
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
