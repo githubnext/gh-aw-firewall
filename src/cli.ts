@@ -384,6 +384,16 @@ program
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
+  .option(
+    '--ssl-bump',
+    'Enable SSL Bump for HTTPS content inspection (allows URL path filtering for HTTPS)',
+    false
+  )
+  .option(
+    '--allow-urls <urls>',
+    'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
+    '                                   Supports wildcards: https://github.com/githubnext/*'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -532,6 +542,21 @@ program
       process.exit(1);
     }
 
+    // Parse --allow-urls for SSL Bump mode
+    let allowedUrls: string[] | undefined;
+    if (options.allowUrls) {
+      allowedUrls = parseDomains(options.allowUrls);
+      if (allowedUrls.length > 0 && !options.sslBump) {
+        logger.error('--allow-urls requires --ssl-bump to be enabled');
+        process.exit(1);
+      }
+    }
+
+    // Validate SSL Bump option
+    if (options.sslBump) {
+      logger.info('SSL Bump mode enabled - HTTPS content inspection will be performed');
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -549,6 +574,8 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      sslBump: options.sslBump,
+      allowedUrls,
     };
 
     // Warn if --env-all is used

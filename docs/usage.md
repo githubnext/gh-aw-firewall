@@ -8,6 +8,12 @@ sudo awf [options] <command>
 Options:
   --allow-domains <domains>  Comma-separated list of allowed domains (required)
                              Example: github.com,api.github.com,arxiv.org
+  --block-domains <domains>  Comma-separated list of blocked domains
+                             Takes precedence over allowed domains
+  --block-domains-file <path> Path to file containing blocked domains
+  --ssl-bump                 Enable SSL Bump for HTTPS content inspection
+  --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
+                             Example: https://github.com/githubnext/*,https://api.github.com/repos/*
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
@@ -253,6 +259,55 @@ sudo awf \
 - Allow a broad domain (e.g., `*.example.com`) but block specific sensitive subdomains
 - Block known bad domains while allowing a curated list
 - Prevent access to internal services from AI agents
+
+## SSL Bump (HTTPS Content Inspection)
+
+By default, awf filters HTTPS traffic based on domain names only (using SNI). Enable SSL Bump to filter by URL path.
+
+### Enabling SSL Bump
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --ssl-bump \
+  --allow-urls "https://github.com/githubnext/*" \
+  'curl https://github.com/githubnext/some-repo'
+```
+
+### URL Pattern Syntax
+
+URL patterns support wildcards:
+
+```bash
+# Match any path under an organization
+--allow-urls "https://github.com/githubnext/*"
+
+# Match specific API endpoints
+--allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"
+
+# Multiple patterns (comma-separated)
+--allow-urls "https://github.com/org1/*,https://github.com/org2/*"
+```
+
+### How It Works
+
+When `--ssl-bump` is enabled:
+
+1. A per-session CA certificate is generated (valid for 1 day)
+2. The CA is injected into the agent container's trust store
+3. Squid intercepts HTTPS connections to inspect full URLs
+4. Requests are matched against `--allow-urls` patterns
+
+### Security Note
+
+SSL Bump requires intercepting HTTPS traffic:
+
+- The session CA is unique to each execution
+- CA private key exists only in the temporary work directory
+- Short certificate validity (1 day) limits exposure
+- Traffic is re-encrypted between proxy and destination
+
+For more details, see [SSL Bump documentation](ssl-bump.md).
 
 ## Limitations
 
