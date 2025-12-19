@@ -5,21 +5,35 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 > [!TIP]
 > This project is a part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). For more background, check out the [project page on the GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
 
-## Features
+## What it does
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 - **Docker-in-Docker Support**: Spawned containers inherit firewall restrictions
 
-## Quick Start
+## Get started fast
 
-### Requirements
+- **Requirement:** Docker running on your machine
+- **Install:**  
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+  ```
+  Review the script before running, or download the latest release binary and verify it with the published `checksums.txt` before installing.
+- **Run your first command:**  
+  ```bash
+  sudo awf --allow-domains github.com -- curl https://api.github.com
+  ```
+  Use the `--` separator to pass the command you want to run behind the firewall.
 
-- **Docker**: Must be running
+### GitHub Copilot CLI in one line
 
-### Installation
+```bash
+sudo -E awf \
+  --allow-domains github.com,api.github.com,githubusercontent.com \
+  -- copilot --prompt "List my repositories"
+```
 
-**Recommended: One-line installer with SHA verification**
+### Installation Options
 
 ```bash
 # Install latest version
@@ -61,197 +75,21 @@ sudo awf --help
 
 **Docker Image Verification:** All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
 
-### Basic Usage
+## Explore the docs
 
-```bash
-# Simple HTTP request
-sudo awf \
-  --allow-domains github.com,api.github.com \
-  -- curl https://api.github.com
+- [Quick start](docs/quickstart.md) — install, verify, and run your first command
+- [Usage guide](docs/usage.md) — CLI flags, domain allowlists, Docker-in-Docker examples
+- [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
+- [Security model](docs/security.md) — what the firewall protects and how
+- [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
+- [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
+- [Image verification](docs/image-verification.md) — cosign signature verification
 
-# With GitHub Copilot CLI
-sudo -E awf \
-  --allow-domains github.com,api.github.com,googleapis.com \
-  -- copilot --prompt "List my repositories"
+## Development
 
-# Docker-in-Docker (spawned containers inherit firewall)
-sudo awf \
-  --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
-```
-
-**Note:** Always use the `--` separator to pass commands and arguments. This ensures proper argument handling and avoids shell escaping issues.
-
-### Log Viewing
-
-View Squid proxy logs from current or previous runs:
-
-```bash
-# View recent logs with pretty formatting
-awf logs
-
-# Follow logs in real-time
-awf logs -f
-
-# View logs in JSON format for scripting
-awf logs --format json
-
-# List all available log sources
-awf logs --list
-```
-
-## Domain Whitelisting
-
-Domains automatically match all subdomains:
-
-```bash
-# github.com matches api.github.com, raw.githubusercontent.com, etc.
-sudo awf --allow-domains github.com -- curl https://api.github.com  # ✓ works
-```
-
-### Wildcard Patterns
-
-You can use wildcard patterns with `*` to match multiple domains:
-
-```bash
-# Match any subdomain of github.com
---allow-domains '*.github.com'
-
-# Match api-v1.example.com, api-v2.example.com, etc.
---allow-domains 'api-*.example.com'
-
-# Combine plain domains and wildcards
---allow-domains 'github.com,*.googleapis.com,api-*.example.com'
-```
-
-**Pattern rules:**
-- `*` matches any characters (converted to regex `.*`)
-- Patterns are case-insensitive (DNS is case-insensitive)
-- Overly broad patterns like `*`, `*.*`, or `*.*.*` are rejected for security
-- Use quotes around patterns to prevent shell expansion
-
-**Examples:**
-| Pattern | Matches | Does Not Match |
-|---------|---------|----------------|
-| `*.github.com` | `api.github.com`, `raw.github.com` | `github.com` |
-| `api-*.example.com` | `api-v1.example.com`, `api-test.example.com` | `api.example.com` |
-| `github.com` | `github.com`, `api.github.com` | `notgithub.com` |
-
-### Using Command-Line Flag
-
-Common domain lists:
-
-```bash
-# For GitHub Copilot with GitHub API
---allow-domains github.com,api.github.com,githubusercontent.com,googleapis.com
-
-# For MCP servers
---allow-domains github.com,arxiv.org,example.com
-```
-
-### Using a Domains File
-
-You can also specify domains in a file using `--allow-domains-file`:
-
-```bash
-# Create a domains file (see examples/domains.txt)
-cat > allowed-domains.txt << 'EOF'
-# GitHub domains
-github.com
-api.github.com
-
-# NPM registry
-npmjs.org, registry.npmjs.org
-
-# Wildcard patterns
-*.googleapis.com
-
-# Example with inline comment
-example.com # Example domain
-EOF
-
-# Use the domains file
-sudo awf --allow-domains-file allowed-domains.txt -- curl https://api.github.com
-```
-
-**File format:**
-- One domain per line or comma-separated
-- Comments start with `#` (full line or inline)
-- Empty lines are ignored
-- Whitespace is trimmed
-- Wildcard patterns are supported
-
-**Combining both methods:**
-```bash
-# You can use both flags together - domains are merged
-sudo awf \
-  --allow-domains github.com \
-  --allow-domains-file my-domains.txt \
-  -- curl https://api.github.com
-```
-
-
-## Security Considerations
-
-### What This Protects Against
-- Unauthorized egress to non-whitelisted domains
-- Data exfiltration via HTTP/HTTPS
-- DNS-based data exfiltration to unauthorized DNS servers
-- MCP servers accessing unexpected endpoints
-
-### Agent Container Security (User Mode)
-
-The agent container runs user commands as a **non-root user** (`awfuser`) for enhanced security:
-
-- **Privilege Separation**: Privileged operations (iptables setup, DNS configuration) run as root in the entrypoint, then privileges are dropped before executing user commands
-- **UID/GID Matching**: The `awfuser` UID/GID is automatically adjusted to match the host user's UID/GID, ensuring correct file ownership for mounted volumes
-- **Reduced Attack Surface**: If a user command is compromised, it cannot modify system files or escape the container's security boundaries
-- **Docker Access**: The `awfuser` is added to the docker group, allowing MCP servers to spawn containers while still running as non-root
-
-**Note:** The `awf` CLI itself requires `sudo` for host-level iptables configuration (DOCKER-USER chain), but the agent processes (GitHub Copilot CLI, etc.) run without root privileges inside the container.
-
-### DNS Server Restriction
-
-DNS traffic is restricted to trusted servers only (default: Google DNS 8.8.8.8, 8.8.4.4). This prevents DNS-based data exfiltration attacks where an attacker encodes data in DNS queries to a malicious DNS server.
-
-```bash
-# Use custom DNS servers
-sudo awf \
-  --allow-domains github.com \
-  --dns-servers 1.1.1.1,1.0.0.1 \
-  -- curl https://api.github.com
-```
-
-## Development & Testing
-
-### Running Tests
-
-```bash
-# Install dependencies
-npm install
-
-# Run all tests
-npm test
-
-# Run tests with coverage report
-npm run test:coverage
-
-# Run tests in watch mode
-npm run test:watch
-```
-
-### Building
-
-```bash
-# Build TypeScript
-npm run build
-
-# Run linter
-npm run lint
-
-# Clean build artifacts
-npm run clean
-```
+- Install dependencies: `npm install`
+- Run tests: `npm test`
+- Build: `npm run build`
 
 ## Contributing
 
