@@ -275,9 +275,8 @@ export function isDomainMatchedByPattern(
         if (pattern.protocol === 'both') {
           return true;
         }
-        // If domain is 'both', it needs a 'both' pattern to be fully covered
+        // A domain that needs both protocols cannot be fully covered by a single-protocol pattern
         if (domainEntry.protocol === 'both') {
-          // Pattern 'http' or 'https' cannot fully cover a 'both' domain
           continue;
         }
         // Pattern matches specific protocol

@@ -74,7 +74,7 @@ export function generateSquidConfig(config: SquidConfig): string {
   const { domains, port } = config;
 
   // Parse domains into plain domains and wildcard patterns
-  // Note: parseDomainList now preserves protocol info instead of stripping it
+  // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
   // This also validates all inputs and throws on invalid patterns
   const { plainDomains, patterns } = parseDomainList(domains);
 
@@ -188,7 +188,7 @@ export function generateSquidConfig(config: SquidConfig): string {
     }
   }
 
-  // Build the deny rule for domains that allow both protocols
+  // Build the deny rule based on configured domains and their protocols
   const hasBothDomains = domainsByProto.both.length > 0;
   const hasBothPatterns = patternsByProto.both.length > 0;
 
