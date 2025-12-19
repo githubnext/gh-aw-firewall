@@ -130,6 +130,38 @@ You can use wildcard patterns with `*` to match multiple domains:
 | `api-*.example.com` | `api-v1.example.com`, `api-test.example.com` | `api.example.com` |
 | `github.com` | `github.com`, `api.github.com` | `notgithub.com` |
 
+### Protocol-Specific Domains
+
+You can restrict domains to allow only HTTP or only HTTPS traffic by using protocol prefixes:
+
+```bash
+# Allow only HTTPS traffic to secure.example.com
+--allow-domains 'https://secure.example.com'
+
+# Allow only HTTP traffic to legacy-api.example.com
+--allow-domains 'http://legacy-api.example.com'
+
+# Default: allow both HTTP and HTTPS
+--allow-domains 'example.com'
+
+# Mix all three options
+--allow-domains 'example.com,https://secure.example.com,http://legacy.example.com'
+```
+
+**Protocol rules:**
+- `https://domain.com` - Allow only HTTPS (port 443) traffic
+- `http://domain.com` - Allow only HTTP (port 80) traffic
+- `domain.com` - Allow both HTTP and HTTPS (default, backward compatible)
+- Protocol prefixes work with wildcards: `https://*.secure.example.com`
+
+**Examples:**
+| Input | HTTP Traffic | HTTPS Traffic |
+|-------|--------------|---------------|
+| `github.com` | ✓ Allowed | ✓ Allowed |
+| `https://api.github.com` | ✗ Blocked | ✓ Allowed |
+| `http://legacy-api.example.com` | ✓ Allowed | ✗ Blocked |
+| `https://*.secure.example.com` | ✗ Blocked | ✓ Allowed |
+
 ### Using Command-Line Flag
 
 Common domain lists:

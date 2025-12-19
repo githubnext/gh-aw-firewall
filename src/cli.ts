@@ -300,10 +300,12 @@ program
   .version(version)
   .option(
     '--allow-domains <domains>',
-    'Comma-separated list of allowed domains. Supports wildcards:\n' +
-    '                                   github.com        - exact domain + subdomains\n' +
-    '                                   *.github.com      - any subdomain of github.com\n' +
-    '                                   api-*.example.com - api-* subdomains'
+    'Comma-separated list of allowed domains. Supports wildcards and protocol prefixes:\n' +
+    '                                   github.com         - exact domain + subdomains (HTTP & HTTPS)\n' +
+    '                                   *.github.com       - any subdomain of github.com\n' +
+    '                                   api-*.example.com  - api-* subdomains\n' +
+    '                                   https://secure.com - HTTPS only\n' +
+    '                                   http://legacy.com  - HTTP only'
   )
   .option(
     '--allow-domains-file <path>',

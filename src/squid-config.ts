@@ -2,7 +2,56 @@ import { SquidConfig } from './types';
 import {
   parseDomainList,
   isDomainMatchedByPattern,
+  PlainDomainEntry,
+  DomainPattern,
 } from './domain-patterns';
+
+/**
+ * Groups domains/patterns by their protocol restriction
+ */
+interface DomainsByProtocol {
+  http: string[];
+  https: string[];
+  both: string[];
+}
+
+/**
+ * Groups patterns by their protocol restriction
+ */
+interface PatternsByProtocol {
+  http: DomainPattern[];
+  https: DomainPattern[];
+  both: DomainPattern[];
+}
+
+/**
+ * Helper to add leading dot to domain for Squid subdomain matching
+ */
+function formatDomainForSquid(domain: string): string {
+  return domain.startsWith('.') ? domain : `.${domain}`;
+}
+
+/**
+ * Group plain domains by protocol
+ */
+function groupDomainsByProtocol(domains: PlainDomainEntry[]): DomainsByProtocol {
+  const result: DomainsByProtocol = { http: [], https: [], both: [] };
+  for (const entry of domains) {
+    result[entry.protocol].push(entry.domain);
+  }
+  return result;
+}
+
+/**
+ * Group patterns by protocol
+ */
+function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol {
+  const result: PatternsByProtocol = { http: [], https: [], both: [] };
+  for (const pattern of patterns) {
+    result[pattern.protocol].push(pattern);
+  }
+  return result;
+}
 
 /**
  * Generates Squid proxy configuration with domain whitelisting
@@ -11,73 +60,161 @@ import {
  * - Plain domains use dstdomain ACL (efficient, fast matching)
  * - Wildcard patterns use dstdom_regex ACL (regex matching)
  *
+ * Supports protocol-specific domain restrictions:
+ * - http://domain.com  -> allow only HTTP traffic
+ * - https://domain.com -> allow only HTTPS traffic
+ * - domain.com         -> allow both HTTP and HTTPS (default)
+ *
  * @example
  * // Plain domain: github.com -> acl allowed_domains dstdomain .github.com
  * // Wildcard: *.github.com -> acl allowed_domains_regex dstdom_regex -i ^.*\.github\.com$
+ * // HTTP only: http://api.example.com -> separate ACL with !CONNECT rule
  */
 export function generateSquidConfig(config: SquidConfig): string {
   const { domains, port } = config;
 
-  // Normalize domains - remove protocol if present
-  const normalizedDomains = domains.map(domain => {
-    return domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  });
-
   // Parse domains into plain domains and wildcard patterns
+  // Note: parseDomainList now preserves protocol info instead of stripping it
   // This also validates all inputs and throws on invalid patterns
-  const { plainDomains, patterns } = parseDomainList(normalizedDomains);
+  const { plainDomains, patterns } = parseDomainList(domains);
 
-  // Remove redundant plain subdomains (e.g., if github.com is present, api.github.com is redundant)
-  const uniquePlainDomains = plainDomains.filter((domain, index, arr) => {
-    // Check if this domain is a subdomain of another plain domain in the list
-    return !arr.some((otherDomain, otherIndex) => {
+  // Remove redundant plain subdomains within same protocol
+  // (e.g., if github.com with 'both' is present, api.github.com with 'both' is redundant)
+  const uniquePlainDomains = plainDomains.filter((entry, index, arr) => {
+    // Check if this domain is a subdomain of another plain domain with compatible protocol
+    return !arr.some((other, otherIndex) => {
       if (index === otherIndex) return false;
-      // Check if domain is a subdomain of otherDomain (but not an exact duplicate)
-      return domain !== otherDomain && domain.endsWith('.' + otherDomain);
+      // Check if this domain is a subdomain of other
+      if (entry.domain === other.domain || !entry.domain.endsWith('.' + other.domain)) {
+        return false;
+      }
+      // Subdomain is only redundant if parent has same or broader protocol
+      return other.protocol === 'both' || other.protocol === entry.protocol;
     });
   });
 
   // Remove plain domains that are already covered by wildcard patterns
-  const filteredPlainDomains = uniquePlainDomains.filter(domain => {
-    return !isDomainMatchedByPattern(domain, patterns);
+  const filteredPlainDomains = uniquePlainDomains.filter(entry => {
+    return !isDomainMatchedByPattern(entry, patterns);
   });
 
-  // Generate ACL entries for plain domains using dstdomain (fast matching)
-  const domainAcls = filteredPlainDomains
-    .map(domain => {
-      // Add leading dot for subdomain matching unless already present
-      const domainPattern = domain.startsWith('.') ? domain : `.${domain}`;
-      return `acl allowed_domains dstdomain ${domainPattern}`;
-    })
-    .join('\n');
+  // Group domains and patterns by protocol
+  const domainsByProto = groupDomainsByProtocol(filteredPlainDomains);
+  const patternsByProto = groupPatternsByProtocol(patterns);
 
-  // Generate ACL entries for wildcard patterns using dstdom_regex
-  // Use -i flag for case-insensitive matching (DNS is case-insensitive)
-  const patternAcls = patterns
-    .map(p => `acl allowed_domains_regex dstdom_regex -i ${p.regex}`)
-    .join('\n');
+  // Generate ACL entries
+  const aclLines: string[] = [];
+  const accessRules: string[] = [];
 
-  // Determine the ACL section and deny rule based on what we have
-  let aclSection = '';
+  // === DOMAINS FOR BOTH PROTOCOLS (current behavior) ===
+  if (domainsByProto.both.length > 0) {
+    aclLines.push('# ACL definitions for allowed domains (HTTP and HTTPS)');
+    for (const domain of domainsByProto.both) {
+      aclLines.push(`acl allowed_domains dstdomain ${formatDomainForSquid(domain)}`);
+    }
+  }
+
+  // === PATTERNS FOR BOTH PROTOCOLS ===
+  if (patternsByProto.both.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for allowed domain patterns (HTTP and HTTPS)');
+    for (const p of patternsByProto.both) {
+      aclLines.push(`acl allowed_domains_regex dstdom_regex -i ${p.regex}`);
+    }
+  }
+
+  // === HTTP-ONLY DOMAINS ===
+  if (domainsByProto.http.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for HTTP-only domains');
+    for (const domain of domainsByProto.http) {
+      aclLines.push(`acl allowed_http_only dstdomain ${formatDomainForSquid(domain)}`);
+    }
+  }
+
+  // === HTTP-ONLY PATTERNS ===
+  if (patternsByProto.http.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for HTTP-only domain patterns');
+    for (const p of patternsByProto.http) {
+      aclLines.push(`acl allowed_http_only_regex dstdom_regex -i ${p.regex}`);
+    }
+  }
+
+  // === HTTPS-ONLY DOMAINS ===
+  if (domainsByProto.https.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for HTTPS-only domains');
+    for (const domain of domainsByProto.https) {
+      aclLines.push(`acl allowed_https_only dstdomain ${formatDomainForSquid(domain)}`);
+    }
+  }
+
+  // === HTTPS-ONLY PATTERNS ===
+  if (patternsByProto.https.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for HTTPS-only domain patterns');
+    for (const p of patternsByProto.https) {
+      aclLines.push(`acl allowed_https_only_regex dstdom_regex -i ${p.regex}`);
+    }
+  }
+
+  // Build access rules
+  // Order matters: allow rules come before deny rules
+
+  // Allow HTTP-only domains for non-CONNECT requests
+  const hasHttpOnly = domainsByProto.http.length > 0 || patternsByProto.http.length > 0;
+  if (hasHttpOnly) {
+    if (domainsByProto.http.length > 0 && patternsByProto.http.length > 0) {
+      accessRules.push('http_access allow !CONNECT allowed_http_only');
+      accessRules.push('http_access allow !CONNECT allowed_http_only_regex');
+    } else if (domainsByProto.http.length > 0) {
+      accessRules.push('http_access allow !CONNECT allowed_http_only');
+    } else {
+      accessRules.push('http_access allow !CONNECT allowed_http_only_regex');
+    }
+  }
+
+  // Allow HTTPS-only domains for CONNECT requests
+  const hasHttpsOnly = domainsByProto.https.length > 0 || patternsByProto.https.length > 0;
+  if (hasHttpsOnly) {
+    if (domainsByProto.https.length > 0 && patternsByProto.https.length > 0) {
+      accessRules.push('http_access allow CONNECT allowed_https_only');
+      accessRules.push('http_access allow CONNECT allowed_https_only_regex');
+    } else if (domainsByProto.https.length > 0) {
+      accessRules.push('http_access allow CONNECT allowed_https_only');
+    } else {
+      accessRules.push('http_access allow CONNECT allowed_https_only_regex');
+    }
+  }
+
+  // Build the deny rule for domains that allow both protocols
+  const hasBothDomains = domainsByProto.both.length > 0;
+  const hasBothPatterns = patternsByProto.both.length > 0;
+
   let denyRule: string;
-
-  if (filteredPlainDomains.length > 0 && patterns.length > 0) {
-    // Both plain domains and patterns
-    aclSection = `# ACL definitions for allowed domains\n${domainAcls}\n\n# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
+  if (hasBothDomains && hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains !allowed_domains_regex';
-  } else if (filteredPlainDomains.length > 0) {
-    // Only plain domains
-    aclSection = `# ACL definitions for allowed domains\n${domainAcls}`;
+  } else if (hasBothDomains) {
     denyRule = 'http_access deny !allowed_domains';
-  } else if (patterns.length > 0) {
-    // Only patterns
-    aclSection = `# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
+  } else if (hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains_regex';
+  } else if (hasHttpOnly || hasHttpsOnly) {
+    // Only protocol-specific domains - deny all by default
+    // The allow rules above will permit the specific traffic
+    denyRule = 'http_access deny all';
   } else {
-    // No domains - deny all (edge case, should not happen with validation)
-    aclSection = '# No domains configured';
+    // No domains configured
     denyRule = 'http_access deny all';
   }
+
+  // Combine ACL section
+  const aclSection = aclLines.length > 0 ? aclLines.join('\n') : '# No domains configured';
+
+  // Combine access rules section for protocol-specific domains
+  const accessRulesSection = accessRules.length > 0
+    ? '# Protocol-specific domain access rules\n' + accessRules.join('\n') + '\n\n'
+    : '';
 
   return `# Squid configuration for egress traffic control
 # Generated by awf
@@ -115,7 +252,7 @@ acl CONNECT method CONNECT
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 
-# Deny requests to unknown domains (not in allow-list)
+${accessRulesSection}# Deny requests to unknown domains (not in allow-list)
 # This applies to all sources including localnet
 ${denyRule}
 
