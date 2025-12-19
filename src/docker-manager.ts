@@ -379,7 +379,9 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
       fs.copyFileSync(altSeccompPath, seccompDestPath);
       logger.debug(`Seccomp profile written to: ${seccompDestPath}`);
     } else {
-      logger.warn(`Seccomp profile not found at ${seccompSourcePath} or ${altSeccompPath}`);
+      const message = `Seccomp profile not found at ${seccompSourcePath} or ${altSeccompPath}. Container security hardening requires the seccomp profile.`;
+      logger.error(message);
+      throw new Error(message);
     }
   }
 
