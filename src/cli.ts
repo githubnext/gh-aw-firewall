@@ -312,6 +312,14 @@ program
     'Path to file containing allowed domains (one per line or comma-separated, supports # comments)'
   )
   .option(
+    '--block-domains <domains>',
+    'Comma-separated list of blocked domains (takes precedence over allowed domains). Supports wildcards.'
+  )
+  .option(
+    '--block-domains-file <path>',
+    'Path to file containing blocked domains (one per line or comma-separated, supports # comments)'
+  )
+  .option(
     '--log-level <level>',
     'Log level: debug, info, warn, error',
     'info'
@@ -459,6 +467,38 @@ program
       }
     }
 
+    // Parse blocked domains from both --block-domains flag and --block-domains-file
+    let blockedDomains: string[] = [];
+
+    // Parse blocked domains from command-line flag if provided
+    if (options.blockDomains) {
+      blockedDomains = parseDomains(options.blockDomains);
+    }
+
+    // Parse blocked domains from file if provided
+    if (options.blockDomainsFile) {
+      try {
+        const fileBlockedDomainsArray = parseDomainsFile(options.blockDomainsFile);
+        blockedDomains.push(...fileBlockedDomainsArray);
+      } catch (error) {
+        logger.error(`Failed to read blocked domains file: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
+
+    // Remove duplicates from blocked domains
+    blockedDomains = [...new Set(blockedDomains)];
+
+    // Validate all blocked domains and patterns
+    for (const domain of blockedDomains) {
+      try {
+        validateDomainOrPattern(domain);
+      } catch (error) {
+        logger.error(`Invalid blocked domain or pattern: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
+
     // Parse additional environment variables from --env flags
     let additionalEnv: Record<string, string> = {};
     if (options.env && Array.isArray(options.env)) {
@@ -494,6 +534,7 @@ program
 
     const config: WrapperConfig = {
       allowedDomains,
+      blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
       agentCommand,
       logLevel,
       keepContainers: options.keepContainers,
@@ -523,6 +564,9 @@ program
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
+    if (blockedDomains.length > 0) {
+      logger.info(`Blocked domains: ${blockedDomains.join(', ')}`);
+    }
     logger.debug(`DNS servers: ${dnsServers.join(', ')}`);
 
     let exitCode = 0;

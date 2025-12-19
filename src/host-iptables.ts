@@ -276,10 +276,23 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
 
   // Add IPv4 DNS server rules using iptables
   for (const dnsServer of ipv4DnsServers) {
+    // Log DNS queries first (LOG doesn't terminate processing)
+    await execa('iptables', [
+      '-t', 'filter', '-A', CHAIN_NAME,
+      '-p', 'udp', '-d', dnsServer, '--dport', '53',
+      '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+    ]);
+
     await execa('iptables', [
       '-t', 'filter', '-A', CHAIN_NAME,
       '-p', 'udp', '-d', dnsServer, '--dport', '53',
       '-j', 'ACCEPT',
+    ]);
+
+    await execa('iptables', [
+      '-t', 'filter', '-A', CHAIN_NAME,
+      '-p', 'tcp', '-d', dnsServer, '--dport', '53',
+      '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
     ]);
 
     await execa('iptables', [
@@ -336,10 +349,23 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
 
       // 4. Allow DNS ONLY to specified trusted IPv6 DNS servers
       for (const dnsServer of ipv6DnsServers) {
+        // Log DNS queries first (LOG doesn't terminate processing)
+        await execa('ip6tables', [
+          '-t', 'filter', '-A', CHAIN_NAME_V6,
+          '-p', 'udp', '-d', dnsServer, '--dport', '53',
+          '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+        ]);
+
         await execa('ip6tables', [
           '-t', 'filter', '-A', CHAIN_NAME_V6,
           '-p', 'udp', '-d', dnsServer, '--dport', '53',
           '-j', 'ACCEPT',
+        ]);
+
+        await execa('ip6tables', [
+          '-t', 'filter', '-A', CHAIN_NAME_V6,
+          '-p', 'tcp', '-d', dnsServer, '--dport', '53',
+          '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
         ]);
 
         await execa('ip6tables', [

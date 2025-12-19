@@ -36,6 +36,19 @@ export interface WrapperConfig {
   allowedDomains: string[];
 
   /**
+   * List of blocked domains for HTTP/HTTPS egress traffic
+   * 
+   * Blocked domains take precedence over allowed domains. If a domain matches
+   * both the allowlist and blocklist, it will be blocked. This allows for
+   * fine-grained control like allowing '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as allowedDomains.
+   * 
+   * @example ['internal.example.com', '*.sensitive.org']
+   */
+  blockedDomains?: string[];
+
+  /**
    * The command to execute inside the firewall container
    * 
    * This command runs inside an Ubuntu-based Docker container with iptables rules
@@ -239,7 +252,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * 
  * Used to generate squid.conf with domain-based access control lists (ACLs).
  * The generated configuration implements L7 (application layer) filtering for
- * HTTP and HTTPS traffic using domain whitelisting.
+ * HTTP and HTTPS traffic using domain whitelisting and optional blocklisting.
  */
 export interface SquidConfig {
   /**
@@ -250,6 +263,17 @@ export interface SquidConfig {
    * which matches both 'github.com' and all subdomains like 'api.github.com'.
    */
   domains: string[];
+
+  /**
+   * List of blocked domains for proxy access
+   * 
+   * These domains are explicitly denied. Blocked domains take precedence over
+   * allowed domains. This allows for fine-grained control like allowing 
+   * '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as domains.
+   */
+  blockedDomains?: string[];
 
   /**
    * Port number for the Squid proxy to listen on
@@ -472,13 +496,72 @@ export interface DockerService {
 
   /**
    * Linux capabilities to add to the container
-   * 
+   *
    * Grants additional privileges beyond the default container capabilities.
    * The agent container requires NET_ADMIN for iptables manipulation.
-   * 
+   *
    * @example ['NET_ADMIN']
    */
   cap_add?: string[];
+
+  /**
+   * Linux capabilities to drop from the container
+   *
+   * Removes specific capabilities to reduce attack surface. The firewall drops
+   * capabilities that could be used for container escape or firewall bypass.
+   *
+   * @example ['NET_RAW', 'SYS_PTRACE', 'SYS_MODULE']
+   */
+  cap_drop?: string[];
+
+  /**
+   * Security options for the container
+   *
+   * Used for seccomp profiles, AppArmor profiles, and other security configurations.
+   *
+   * @example ['seccomp=/path/to/profile.json']
+   */
+  security_opt?: string[];
+
+  /**
+   * Memory limit for the container
+   *
+   * Maximum amount of memory the container can use. Prevents DoS attacks
+   * via memory exhaustion.
+   *
+   * @example '4g'
+   * @example '512m'
+   */
+  mem_limit?: string;
+
+  /**
+   * Total memory limit including swap
+   *
+   * Set equal to mem_limit to disable swap usage.
+   *
+   * @example '4g'
+   */
+  memswap_limit?: string;
+
+  /**
+   * Maximum number of PIDs (processes) in the container
+   *
+   * Limits fork bombs and process exhaustion attacks.
+   *
+   * @example 1000
+   */
+  pids_limit?: number;
+
+  /**
+   * CPU shares (relative weight)
+   *
+   * Controls CPU allocation relative to other containers.
+   * Default is 1024.
+   *
+   * @example 1024
+   * @example 512
+   */
+  cpu_shares?: number;
 
   /**
    * Keep STDIN open even if not attached

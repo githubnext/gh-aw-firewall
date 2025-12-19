@@ -54,11 +54,13 @@ function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol 
 }
 
 /**
- * Generates Squid proxy configuration with domain whitelisting
+ * Generates Squid proxy configuration with domain whitelisting and optional blocklisting
  *
  * Supports both plain domains and wildcard patterns:
  * - Plain domains use dstdomain ACL (efficient, fast matching)
  * - Wildcard patterns use dstdom_regex ACL (regex matching)
+ *
+ * Blocked domains take precedence over allowed domains.
  *
  * Supports protocol-specific domain restrictions:
  * - http://domain.com  -> allow only HTTP traffic
@@ -69,9 +71,10 @@ function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol 
  * // Plain domain: github.com -> acl allowed_domains dstdomain .github.com
  * // Wildcard: *.github.com -> acl allowed_domains_regex dstdom_regex -i ^.*\.github\.com$
  * // HTTP only: http://api.example.com -> separate ACL with !CONNECT rule
+ * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, port } = config;
+  const { domains, blockedDomains, port } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -192,6 +195,40 @@ export function generateSquidConfig(config: SquidConfig): string {
   const hasBothDomains = domainsByProto.both.length > 0;
   const hasBothPatterns = patternsByProto.both.length > 0;
 
+  // Process blocked domains (optional) - blocklist takes precedence over allowlist
+  const blockedAclLines: string[] = [];
+  const blockedAccessRules: string[] = [];
+
+  if (blockedDomains && blockedDomains.length > 0) {
+    // Normalize blocked domains
+    const normalizedBlockedDomains = blockedDomains.map(domain => {
+      return domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    });
+
+    // Parse blocked domains into plain domains and wildcard patterns
+    const { plainDomains: blockedPlainDomains, patterns: blockedPatterns } = parseDomainList(normalizedBlockedDomains);
+
+    // Generate ACL entries for blocked plain domains
+    if (blockedPlainDomains.length > 0) {
+      blockedAclLines.push('# ACL definitions for blocked domains');
+      for (const entry of blockedPlainDomains) {
+        blockedAclLines.push(`acl blocked_domains dstdomain ${formatDomainForSquid(entry.domain)}`);
+      }
+      blockedAccessRules.push('http_access deny blocked_domains');
+    }
+
+    // Generate ACL entries for blocked wildcard patterns
+    if (blockedPatterns.length > 0) {
+      blockedAclLines.push('');
+      blockedAclLines.push('# ACL definitions for blocked domain patterns (wildcard)');
+      for (const p of blockedPatterns) {
+        blockedAclLines.push(`acl blocked_domains_regex dstdom_regex -i ${p.regex}`);
+      }
+      blockedAccessRules.push('http_access deny blocked_domains_regex');
+    }
+  }
+
+  // Build the deny rule based on configured domains and their protocols
   let denyRule: string;
   if (hasBothDomains && hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains !allowed_domains_regex';
@@ -208,12 +245,34 @@ export function generateSquidConfig(config: SquidConfig): string {
     denyRule = 'http_access deny all';
   }
 
-  // Combine ACL section
-  const aclSection = aclLines.length > 0 ? aclLines.join('\n') : '# No domains configured';
+  // Combine ACL sections: blocked domains first, then allowed domains
+  const allAclLines = [...blockedAclLines];
+  if (blockedAclLines.length > 0 && aclLines.length > 0) {
+    allAclLines.push('');
+  }
+  allAclLines.push(...aclLines);
+  const aclSection = allAclLines.length > 0 ? allAclLines.join('\n') : '# No domains configured';
 
-  // Combine access rules section for protocol-specific domains
-  const accessRulesSection = accessRules.length > 0
-    ? '# Protocol-specific domain access rules\n' + accessRules.join('\n') + '\n\n'
+  // Combine access rules section:
+  // 1. Blocked domains deny rules first (blocklist takes precedence)
+  // 2. Protocol-specific allow rules
+  // 3. Deny rule for non-allowed domains
+  const allAccessRules: string[] = [];
+
+  if (blockedAccessRules.length > 0) {
+    allAccessRules.push('# Deny requests to blocked domains (blocklist takes precedence)');
+    allAccessRules.push(...blockedAccessRules);
+    allAccessRules.push('');
+  }
+
+  if (accessRules.length > 0) {
+    allAccessRules.push('# Protocol-specific domain access rules');
+    allAccessRules.push(...accessRules);
+    allAccessRules.push('');
+  }
+
+  const accessRulesSection = allAccessRules.length > 0
+    ? allAccessRules.join('\n') + '\n'
     : '';
 
   return `# Squid configuration for egress traffic control
