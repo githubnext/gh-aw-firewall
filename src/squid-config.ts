@@ -114,7 +114,9 @@ acl CONNECT method CONNECT
 # Clients must use domain names, not raw IP addresses
 # This prevents bypassing domain-based filtering via direct IP HTTPS connections
 acl ip_dst_ipv4 dstdom_regex ^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$
-acl ip_dst_ipv6 dstdom_regex ^\\[?[0-9a-fA-F:]+\\]?$
+# IPv6: Must contain at least one colon (distinguishes from domain names)
+# Matches: ::1, fe80::1, 2001:db8::1, [::1] (bracket notation for URLs)
+acl ip_dst_ipv6 dstdom_regex ^\\[?[0-9a-fA-F]*:[0-9a-fA-F:]*\\]?$
 
 # Access rules
 # Deny direct IP connections first (before domain filtering)
