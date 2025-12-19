@@ -36,6 +36,19 @@ export interface WrapperConfig {
   allowedDomains: string[];
 
   /**
+   * List of blocked domains for HTTP/HTTPS egress traffic
+   * 
+   * Blocked domains take precedence over allowed domains. If a domain matches
+   * both the allowlist and blocklist, it will be blocked. This allows for
+   * fine-grained control like allowing '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as allowedDomains.
+   * 
+   * @example ['internal.example.com', '*.sensitive.org']
+   */
+  blockedDomains?: string[];
+
+  /**
    * The command to execute inside the firewall container
    * 
    * This command runs inside an Ubuntu-based Docker container with iptables rules
@@ -239,7 +252,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * 
  * Used to generate squid.conf with domain-based access control lists (ACLs).
  * The generated configuration implements L7 (application layer) filtering for
- * HTTP and HTTPS traffic using domain whitelisting.
+ * HTTP and HTTPS traffic using domain whitelisting and optional blocklisting.
  */
 export interface SquidConfig {
   /**
@@ -250,6 +263,17 @@ export interface SquidConfig {
    * which matches both 'github.com' and all subdomains like 'api.github.com'.
    */
   domains: string[];
+
+  /**
+   * List of blocked domains for proxy access
+   * 
+   * These domains are explicitly denied. Blocked domains take precedence over
+   * allowed domains. This allows for fine-grained control like allowing 
+   * '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as domains.
+   */
+  blockedDomains?: string[];
 
   /**
    * Port number for the Squid proxy to listen on

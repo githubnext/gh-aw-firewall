@@ -121,6 +121,34 @@ Domains automatically match all subdomains:
 sudo awf --allow-domains github.com "curl https://api.github.com"  # ✓ works
 ```
 
+### Wildcard Patterns
+
+You can use wildcard patterns with `*` to match multiple domains:
+
+```bash
+# Match any subdomain of github.com
+--allow-domains '*.github.com'
+
+# Match api-v1.example.com, api-v2.example.com, etc.
+--allow-domains 'api-*.example.com'
+
+# Combine plain domains and wildcards
+--allow-domains 'github.com,*.googleapis.com,api-*.example.com'
+```
+
+**Pattern rules:**
+- `*` matches any characters (converted to regex `.*`)
+- Patterns are case-insensitive (DNS is case-insensitive)
+- Overly broad patterns like `*`, `*.*`, or `*.*.*` are rejected for security
+- Use quotes around patterns to prevent shell expansion
+
+**Examples:**
+| Pattern | Matches | Does Not Match |
+|---------|---------|----------------|
+| `*.github.com` | `api.github.com`, `raw.github.com` | `github.com` |
+| `api-*.example.com` | `api-v1.example.com`, `api-test.example.com` | `api.example.com` |
+| `github.com` | `github.com`, `api.github.com` | `notgithub.com` |
+
 ### Multiple Domains
 
 ```bash
@@ -155,16 +183,78 @@ For MCP servers:
   mcp.deepwiki.com
 ```
 
-## Limitations
+## Domain Blocklist
 
-### No Wildcard Syntax
+You can explicitly block specific domains using `--block-domains` and `--block-domains-file`. **Blocked domains take precedence over allowed domains**, enabling fine-grained control.
 
-Wildcards are not needed - subdomains match automatically:
+### Basic Blocklist Usage
 
 ```bash
---allow-domains '*.github.com'  # ✗ syntax not supported
---allow-domains github.com       # ✓ matches *.github.com automatically
+# Allow example.com but block internal.example.com
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://api.example.com  # ✓ works
+
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://internal.example.com  # ✗ blocked
 ```
+
+### Blocklist with Wildcards
+
+```bash
+# Allow all of example.com except any subdomain starting with "internal-"
+sudo awf \
+  --allow-domains example.com \
+  --block-domains 'internal-*.example.com' \
+  -- curl https://api.example.com  # ✓ works
+
+# Block all subdomains matching the pattern
+sudo awf \
+  --allow-domains '*.example.com' \
+  --block-domains '*.secret.example.com' \
+  -- curl https://api.example.com  # ✓ works
+```
+
+### Using a Blocklist File
+
+```bash
+# Create a blocklist file
+cat > blocked-domains.txt << 'EOF'
+# Internal services that should never be accessed
+internal.example.com
+admin.example.com
+
+# Block all subdomains of sensitive.org
+*.sensitive.org
+EOF
+
+# Use the blocklist file
+sudo awf \
+  --allow-domains example.com,sensitive.org \
+  --block-domains-file blocked-domains.txt \
+  -- curl https://api.example.com
+```
+
+**Combining flags:**
+```bash
+# You can combine all domain flags
+sudo awf \
+  --allow-domains github.com \
+  --allow-domains-file allowed.txt \
+  --block-domains internal.github.com \
+  --block-domains-file blocked.txt \
+  -- your-command
+```
+
+**Use cases:**
+- Allow a broad domain (e.g., `*.example.com`) but block specific sensitive subdomains
+- Block known bad domains while allowing a curated list
+- Prevent access to internal services from AI agents
+
+## Limitations
 
 ### No Internationalized Domains
 

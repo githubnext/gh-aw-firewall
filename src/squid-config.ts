@@ -5,18 +5,21 @@ import {
 } from './domain-patterns';
 
 /**
- * Generates Squid proxy configuration with domain whitelisting
+ * Generates Squid proxy configuration with domain whitelisting and optional blocklisting
  *
  * Supports both plain domains and wildcard patterns:
  * - Plain domains use dstdomain ACL (efficient, fast matching)
  * - Wildcard patterns use dstdom_regex ACL (regex matching)
+ * 
+ * Blocked domains take precedence over allowed domains.
  *
  * @example
  * // Plain domain: github.com -> acl allowed_domains dstdomain .github.com
  * // Wildcard: *.github.com -> acl allowed_domains_regex dstdom_regex -i ^.*\.github\.com$
+ * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, port } = config;
+  const { domains, blockedDomains, port } = config;
 
   // Normalize domains - remove protocol if present
   const normalizedDomains = domains.map(domain => {
@@ -57,27 +60,83 @@ export function generateSquidConfig(config: SquidConfig): string {
     .map(p => `acl allowed_domains_regex dstdom_regex -i ${p.regex}`)
     .join('\n');
 
-  // Determine the ACL section and deny rule based on what we have
-  let aclSection = '';
+  // Process blocked domains (optional)
+  let blockedAclSection = '';
+  let blockRule = '';
+
+  if (blockedDomains && blockedDomains.length > 0) {
+    // Normalize blocked domains
+    const normalizedBlockedDomains = blockedDomains.map(domain => {
+      return domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    });
+
+    // Parse blocked domains into plain domains and wildcard patterns
+    const { plainDomains: blockedPlainDomains, patterns: blockedPatterns } = parseDomainList(normalizedBlockedDomains);
+
+    // Generate ACL entries for blocked plain domains
+    const blockedDomainAcls = blockedPlainDomains
+      .map(domain => {
+        const domainPattern = domain.startsWith('.') ? domain : `.${domain}`;
+        return `acl blocked_domains dstdomain ${domainPattern}`;
+      })
+      .join('\n');
+
+    // Generate ACL entries for blocked wildcard patterns
+    const blockedPatternAcls = blockedPatterns
+      .map(p => `acl blocked_domains_regex dstdom_regex -i ${p.regex}`)
+      .join('\n');
+
+    // Build blocked ACL section
+    const blockedSections: string[] = [];
+    if (blockedPlainDomains.length > 0) {
+      blockedSections.push(`# ACL definitions for blocked domains\n${blockedDomainAcls}`);
+    }
+    if (blockedPatterns.length > 0) {
+      blockedSections.push(`# ACL definitions for blocked domain patterns (wildcard)\n${blockedPatternAcls}`);
+    }
+    blockedAclSection = blockedSections.join('\n\n');
+
+    // Build block rule (blocked domains are denied first, before checking allowed domains)
+    if (blockedPlainDomains.length > 0 && blockedPatterns.length > 0) {
+      blockRule = 'http_access deny blocked_domains\nhttp_access deny blocked_domains_regex';
+    } else if (blockedPlainDomains.length > 0) {
+      blockRule = 'http_access deny blocked_domains';
+    } else if (blockedPatterns.length > 0) {
+      blockRule = 'http_access deny blocked_domains_regex';
+    }
+  }
+
+  // Determine the ACL section and deny rule based on what we have for allowed domains
+  let allowedAclSection = '';
   let denyRule: string;
 
   if (filteredPlainDomains.length > 0 && patterns.length > 0) {
     // Both plain domains and patterns
-    aclSection = `# ACL definitions for allowed domains\n${domainAcls}\n\n# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
+    allowedAclSection = `# ACL definitions for allowed domains\n${domainAcls}\n\n# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
     denyRule = 'http_access deny !allowed_domains !allowed_domains_regex';
   } else if (filteredPlainDomains.length > 0) {
     // Only plain domains
-    aclSection = `# ACL definitions for allowed domains\n${domainAcls}`;
+    allowedAclSection = `# ACL definitions for allowed domains\n${domainAcls}`;
     denyRule = 'http_access deny !allowed_domains';
   } else if (patterns.length > 0) {
     // Only patterns
-    aclSection = `# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
+    allowedAclSection = `# ACL definitions for allowed domain patterns (wildcard)\n${patternAcls}`;
     denyRule = 'http_access deny !allowed_domains_regex';
   } else {
     // No domains - deny all (edge case, should not happen with validation)
-    aclSection = '# No domains configured';
+    allowedAclSection = '# No domains configured';
     denyRule = 'http_access deny all';
   }
+
+  // Combine blocked and allowed ACL sections
+  const aclSection = blockedAclSection
+    ? `${blockedAclSection}\n\n${allowedAclSection}`
+    : allowedAclSection;
+
+  // Combine access rules: blocked domains first, then allowed domains check
+  const accessRules = blockRule
+    ? `# Deny requests to blocked domains (blocklist takes precedence)\n${blockRule}\n\n# Deny requests to unknown domains (not in allow-list)\n# This applies to all sources including localnet\n${denyRule}`
+    : `# Deny requests to unknown domains (not in allow-list)\n# This applies to all sources including localnet\n${denyRule}`;
 
   return `# Squid configuration for egress traffic control
 # Generated by awf
@@ -115,9 +174,7 @@ acl CONNECT method CONNECT
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 
-# Deny requests to unknown domains (not in allow-list)
-# This applies to all sources including localnet
-${denyRule}
+${accessRules}
 
 # Allow from trusted sources (after domain filtering)
 http_access allow localnet

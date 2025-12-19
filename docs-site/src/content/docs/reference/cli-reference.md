@@ -21,6 +21,8 @@ awf [options] -- <command>
 |--------|------|---------|-------------|
 | `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (required unless `--allow-domains-file` used) |
 | `--allow-domains-file <path>` | string | — | Path to file containing allowed domains |
+| `--block-domains <domains>` | string | — | Comma-separated list of blocked domains (takes precedence over allowed) |
+| `--block-domains-file <path>` | string | — | Path to file containing blocked domains |
 | `--log-level <level>` | string | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `--keep-containers` | flag | `false` | Keep containers running after command exits |
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
@@ -40,10 +42,11 @@ awf [options] -- <command>
 
 ### `--allow-domains <domains>`
 
-Comma-separated list of allowed domains. Domains automatically match all subdomains.
+Comma-separated list of allowed domains. Domains automatically match all subdomains. Supports wildcard patterns.
 
 ```bash
 --allow-domains github.com,npmjs.org
+--allow-domains '*.github.com,api-*.example.com'
 ```
 
 ### `--allow-domains-file <path>`
@@ -52,6 +55,26 @@ Path to file with allowed domains. Supports comments (`#`) and one domain per li
 
 ```bash
 --allow-domains-file ./allowed-domains.txt
+```
+
+### `--block-domains <domains>`
+
+Comma-separated list of blocked domains. **Blocked domains take precedence over allowed domains**, enabling fine-grained control. Supports the same wildcard patterns as `--allow-domains`.
+
+```bash
+# Block specific subdomain while allowing parent domain
+--allow-domains example.com --block-domains internal.example.com
+
+# Block with wildcards
+--allow-domains '*.example.com' --block-domains '*.secret.example.com'
+```
+
+### `--block-domains-file <path>`
+
+Path to file with blocked domains. Supports the same format as `--allow-domains-file`.
+
+```bash
+--block-domains-file ./blocked-domains.txt
 ```
 
 ### `--log-level <level>`
