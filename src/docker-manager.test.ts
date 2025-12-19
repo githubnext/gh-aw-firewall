@@ -173,6 +173,29 @@ describe('docker-manager', () => {
       expect(agent.cap_add).toContain('NET_ADMIN');
     });
 
+    it('should apply container hardening measures', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      // Verify dropped capabilities for security hardening
+      expect(agent.cap_drop).toEqual([
+        'NET_RAW',
+        'SYS_PTRACE',
+        'SYS_MODULE',
+        'SYS_RAWIO',
+        'MKNOD',
+      ]);
+
+      // Verify seccomp profile is configured
+      expect(agent.security_opt).toContain('seccomp=/tmp/awf-test/seccomp-profile.json');
+
+      // Verify resource limits
+      expect(agent.mem_limit).toBe('4g');
+      expect(agent.memswap_limit).toBe('4g');
+      expect(agent.pids_limit).toBe(1000);
+      expect(agent.cpu_shares).toBe(1024);
+    });
+
     it('should disable TTY by default to prevent ANSI escape sequences', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
