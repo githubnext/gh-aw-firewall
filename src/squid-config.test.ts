@@ -596,9 +596,10 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains dstdomain');
-      expect(result).not.toContain('dstdom_regex');
-      expect(result).toContain('http_access deny !allowed_domains');
+      // Should not have domain pattern regex (allowed_domains_regex) for plain domains
+      // Note: IP blocking ACLs (ip_dst_ipv4, ip_dst_ipv6) use dstdom_regex but are separate
       expect(result).not.toContain('allowed_domains_regex');
+      expect(result).toContain('http_access deny !allowed_domains');
     });
 
     it('should handle only pattern domains', () => {
@@ -690,6 +691,54 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('# ACL definitions for allowed domains');
       expect(result).toContain('# ACL definitions for allowed domain patterns');
+    });
+  });
+
+  describe('Direct IP Address Blocking (Security)', () => {
+    it('should include ACL to block direct IPv4 address connections', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Should contain IPv4 address blocking ACL
+      expect(result).toContain('acl ip_dst_ipv4 dstdom_regex');
+      expect(result).toMatch(/\^\\?\[0-9\]\+/); // Should match IP pattern
+    });
+
+    it('should include ACL to block direct IPv6 address connections', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Should contain IPv6 address blocking ACL
+      expect(result).toContain('acl ip_dst_ipv6 dstdom_regex');
+    });
+
+    it('should deny access to IP addresses before domain filtering', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Deny rules should be present and before domain filtering
+      expect(result).toContain('http_access deny ip_dst_ipv4');
+      expect(result).toContain('http_access deny ip_dst_ipv6');
+
+      // Verify order: IP blocking comes before domain filtering
+      const ipv4DenyIndex = result.indexOf('http_access deny ip_dst_ipv4');
+      const domainFilterIndex = result.indexOf('http_access deny !allowed_domains');
+      expect(ipv4DenyIndex).toBeLessThan(domainFilterIndex);
+    });
+
+    it('should include security comment about bypass prevention', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('bypass prevention');
     });
   });
 });

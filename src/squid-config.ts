@@ -110,8 +110,20 @@ acl Safe_ports port 80
 acl Safe_ports port 443
 acl CONNECT method CONNECT
 
+# Security: Block direct IP address connections (bypass prevention)
+# Clients must use domain names, not raw IP addresses
+# This prevents bypassing domain-based filtering via direct IP HTTPS connections
+acl ip_dst_ipv4 dstdom_regex ^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$
+# IPv6: Must contain at least one colon (distinguishes from domain names)
+# Matches: ::1, fe80::1, 2001:db8::1, [::1] (bracket notation for URLs)
+acl ip_dst_ipv6 dstdom_regex ^\\[?[0-9a-fA-F]*:[0-9a-fA-F:]*\\]?$
+
 # Access rules
-# Deny unsafe ports first
+# Deny direct IP connections first (before domain filtering)
+http_access deny ip_dst_ipv4
+http_access deny ip_dst_ipv6
+
+# Deny unsafe ports
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 
