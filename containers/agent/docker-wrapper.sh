@@ -15,24 +15,117 @@ LOG_FILE="/tmp/docker-wrapper.log"
 # NAT setup script that will be injected into child containers
 # This script redirects HTTP/HTTPS traffic to Squid proxy using iptables
 # It's designed to be minimal and work with busybox/alpine shells
-NAT_SETUP_SCRIPT='
-if command -v iptables >/dev/null 2>&1; then
-  iptables -t nat -F OUTPUT 2>/dev/null || true
-  iptables -t nat -A OUTPUT -o lo -j RETURN
-  iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN
-  iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p tcp -d 8.8.8.8 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p udp -d 8.8.4.4 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p tcp -d 8.8.4.4 --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -d 8.8.8.8 -j RETURN
-  iptables -t nat -A OUTPUT -d 8.8.4.4 -j RETURN
-  iptables -t nat -A OUTPUT -d '"$SQUID_IP"' -j RETURN
-  iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination '"$SQUID_IP:$SQUID_PORT"'
-  iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination '"$SQUID_IP:$SQUID_PORT"'
-fi
-'
+# Note: The script ends with a semicolon to ensure proper command separation
+NAT_SETUP_SCRIPT='if command -v iptables >/dev/null 2>&1; then iptables -t nat -F OUTPUT 2>/dev/null || true; iptables -t nat -A OUTPUT -o lo -j RETURN; iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN; iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -p tcp -d 8.8.8.8 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -p udp -d 8.8.4.4 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -p tcp -d 8.8.4.4 --dport 53 -j RETURN; iptables -t nat -A OUTPUT -d 8.8.8.8 -j RETURN; iptables -t nat -A OUTPUT -d 8.8.4.4 -j RETURN; iptables -t nat -A OUTPUT -d '"$SQUID_IP"' -j RETURN; iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination '"$SQUID_IP:$SQUID_PORT"'; iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination '"$SQUID_IP:$SQUID_PORT"'; fi; '
+
+# Function to escape a command argument for use in sh -c
+# Uses printf %q for robust escaping of all shell metacharacters
+escape_for_shell() {
+  local arg="$1"
+  # Use printf %q for proper shell escaping
+  printf '%q' "$arg"
+}
+
+# Function to build escaped command string from array of arguments
+build_escaped_cmd() {
+  local escaped=""
+  for arg in "$@"; do
+    if [ -n "$escaped" ]; then
+      escaped="$escaped "
+    fi
+    escaped="$escaped$(escape_for_shell "$arg")"
+  done
+  echo "$escaped"
+}
+
+# Function to check if an argument is a Docker option that takes a value
+is_docker_option_with_value() {
+  local arg="$1"
+  case "$arg" in
+    -e|--env|-l|--label|-v|--volume|-p|--publish|--name|--hostname|\
+    --user|-u|--workdir|-w|--mount|--network-alias|--dns|--dns-search|\
+    --dns-option|--cpus|--memory|-m|--memory-swap|--memory-reservation|\
+    --kernel-memory|--cpu-shares|--cpu-period|--cpu-quota|--cpuset-cpus|\
+    --cpuset-mems|--blkio-weight|--device|--device-cgroup-rule|\
+    --device-read-bps|--device-read-iops|--device-write-bps|\
+    --device-write-iops|--cap-add|--cap-drop|--security-opt|--ulimit|\
+    --sysctl|--restart|--stop-signal|--stop-timeout|--health-cmd|\
+    --health-interval|--health-retries|--health-start-period|\
+    --health-timeout|--log-driver|--log-opt|--storage-opt|\
+    --tmpfs|--ipc|--pid|--userns|--uts|--runtime|--isolation|\
+    --platform|--pull|--shm-size|--group-add|--cidfile|--cgroup-parent|\
+    --init|--read-only|--gpus|--link|--link-local-ip|--ip|--ip6|\
+    --mac-address|--expose|--domainname|--add-host|--annotation)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Function to parse docker run arguments and extract options, image, and command
+# Sets global variables: PARSED_DOCKER_OPTS, PARSED_IMAGE, PARSED_USER_CMD
+parse_docker_run_args() {
+  local include_network="$1"
+  shift
+  
+  PARSED_DOCKER_OPTS=()
+  PARSED_USER_CMD=()
+  PARSED_IMAGE=""
+  local parsing_opts=true
+  local skip_next=false
+  
+  for arg in "$@"; do
+    if [ "$skip_next" = true ]; then
+      PARSED_DOCKER_OPTS+=("$arg")
+      skip_next=false
+      continue
+    fi
+    
+    if [ "$parsing_opts" = true ]; then
+      # Check for --entrypoint flag (we track this but don't use it currently)
+      if [ "$arg" = "--entrypoint" ]; then
+        PARSED_DOCKER_OPTS+=("$arg")
+        skip_next=true
+        continue
+      fi
+      if [[ "$arg" == "--entrypoint="* ]]; then
+        PARSED_DOCKER_OPTS+=("$arg")
+        continue
+      fi
+      
+      # Check if it's a Docker option that takes a value
+      if is_docker_option_with_value "$arg"; then
+        PARSED_DOCKER_OPTS+=("$arg")
+        skip_next=true
+        continue
+      fi
+      
+      # Handle --network and --net specially if we need to include them
+      if [ "$include_network" = "true" ]; then
+        if [ "$arg" = "--network" ] || [ "$arg" = "--net" ]; then
+          PARSED_DOCKER_OPTS+=("$arg")
+          skip_next=true
+          continue
+        fi
+      fi
+      
+      # Docker options that are flags (no value) or have = format
+      if [[ "$arg" == -* ]]; then
+        PARSED_DOCKER_OPTS+=("$arg")
+        continue
+      fi
+      
+      # First non-option argument is the image name
+      PARSED_IMAGE="$arg"
+      parsing_opts=false
+    else
+      # Everything after the image name is the command
+      PARSED_USER_CMD+=("$arg")
+    fi
+  done
+}
 
 # Log all docker commands
 echo "[$(date -Iseconds)] WRAPPER CALLED: docker $@" >> "$LOG_FILE"
@@ -111,113 +204,24 @@ if [ "$1" = "run" ]; then
     shift # remove 'run'
     echo "[$(date -Iseconds)] INJECTING --network $NETWORK_NAME, proxy env vars, and NAT rules" >> "$LOG_FILE"
     
-    # We need to parse the remaining arguments to find where the image and command are
-    # Docker run format: docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-    # We'll inject our security flags and then wrap the command with NAT setup
-    
-    # Parse remaining arguments to extract:
-    # 1. Docker options (flags that start with - or their values)
-    # 2. Image name
-    # 3. Command and its arguments
-    declare -a docker_opts=()
-    declare -a user_cmd=()
-    image_name=""
-    parsing_opts=true
-    skip_next=false
-    has_rm=false
-    has_entrypoint=false
-    
-    for arg in "$@"; do
-      if [ "$skip_next" = true ]; then
-        docker_opts+=("$arg")
-        skip_next=false
-        continue
-      fi
-      
-      if [ "$parsing_opts" = true ]; then
-        # Check for --rm flag
-        if [ "$arg" = "--rm" ]; then
-          has_rm=true
-          docker_opts+=("$arg")
-          continue
-        fi
-        
-        # Check for --entrypoint flag (we need to handle this specially)
-        if [ "$arg" = "--entrypoint" ]; then
-          has_entrypoint=true
-          docker_opts+=("$arg")
-          skip_next=true
-          continue
-        fi
-        if [[ "$arg" == "--entrypoint="* ]]; then
-          has_entrypoint=true
-          docker_opts+=("$arg")
-          continue
-        fi
-        
-        # Docker options that take a value on the next argument
-        case "$arg" in
-          -e|--env|-l|--label|-v|--volume|-p|--publish|--name|--hostname|\
-          --user|-u|--workdir|-w|--mount|--network-alias|--dns|--dns-search|\
-          --dns-option|--cpus|--memory|-m|--memory-swap|--memory-reservation|\
-          --kernel-memory|--cpu-shares|--cpu-period|--cpu-quota|--cpuset-cpus|\
-          --cpuset-mems|--blkio-weight|--device|--device-cgroup-rule|\
-          --device-read-bps|--device-read-iops|--device-write-bps|\
-          --device-write-iops|--cap-add|--cap-drop|--security-opt|--ulimit|\
-          --sysctl|--restart|--stop-signal|--stop-timeout|--health-cmd|\
-          --health-interval|--health-retries|--health-start-period|\
-          --health-timeout|--log-driver|--log-opt|--storage-opt|\
-          --tmpfs|--ipc|--pid|--userns|--uts|--runtime|--isolation|\
-          --platform|--pull|--shm-size|--group-add|--cidfile|--cgroup-parent|\
-          --init|--read-only|--gpus|--link|--link-local-ip|--ip|--ip6|\
-          --mac-address|--expose|--domainname|--add-host|--annotation)
-            docker_opts+=("$arg")
-            skip_next=true
-            continue
-            ;;
-        esac
-        
-        # Docker options that are flags (no value)
-        if [[ "$arg" == -* ]]; then
-          docker_opts+=("$arg")
-          continue
-        fi
-        
-        # First non-option argument is the image name
-        image_name="$arg"
-        parsing_opts=false
-      else
-        # Everything after the image name is the command
-        user_cmd+=("$arg")
-      fi
-    done
+    # Parse docker run arguments
+    parse_docker_run_args "false" "$@"
     
     # If no image was found, just pass through
-    if [ -z "$image_name" ]; then
+    if [ -z "$PARSED_IMAGE" ]; then
       echo "[$(date -Iseconds)] ERROR: Could not find image name, passing through" >> "$LOG_FILE"
       exec /usr/bin/docker-real run "$@"
     fi
     
-    echo "[$(date -Iseconds)] Image: $image_name, Command: ${user_cmd[*]:-<default>}, HasEntrypoint: $has_entrypoint" >> "$LOG_FILE"
+    echo "[$(date -Iseconds)] Image: $PARSED_IMAGE, Command: ${PARSED_USER_CMD[*]:-<default>}" >> "$LOG_FILE"
     
     # Build the wrapped command that sets up NAT rules then runs the user's command
-    # If user specified a command, wrap it; otherwise let the image's default run
-    if [ ${#user_cmd[@]} -gt 0 ]; then
+    if [ ${#PARSED_USER_CMD[@]} -gt 0 ]; then
       # User specified a command - wrap it with NAT setup
-      # Escape the user command for embedding in sh -c
-      escaped_cmd=""
-      for cmd_part in "${user_cmd[@]}"; do
-        # Escape single quotes in the command
-        escaped_part="${cmd_part//\'/\'\\\'\'}"
-        escaped_cmd="$escaped_cmd '$escaped_part'"
-      done
+      escaped_cmd=$(build_escaped_cmd "${PARSED_USER_CMD[@]}")
+      wrapped_cmd="${NAT_SETUP_SCRIPT}exec ${escaped_cmd}"
       
-      wrapped_cmd="$NAT_SETUP_SCRIPT exec $escaped_cmd"
-    else
-      # No user command - NAT setup only, then exit (image entrypoint will not run with our wrapper)
-      # For this case, we can't easily wrap the default entrypoint, so just set up NAT and warn
-      echo "[$(date -Iseconds)] WARNING: No command specified, NAT rules may not apply to default entrypoint" >> "$LOG_FILE"
-      # Pass through without wrapping - NAT won't apply but proxy env vars will
+      # Execute with NAT wrapper
       exec /usr/bin/docker-real run \
         --network "$NETWORK_NAME" \
         --cap-add NET_ADMIN \
@@ -227,100 +231,46 @@ if [ "$1" = "run" ]; then
         -e https_proxy="$SQUID_PROXY" \
         -e SQUID_PROXY_IP="$SQUID_IP" \
         -e SQUID_PROXY_PORT="$SQUID_PORT" \
-        "${docker_opts[@]}" \
-        "$image_name"
+        "${PARSED_DOCKER_OPTS[@]}" \
+        --entrypoint sh \
+        "$PARSED_IMAGE" \
+        -c "$wrapped_cmd"
+    else
+      # No user command - can't easily wrap the default entrypoint
+      echo "[$(date -Iseconds)] WARNING: No command specified, NAT rules may not apply to default entrypoint" >> "$LOG_FILE"
+      exec /usr/bin/docker-real run \
+        --network "$NETWORK_NAME" \
+        --cap-add NET_ADMIN \
+        -e HTTP_PROXY="$SQUID_PROXY" \
+        -e HTTPS_PROXY="$SQUID_PROXY" \
+        -e http_proxy="$SQUID_PROXY" \
+        -e https_proxy="$SQUID_PROXY" \
+        -e SQUID_PROXY_IP="$SQUID_IP" \
+        -e SQUID_PROXY_PORT="$SQUID_PORT" \
+        "${PARSED_DOCKER_OPTS[@]}" \
+        "$PARSED_IMAGE"
     fi
-    
-    # Execute with NAT wrapper
-    exec /usr/bin/docker-real run \
-      --network "$NETWORK_NAME" \
-      --cap-add NET_ADMIN \
-      -e HTTP_PROXY="$SQUID_PROXY" \
-      -e HTTPS_PROXY="$SQUID_PROXY" \
-      -e http_proxy="$SQUID_PROXY" \
-      -e https_proxy="$SQUID_PROXY" \
-      -e SQUID_PROXY_IP="$SQUID_IP" \
-      -e SQUID_PROXY_PORT="$SQUID_PORT" \
-      "${docker_opts[@]}" \
-      --entrypoint sh \
-      "$image_name" \
-      -c "$wrapped_cmd"
   else
     # Network is already specified (and not host) - still inject NAT rules and proxy env vars
     echo "[$(date -Iseconds)] --network $network_value already specified, injecting NAT rules and proxy env vars" >> "$LOG_FILE"
     
     shift # remove 'run'
     
-    # Parse remaining arguments similar to above
-    declare -a docker_opts2=()
-    declare -a user_cmd2=()
-    image_name2=""
-    parsing_opts2=true
-    skip_next2=false
-    
-    for arg in "$@"; do
-      if [ "$skip_next2" = true ]; then
-        docker_opts2+=("$arg")
-        skip_next2=false
-        continue
-      fi
-      
-      if [ "$parsing_opts2" = true ]; then
-        # Docker options that take a value on the next argument
-        case "$arg" in
-          -e|--env|-l|--label|-v|--volume|-p|--publish|--name|--hostname|\
-          --user|-u|--workdir|-w|--mount|--network-alias|--dns|--dns-search|\
-          --dns-option|--cpus|--memory|-m|--memory-swap|--memory-reservation|\
-          --kernel-memory|--cpu-shares|--cpu-period|--cpu-quota|--cpuset-cpus|\
-          --cpuset-mems|--blkio-weight|--device|--device-cgroup-rule|\
-          --device-read-bps|--device-read-iops|--device-write-bps|\
-          --device-write-iops|--cap-add|--cap-drop|--security-opt|--ulimit|\
-          --sysctl|--restart|--stop-signal|--stop-timeout|--health-cmd|\
-          --health-interval|--health-retries|--health-start-period|\
-          --health-timeout|--log-driver|--log-opt|--storage-opt|\
-          --tmpfs|--ipc|--pid|--userns|--uts|--runtime|--isolation|\
-          --platform|--pull|--shm-size|--group-add|--cidfile|--cgroup-parent|\
-          --init|--read-only|--gpus|--link|--link-local-ip|--ip|--ip6|\
-          --mac-address|--expose|--domainname|--add-host|--annotation|\
-          --network|--net)
-            docker_opts2+=("$arg")
-            skip_next2=true
-            continue
-            ;;
-        esac
-        
-        # Docker options that are flags (no value) or have = format
-        if [[ "$arg" == -* ]]; then
-          docker_opts2+=("$arg")
-          continue
-        fi
-        
-        # First non-option argument is the image name
-        image_name2="$arg"
-        parsing_opts2=false
-      else
-        # Everything after the image name is the command
-        user_cmd2+=("$arg")
-      fi
-    done
+    # Parse docker run arguments (include network options in docker_opts)
+    parse_docker_run_args "true" "$@"
     
     # If no image was found, just pass through
-    if [ -z "$image_name2" ]; then
+    if [ -z "$PARSED_IMAGE" ]; then
       echo "[$(date -Iseconds)] ERROR: Could not find image name, passing through" >> "$LOG_FILE"
       exec /usr/bin/docker-real run "$@"
     fi
     
-    echo "[$(date -Iseconds)] Image: $image_name2, Command: ${user_cmd2[*]:-<default>}" >> "$LOG_FILE"
+    echo "[$(date -Iseconds)] Image: $PARSED_IMAGE, Command: ${PARSED_USER_CMD[*]:-<default>}" >> "$LOG_FILE"
     
     # Build the wrapped command
-    if [ ${#user_cmd2[@]} -gt 0 ]; then
-      escaped_cmd2=""
-      for cmd_part in "${user_cmd2[@]}"; do
-        escaped_part2="${cmd_part//\'/\'\\\'\'}"
-        escaped_cmd2="$escaped_cmd2 '$escaped_part2'"
-      done
-      
-      wrapped_cmd2="$NAT_SETUP_SCRIPT exec $escaped_cmd2"
+    if [ ${#PARSED_USER_CMD[@]} -gt 0 ]; then
+      escaped_cmd=$(build_escaped_cmd "${PARSED_USER_CMD[@]}")
+      wrapped_cmd="${NAT_SETUP_SCRIPT}exec ${escaped_cmd}"
       
       exec /usr/bin/docker-real run \
         --cap-add NET_ADMIN \
@@ -330,10 +280,10 @@ if [ "$1" = "run" ]; then
         -e https_proxy="$SQUID_PROXY" \
         -e SQUID_PROXY_IP="$SQUID_IP" \
         -e SQUID_PROXY_PORT="$SQUID_PORT" \
-        "${docker_opts2[@]}" \
+        "${PARSED_DOCKER_OPTS[@]}" \
         --entrypoint sh \
-        "$image_name2" \
-        -c "$wrapped_cmd2"
+        "$PARSED_IMAGE" \
+        -c "$wrapped_cmd"
     else
       # No command specified - pass through with proxy env vars
       exec /usr/bin/docker-real run \
@@ -344,8 +294,8 @@ if [ "$1" = "run" ]; then
         -e https_proxy="$SQUID_PROXY" \
         -e SQUID_PROXY_IP="$SQUID_IP" \
         -e SQUID_PROXY_PORT="$SQUID_PORT" \
-        "${docker_opts2[@]}" \
-        "$image_name2"
+        "${PARSED_DOCKER_OPTS[@]}" \
+        "$PARSED_IMAGE"
     fi
   fi
 fi
