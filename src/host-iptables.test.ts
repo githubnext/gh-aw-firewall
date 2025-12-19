@@ -140,6 +140,19 @@ describe('host-iptables', () => {
         '-j', 'ACCEPT',
       ]);
 
+      // Verify DNS query logging rules (LOG before ACCEPT for audit trail)
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'udp', '-d', '8.8.8.8', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'tcp', '-d', '8.8.8.8', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+      ]);
+
       // Verify DNS rules for trusted servers only
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
         '-t', 'filter', '-A', 'FW_WRAPPER',
@@ -151,6 +164,19 @@ describe('host-iptables', () => {
         '-t', 'filter', '-A', 'FW_WRAPPER',
         '-p', 'tcp', '-d', '8.8.8.8', '--dport', '53',
         '-j', 'ACCEPT',
+      ]);
+
+      // Verify DNS query logging rules for second DNS server
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'udp', '-d', '8.8.4.4', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-p', 'tcp', '-d', '8.8.4.4', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
       ]);
 
       expect(mockedExeca).toHaveBeenCalledWith('iptables', [
@@ -417,6 +443,19 @@ describe('host-iptables', () => {
         '-t', 'filter', '-A', 'FW_WRAPPER',
         '-p', 'udp', '-d', '8.8.8.8', '--dport', '53',
         '-j', 'ACCEPT',
+      ]);
+
+      // Verify IPv6 DNS query logging rules (LOG before ACCEPT)
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'udp', '-d', '2001:4860:4860::8888', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
+      ]);
+
+      expect(mockedExeca).toHaveBeenCalledWith('ip6tables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER_V6',
+        '-p', 'tcp', '-d', '2001:4860:4860::8888', '--dport', '53',
+        '-j', 'LOG', '--log-prefix', '[FW_DNS_QUERY] ', '--log-level', '4',
       ]);
 
       // Verify IPv6 DNS rule uses ip6tables

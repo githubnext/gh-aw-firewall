@@ -29,6 +29,26 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
 sudo journalctl -k | grep FW_BLOCKED
 ```
 
+### DNS Query Logging (Audit Trail)
+```bash
+# View all DNS queries made by containers
+sudo dmesg | grep FW_DNS_QUERY
+
+# Using journalctl (systemd)
+sudo journalctl -k | grep FW_DNS_QUERY
+
+# Real-time DNS query monitoring
+sudo dmesg -w | grep FW_DNS_QUERY
+
+# Count DNS queries by destination
+sudo dmesg | grep FW_DNS_QUERY | grep -oP 'DST=\K[^ ]+' | sort | uniq -c | sort -rn
+
+# Show DNS queries to specific resolver (e.g., 8.8.8.8)
+sudo dmesg | grep FW_DNS_QUERY | grep 'DST=8.8.8.8'
+```
+
+**Note:** DNS queries are logged for audit trail purposes. This helps detect potential DNS tunneling attempts or unusual DNS activity. The log prefix `[FW_DNS_QUERY]` is used to identify DNS traffic.
+
 ## Log Format
 
 ### Squid Log Entry
