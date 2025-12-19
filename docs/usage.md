@@ -519,6 +519,44 @@ awf logs -f --format json
 awf logs --source /tmp/squid-logs-1760987995318 --format raw
 ```
 
+### PID/Process Tracking
+
+Correlate network requests with the specific processes that made them using the `--with-pid` flag. This enables security auditing and forensic analysis.
+
+```bash
+# Follow logs with PID tracking (requires -f for real-time mode)
+awf logs -f --with-pid
+```
+
+**Pretty format output with PID:**
+```
+[2024-01-01 12:00:00.123] CONNECT api.github.com → 200 (ALLOWED) [curl/7.88.1] <PID:12345 curl>
+```
+
+**JSON format includes additional PID fields:**
+```json
+{
+  "timestamp": 1703001234.567,
+  "domain": "github.com",
+  "statusCode": 200,
+  "isAllowed": true,
+  "pid": 12345,
+  "cmdline": "curl https://github.com",
+  "comm": "curl",
+  "inode": "123456"
+}
+```
+
+**Important limitations:**
+- **Real-time only**: `--with-pid` requires `-f` (follow mode) because PID tracking reads the live `/proc` filesystem
+- **Linux only**: PID tracking requires the `/proc` filesystem (standard on Linux)
+- **Process must be running**: By the time historical logs are viewed, processes may have exited
+
+**Use cases:**
+- **Security auditing**: Identify which command or tool made each request
+- **Incident response**: Trace suspicious network activity to specific processes
+- **Debugging**: Correlate MCP server or tool behavior with network requests
+
 ### Troubleshooting with Logs
 
 **Find blocked requests:**

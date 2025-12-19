@@ -197,6 +197,7 @@ awf logs [options]
 | `--format <format>` | string | `pretty` | Output format: `raw`, `pretty`, `json` |
 | `--source <path>` | string | auto | Path to log directory or `running` for live container |
 | `--list` | flag | `false` | List available log sources |
+| `--with-pid` | flag | `false` | Enrich logs with PID/process info (requires `-f`) |
 
 #### Output Formats
 
@@ -226,7 +227,35 @@ awf logs --source /tmp/squid-logs-1234567890
 
 # Stream from running container
 awf logs --source running -f
+
+# Follow logs with PID/process tracking
+awf logs -f --with-pid
 ```
+
+#### PID Tracking
+
+The `--with-pid` flag enriches log entries with process information, correlating each network request to the specific process that made it.
+
+**Pretty format with PID:**
+```
+[2024-01-01 12:00:00.123] CONNECT api.github.com → 200 (ALLOWED) [curl/7.88.1] <PID:12345 curl>
+```
+
+**JSON output includes additional fields:**
+```json
+{
+  "timestamp": 1703001234.567,
+  "domain": "github.com",
+  "pid": 12345,
+  "cmdline": "curl https://github.com",
+  "comm": "curl",
+  "inode": "123456"
+}
+```
+
+:::caution
+PID tracking only works with `-f` (follow mode) and requires Linux. Process information is only available while processes are running.
+:::
 
 :::note
 Log sources are auto-discovered in this order: running containers, `AWF_LOGS_DIR` environment variable, then preserved log directories in `/tmp/squid-logs-*`.
