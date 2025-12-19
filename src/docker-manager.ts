@@ -304,7 +304,11 @@ export function generateDockerCompose(
         condition: 'service_healthy',
       },
     },
-    cap_add: ['NET_ADMIN'], // Required for iptables
+    // NET_ADMIN is required for iptables setup in entrypoint.sh.
+    // Security: The capability is dropped before running user commands
+    // via 'capsh --drop=cap_net_admin' in containers/agent/entrypoint.sh.
+    // This prevents malicious code from modifying iptables rules.
+    cap_add: ['NET_ADMIN'],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)

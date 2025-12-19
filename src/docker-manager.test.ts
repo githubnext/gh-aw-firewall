@@ -166,7 +166,10 @@ describe('docker-manager', () => {
       expect(depends['squid-proxy'].condition).toBe('service_healthy');
     });
 
-    it('should add NET_ADMIN capability to agent', () => {
+    it('should add NET_ADMIN capability to agent for iptables setup', () => {
+      // NET_ADMIN is required at container start for setup-iptables.sh
+      // The capability is dropped before user command execution via capsh
+      // (see containers/agent/entrypoint.sh)
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
