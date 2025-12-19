@@ -446,7 +446,7 @@ program
     }
 
     // Parse domains from YAML ruleset files (can be multiple)
-    if (options.rulesetFile && Array.isArray(options.rulesetFile)) {
+    if (options.rulesetFile?.length) {
       try {
         const ruleSets = options.rulesetFile.map((filePath: string) => loadRuleSet(filePath));
         const ruleDomains = mergeRuleSets(ruleSets);

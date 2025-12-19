@@ -73,6 +73,6 @@ export function mergeRuleSets(sets: RuleSet[]): string[] {
   return sets.flatMap(set =>
     set.rules
       .map(rule => rule.domain)
-      .filter((domain): domain is string => Boolean(domain))
+      .filter((domain): domain is string => typeof domain === 'string')
   );
 }
