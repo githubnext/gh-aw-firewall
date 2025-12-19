@@ -149,7 +149,8 @@ verify_checksum() {
     
     # Extract the checksum for our binary from checksums.txt
     # Format: "checksum  filename" (two spaces) - use exact filename match at end of line
-    local expected_sum=$(awk -v fname="$BINARY_NAME" '$2 == fname {print $1; exit}' "$checksums_file")
+    local expected_sum
+    expected_sum=$(awk -v fname="$BINARY_NAME" '$2 == fname {print $1; exit}' "$checksums_file")
     
     if [ -z "$expected_sum" ]; then
         error "Could not find checksum for $BINARY_NAME in checksums.txt"
@@ -166,7 +167,8 @@ verify_checksum() {
     expected_sum=$(echo "$expected_sum" | tr 'A-F' 'a-f')
     
     # Calculate actual checksum
-    local actual_sum=$(sha256sum "$file" | awk '{print $1}' | tr 'A-F' 'a-f')
+    local actual_sum
+    actual_sum=$(sha256sum "$file" | awk '{print $1}' | tr 'A-F' 'a-f')
     
     if [ "$expected_sum" != "$actual_sum" ]; then
         error "Checksum verification failed!"
@@ -202,7 +204,7 @@ main() {
     fi
     
     # Set up cleanup trap (mktemp already ensures secure location)
-    trap "rm -rf '$TEMP_DIR'" EXIT
+    trap 'rm -rf "$TEMP_DIR"' EXIT
     
     # Download URLs
     BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
