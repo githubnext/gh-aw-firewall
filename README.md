@@ -183,6 +183,77 @@ sudo awf \
   -- curl https://api.github.com
 ```
 
+## Domain Blocklist
+
+You can explicitly block specific domains using `--block-domains` and `--block-domains-file`. **Blocked domains take precedence over allowed domains**, enabling fine-grained control.
+
+### Basic Blocklist Usage
+
+```bash
+# Allow example.com but block internal.example.com
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://api.example.com  # ✓ works
+
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://internal.example.com  # ✗ blocked
+```
+
+### Blocklist with Wildcards
+
+```bash
+# Allow all of example.com except any subdomain starting with "internal-"
+sudo awf \
+  --allow-domains example.com \
+  --block-domains 'internal-*.example.com' \
+  -- curl https://api.example.com  # ✓ works
+
+# Block all subdomains matching the pattern
+sudo awf \
+  --allow-domains '*.example.com' \
+  --block-domains '*.secret.example.com' \
+  -- curl https://api.example.com  # ✓ works
+```
+
+### Using a Blocklist File
+
+```bash
+# Create a blocklist file
+cat > blocked-domains.txt << 'EOF'
+# Internal services that should never be accessed
+internal.example.com
+admin.example.com
+
+# Block all subdomains of sensitive.org
+*.sensitive.org
+EOF
+
+# Use the blocklist file
+sudo awf \
+  --allow-domains example.com,sensitive.org \
+  --block-domains-file blocked-domains.txt \
+  -- curl https://api.example.com
+```
+
+**Combining flags:**
+```bash
+# You can combine all domain flags
+sudo awf \
+  --allow-domains github.com \
+  --allow-domains-file allowed.txt \
+  --block-domains internal.github.com \
+  --block-domains-file blocked.txt \
+  -- your-command
+```
+
+**Use cases:**
+- Allow a broad domain (e.g., `*.example.com`) but block specific sensitive subdomains
+- Block known bad domains while allowing a curated list
+- Prevent access to internal services from AI agents
+
 
 ## Security Considerations
 

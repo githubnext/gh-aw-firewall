@@ -404,6 +404,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // Write Squid config
   const squidConfig = generateSquidConfig({
     domains: config.allowedDomains,
+    blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
