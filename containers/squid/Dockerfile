@@ -1,15 +1,17 @@
 FROM ubuntu/squid:latest
 
-# Install additional tools for debugging and healthcheck
+# Install additional tools for debugging, healthcheck, and SSL Bump
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     dnsutils \
     net-tools \
-    netcat-openbsd && \
+    netcat-openbsd \
+    openssl \
+    squid-openssl && \
     rm -rf /var/lib/apt/lists/*
 
-# Create log directory
+# Create log directory and SSL database directory
 RUN mkdir -p /var/log/squid && \
     chown -R proxy:proxy /var/log/squid
 
@@ -17,8 +19,9 @@ RUN mkdir -p /var/log/squid && \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Expose Squid port
+# Expose Squid port (3128 for HTTP, 3129 for HTTPS with SSL Bump)
 EXPOSE 3128
+EXPOSE 3129
 
 # Use entrypoint to fix permissions before starting Squid
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

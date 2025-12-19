@@ -54,6 +54,94 @@ function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol 
 }
 
 /**
+ * Generates SSL Bump configuration section for HTTPS content inspection
+ *
+ * @param caFiles - Paths to CA certificate and key
+ * @param sslDbPath - Path to SSL certificate database
+ * @param hasPlainDomains - Whether there are plain domain ACLs
+ * @param hasPatterns - Whether there are pattern ACLs
+ * @param urlPatterns - Optional URL patterns for HTTPS filtering
+ * @returns Squid SSL Bump configuration string
+ */
+function generateSslBumpSection(
+  caFiles: { certPath: string; keyPath: string },
+  sslDbPath: string,
+  hasPlainDomains: boolean,
+  hasPatterns: boolean,
+  urlPatterns?: string[]
+): string {
+  // Build the SSL Bump domain list for the bump directive
+  let bumpAcls = '';
+  if (hasPlainDomains && hasPatterns) {
+    bumpAcls = 'ssl_bump bump allowed_domains\nssl_bump bump allowed_domains_regex';
+  } else if (hasPlainDomains) {
+    bumpAcls = 'ssl_bump bump allowed_domains';
+  } else if (hasPatterns) {
+    bumpAcls = 'ssl_bump bump allowed_domains_regex';
+  } else {
+    // No domains configured - terminate all
+    bumpAcls = '# No domains configured - terminate all SSL connections';
+  }
+
+  // Generate URL pattern ACLs if provided
+  let urlAclSection = '';
+  let urlAccessRules = '';
+  if (urlPatterns && urlPatterns.length > 0) {
+    const urlAcls = urlPatterns
+      .map((pattern, i) => `acl allowed_url_${i} url_regex ${pattern}`)
+      .join('\n');
+    urlAclSection = `\n# URL pattern ACLs for HTTPS content inspection\n${urlAcls}\n`;
+
+    // Build access rules for URL patterns
+    const urlAccessLines = urlPatterns
+      .map((_, i) => `http_access allow allowed_url_${i}`)
+      .join('\n');
+    urlAccessRules = `\n# Allow HTTPS requests matching URL patterns\n${urlAccessLines}\n`;
+  }
+
+  return `
+# SSL Bump configuration for HTTPS content inspection
+# WARNING: This enables TLS interception - traffic is decrypted for inspection
+# A per-session CA certificate is used for dynamic certificate generation
+
+# HTTP port for transparent proxy
+http_port 3128
+
+# HTTPS port with SSL Bump for interception
+https_port 3129 intercept ssl-bump \\
+  cert=${caFiles.certPath} \\
+  key=${caFiles.keyPath} \\
+  generate-host-certificates=on \\
+  dynamic_cert_mem_cache_size=4MB \\
+  options=NO_SSLv3,NO_TLSv1,NO_TLSv1_1
+
+# SSL certificate database for dynamic certificate generation
+sslcrtd_program /usr/lib/squid/security_file_certgen -s ${sslDbPath} -M 4MB
+sslcrtd_children 5
+
+# SSL Bump ACL steps:
+# Step 1 (SslBump1): Peek at ClientHello to get SNI
+# Step 2 (SslBump2): Stare at server certificate to validate
+# Step 3 (SslBump3): Bump or splice based on policy
+acl step1 at_step SslBump1
+acl step2 at_step SslBump2
+acl step3 at_step SslBump3
+
+# Peek at ClientHello to see SNI (Server Name Indication)
+ssl_bump peek step1
+
+# Stare at server certificate to validate it
+ssl_bump stare step2
+
+# Bump (intercept) connections to allowed domains
+${bumpAcls}
+
+# Terminate (deny) connections to non-allowed domains
+ssl_bump terminate all
+${urlAclSection}${urlAccessRules}`;
+}
+
+/**
  * Generates Squid proxy configuration with domain whitelisting and optional blocklisting
  *
  * Supports both plain domains and wildcard patterns:
@@ -67,6 +155,8 @@ function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol 
  * - https://domain.com -> allow only HTTPS traffic
  * - domain.com         -> allow both HTTP and HTTPS (default)
  *
+ * When sslBump is enabled, adds SSL Bump configuration for HTTPS inspection.
+ *
  * @example
  * // Plain domain: github.com -> acl allowed_domains dstdomain .github.com
  * // Wildcard: *.github.com -> acl allowed_domains_regex dstdom_regex -i ^.*\.github\.com$
@@ -74,7 +164,7 @@ function groupPatternsByProtocol(patterns: DomainPattern[]): PatternsByProtocol 
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -275,8 +365,30 @@ export function generateSquidConfig(config: SquidConfig): string {
     ? allAccessRules.join('\n') + '\n'
     : '';
 
+  // Generate SSL Bump section if enabled
+  let sslBumpSection = '';
+  let portConfig = `http_port ${port}`;
+
+  // For SSL Bump, we need to check hasPlainDomains and hasPatterns for the 'both' protocol domains
+  // since those are the ones that go into allowed_domains / allowed_domains_regex ACLs
+  const hasPlainDomainsForSslBump = domainsByProto.both.length > 0;
+  const hasPatternsForSslBump = patternsByProto.both.length > 0;
+
+  if (sslBump && caFiles && sslDbPath) {
+    sslBumpSection = generateSslBumpSection(
+      caFiles,
+      sslDbPath,
+      hasPlainDomainsForSslBump,
+      hasPatternsForSslBump,
+      urlPatterns
+    );
+    // SSL Bump section includes its own port config, so use that instead
+    portConfig = '';
+  }
+
   return `# Squid configuration for egress traffic control
 # Generated by awf
+${sslBump ? '\n# SSL Bump mode enabled - HTTPS traffic will be intercepted for URL inspection' : ''}
 
 # Custom log format with detailed connection information
 # Format: timestamp client_ip:port dest_domain dest_ip:port protocol method status decision url user_agent
@@ -289,7 +401,8 @@ cache_log /var/log/squid/cache.log
 cache deny all
 
 # Port configuration
-http_port ${port}
+${portConfig}
+${sslBumpSection}
 
 ${aclSection}
 
