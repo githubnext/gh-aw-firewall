@@ -3,6 +3,10 @@ title: SSL Bump
 description: Enable HTTPS content inspection for URL path filtering with per-session CA certificates.
 ---
 
+:::note[Power-User Feature]
+SSL Bump is an advanced feature that intercepts HTTPS traffic. It requires local Docker image builds and adds performance overhead. Only enable this when you need URL path filtering for HTTPS traffic. For most use cases, domain-based filtering (default mode) is sufficient.
+:::
+
 SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering instead of just domain-based filtering.
 
 ## Overview

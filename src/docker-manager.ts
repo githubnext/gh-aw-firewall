@@ -6,7 +6,7 @@ import execa from 'execa';
 import { DockerComposeConfig, WrapperConfig, BlockedTarget } from './types';
 import { logger } from './logger';
 import { generateSquidConfig } from './squid-config';
-import { generateSessionCa, initSslDb, CaFiles } from './ssl-bump';
+import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
 
 const SQUID_PORT = 3128;
 
@@ -184,7 +184,8 @@ export function generateDockerCompose(
   if (sslConfig) {
     squidVolumes.push(`${sslConfig.caFiles.certPath}:${sslConfig.caFiles.certPath}:ro`);
     squidVolumes.push(`${sslConfig.caFiles.keyPath}:${sslConfig.caFiles.keyPath}:ro`);
-    squidVolumes.push(`${sslConfig.sslDbPath}:${sslConfig.sslDbPath}:rw`);
+    // Mount SSL database at /var/spool/squid_ssl_db (Squid's expected location)
+    squidVolumes.push(`${sslConfig.sslDbPath}:/var/spool/squid_ssl_db:rw`);
   }
 
   // Squid service configuration
@@ -500,15 +501,23 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     }
   }
 
+  // Transform user URL patterns to regex patterns for Squid ACLs
+  let urlPatterns: string[] | undefined;
+  if (config.allowedUrls && config.allowedUrls.length > 0) {
+    urlPatterns = parseUrlPatterns(config.allowedUrls);
+    logger.debug(`Parsed ${urlPatterns.length} URL pattern(s) for SSL Bump filtering`);
+  }
+
   // Write Squid config
+  // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
   const squidConfig = generateSquidConfig({
     domains: config.allowedDomains,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
     sslBump: config.sslBump,
     caFiles: sslConfig?.caFiles,
-    sslDbPath: sslConfig?.sslDbPath,
-    urlPatterns: config.allowedUrls,
+    sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
+    urlPatterns,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);
