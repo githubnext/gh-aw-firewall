@@ -18,12 +18,12 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
   ```bash
   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
   ```
+  Review the script before running, or download the latest release binary and verify it with the published `checksums.txt` before installing.
 - **Run your first command:**  
   ```bash
   sudo awf --allow-domains github.com -- curl https://api.github.com
   ```
-
-Use the `--` separator to pass the command you want to run behind the firewall.
+  Use the `--` separator to pass the command you want to run behind the firewall.
 
 ### GitHub Copilot CLI in one line
 
@@ -35,9 +35,9 @@ sudo -E awf \
 
 ## Explore the docs
 
-- [Quickstart](docs/quickstart.md) — install, verify, and run your first command
+- [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, Docker-in-Docker examples
-- [Logging](LOGGING.md) and [quick reference](docs/logging_quickref.md) — view and filter Squid traffic
+- [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
 - [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
