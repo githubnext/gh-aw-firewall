@@ -349,6 +349,54 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
    ```
 3. This is why pre-test cleanup is critical in CI/CD
 
+## SSL Bump Issues
+
+### Certificate Validation Failures
+
+**Problem:** Agent reports SSL/TLS certificate errors when `--ssl-bump` is enabled
+
+**Solution:**
+1. Verify the CA was injected into the trust store:
+   ```bash
+   docker exec awf-agent ls -la /usr/local/share/ca-certificates/
+   docker exec awf-agent cat /etc/ssl/certs/ca-certificates.crt | grep -A1 "AWF Session CA"
+   ```
+2. Check if the application uses certificate pinning (incompatible with SSL Bump)
+3. For Node.js applications, verify NODE_EXTRA_CA_CERTS is not overriding:
+   ```bash
+   docker exec awf-agent printenv | grep -i cert
+   ```
+
+### URL Patterns Not Matching
+
+**Problem:** Allowed URL patterns are being blocked with `--ssl-bump`
+
+**Solution:**
+1. Enable debug logging to see pattern matching:
+   ```bash
+   sudo awf --log-level debug --ssl-bump --allow-urls "..." 'your-command'
+   ```
+2. Check the exact URL format in Squid logs:
+   ```bash
+   sudo cat /tmp/squid-logs-*/access.log | grep your-domain
+   ```
+3. Ensure patterns include the scheme:
+   ```bash
+   # ✗ Wrong: github.com/githubnext/*
+   # ✓ Correct: https://github.com/githubnext/*
+   ```
+
+### Application Fails with Certificate Pinning
+
+**Problem:** Application refuses to connect due to certificate pinning
+
+**Solution:**
+- Applications with certificate pinning are incompatible with SSL Bump
+- Use domain-only filtering without `--ssl-bump` for these applications:
+  ```bash
+  sudo awf --allow-domains github.com 'your-pinned-app'
+  ```
+
 ## Getting More Help
 
 If you're still experiencing issues:
@@ -372,4 +420,5 @@ If you're still experiencing issues:
 4. **Check documentation:**
    - [Architecture](architecture.md) - Understand how the system works
    - [Usage Guide](usage.md) - Detailed usage examples
+   - [SSL Bump](ssl-bump.md) - HTTPS content inspection and URL filtering
    - [Logging Documentation](../LOGGING.md) - Comprehensive logging guide
