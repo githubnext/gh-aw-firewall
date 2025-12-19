@@ -89,6 +89,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - Both commit messages AND PR titles must follow this format
 - PR descriptions should be 1-2 sentences max
 
+**Allowed scopes for PR titles:** `cli`, `docker`, `squid`, `proxy`, `ci`, `deps`
+- Using scopes not in this list will cause the PR Title Check to fail
+- If unsure, omit the scope entirely (e.g., `test: add new tests` instead of `test(security): add new tests`)
+
 **Common types:**
 - `feat`: New feature
 - `fix`: Bug fix
@@ -103,8 +107,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - ✅ `docs(template): fix duplicate heading in release template`
 - ✅ `feat: add new domain whitelist option`
 - ✅ `fix(cleanup): resolve container cleanup race condition`
+- ✅ `test: add NET_ADMIN capability verification tests`
 - ❌ `Fix bug` (missing type)
 - ❌ `docs: Fix template.` (uppercase subject, period at end)
+- ❌ `test(security): add new tests` (scope `security` not in allowed list for PR titles)
 
 ## Development Commands
 
