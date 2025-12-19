@@ -11,6 +11,7 @@ Options:
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
+  --no-docker                Disable Docker-in-Docker: do not mount Docker socket
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
@@ -44,6 +45,24 @@ sudo awf \
   'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
 # Returns: curl: (22) The requested URL returned error: 403
 ```
+
+### Disabling Docker-in-Docker
+
+By default, the agent container has access to the Docker socket, allowing it to spawn additional containers (which inherit firewall restrictions). For additional security, you can disable this with the `--no-docker` flag:
+
+```bash
+# Disable Docker-in-Docker - Docker socket is not mounted
+sudo awf \
+  --allow-domains github.com \
+  --no-docker \
+  -- curl https://api.github.com
+```
+
+When `--no-docker` is enabled:
+- The Docker socket (`/var/run/docker.sock`) is not mounted
+- Commands cannot spawn new Docker containers from within the firewall
+- Provides additional security by preventing container escapes via Docker
+- Useful when running untrusted code that shouldn't have Docker access
 
 ### With GitHub Copilot CLI
 

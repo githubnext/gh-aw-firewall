@@ -10,6 +10,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 - **Docker-in-Docker Support**: Spawned containers inherit firewall restrictions
+- **Optional Docker Isolation**: Disable Docker socket access with `--no-docker` for additional security
 
 ## Get started fast
 
