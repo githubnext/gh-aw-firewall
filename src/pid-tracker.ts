@@ -21,6 +21,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { PidTrackResult } from './types';
 
@@ -301,12 +302,12 @@ export async function trackPidForPort(
   procPath = '/proc'
 ): Promise<PidTrackResult> {
   try {
-    // Read /proc/net/tcp
+    // Read /proc/net/tcp using async operations
     const tcpPath = path.join(procPath, 'net', 'tcp');
     let tcpContent: string;
 
     try {
-      tcpContent = fs.readFileSync(tcpPath, 'utf-8');
+      tcpContent = await fsPromises.readFile(tcpPath, 'utf-8');
     } catch (err) {
       return {
         pid: -1,
@@ -329,7 +330,8 @@ export async function trackPidForPort(
       };
     }
 
-    // Find the process that owns this socket
+    // Find the process that owns this socket (uses sync operations for fd scanning)
+    // This is intentional as the /proc filesystem is very fast and sync is simpler
     const processInfo = findProcessByInode(inode, procPath);
 
     if (!processInfo) {
