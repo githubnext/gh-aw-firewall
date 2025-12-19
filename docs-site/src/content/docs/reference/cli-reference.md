@@ -19,8 +19,9 @@ awf [options] -- <command>
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (required unless `--allow-domains-file` used) |
+| `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (required unless `--allow-domains-file` or `--ruleset-file` used) |
 | `--allow-domains-file <path>` | string | — | Path to file containing allowed domains |
+| `--ruleset-file <path>` | string | — | Path to YAML rule file (repeatable) |
 | `--log-level <level>` | string | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `--keep-containers` | flag | `false` | Keep containers running after command exits |
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
@@ -52,6 +53,14 @@ Path to file with allowed domains. Supports comments (`#`) and one domain per li
 
 ```bash
 --allow-domains-file ./allowed-domains.txt
+```
+
+### `--ruleset-file <path>`
+
+Load allowed domains from a YAML rule file. Can be specified multiple times to merge rule sets.
+
+```bash
+--ruleset-file ./awf-rules.yaml --ruleset-file ./project-rules.yaml
 ```
 
 ### `--log-level <level>`
