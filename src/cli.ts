@@ -598,6 +598,20 @@ program
     }
   });
 
+/**
+ * Validates that a format string is one of the allowed values
+ * 
+ * @param format - Format string to validate
+ * @param validFormats - Array of valid format options
+ * @throws Exits process with error if format is invalid
+ */
+function validateFormat(format: string, validFormats: string[]): void {
+  if (!validFormats.includes(format)) {
+    logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // Logs subcommand - view Squid proxy logs
 const logsCmd = program
   .command('logs')
@@ -613,10 +627,7 @@ const logsCmd = program
   .action(async (options) => {
     // Validate format option
     const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
-    if (!validFormats.includes(options.format)) {
-      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
-      process.exit(1);
-    }
+    validateFormat(options.format, validFormats);
 
     // Dynamic import to avoid circular dependencies
     const { logsCommand } = await import('./commands/logs');
@@ -666,10 +677,7 @@ logsCmd
   .action(async (options) => {
     // Validate format option
     const validFormats = ['json', 'markdown', 'pretty'];
-    if (!validFormats.includes(options.format)) {
-      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
-      process.exit(1);
-    }
+    validateFormat(options.format, validFormats);
 
     const { summaryCommand } = await import('./commands/logs-summary');
     await summaryCommand({

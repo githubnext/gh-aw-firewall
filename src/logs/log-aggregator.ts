@@ -117,11 +117,14 @@ export async function loadAllLogs(source: LogSource): Promise<ParsedLogEntry[]> 
 
   if (source.type === 'running') {
     // Read from running container
+    if (!source.containerName) {
+      throw new Error('Container name is required for running log source');
+    }
     logger.debug(`Loading logs from container: ${source.containerName}`);
     try {
       const result = await execa('docker', [
         'exec',
-        source.containerName!,
+        source.containerName,
         'cat',
         '/var/log/squid/access.log',
       ]);
@@ -132,7 +135,10 @@ export async function loadAllLogs(source: LogSource): Promise<ParsedLogEntry[]> 
     }
   } else {
     // Read from file
-    const filePath = path.join(source.path!, 'access.log');
+    if (!source.path) {
+      throw new Error('Path is required for preserved log source');
+    }
+    const filePath = path.join(source.path, 'access.log');
     logger.debug(`Loading logs from file: ${filePath}`);
 
     if (!fs.existsSync(filePath)) {

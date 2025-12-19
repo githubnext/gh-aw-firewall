@@ -49,20 +49,28 @@ export function formatStatsMarkdown(stats: AggregatedStats): string {
   const requestWord = stats.totalRequests === 1 ? 'request' : 'requests';
   const domainWord = stats.uniqueDomains === 1 ? 'domain' : 'domains';
 
+  // Filter out "-" domain for valid domain count
+  const validDomains = Array.from(stats.byDomain.values()).filter(d => d.domain !== '-');
+  const validDomainCount = validDomains.length;
+  
+  // Show both counts if there are invalid domains
+  const domainCountText =
+    validDomainCount === stats.uniqueDomains
+      ? `${stats.uniqueDomains} unique ${domainWord}`
+      : `${stats.uniqueDomains} unique ${domainWord} (${validDomainCount} valid)`;
+
   lines.push('<details>');
   lines.push(
     `<summary>${stats.totalRequests} ${requestWord} | ` +
       `${stats.allowedRequests} allowed | ` +
       `${stats.deniedRequests} blocked | ` +
-      `${stats.uniqueDomains} unique ${domainWord}</summary>\n`
+      `${domainCountText}</summary>\n`
   );
 
   // Domain breakdown table
   if (stats.uniqueDomains > 0) {
-    // Sort domains: by total requests descending, filter out "-"
-    const sortedDomains = Array.from(stats.byDomain.values())
-      .filter(d => d.domain !== '-')
-      .sort((a, b) => b.total - a.total);
+    // Sort domains: by total requests descending
+    const sortedDomains = validDomains.sort((a, b) => b.total - a.total);
 
     if (sortedDomains.length > 0) {
       lines.push('| Domain | Allowed | Denied |');
@@ -98,8 +106,10 @@ export function formatStatsPretty(
 ): string {
   const lines: string[] = [];
 
-  // Helper for conditional coloring
-  const c = colorize ? chalk : { green: (s: string) => s, red: (s: string) => s, cyan: (s: string) => s, gray: (s: string) => s, bold: (s: string) => s, yellow: (s: string) => s };
+  // Helper for conditional coloring - use Proxy for clean no-op fallback
+  const c = colorize
+    ? chalk
+    : (new Proxy({}, { get: () => (s: string) => s }) as typeof chalk);
 
   lines.push(c.bold('Firewall Statistics'));
   lines.push(c.gray('─'.repeat(40)));
@@ -142,8 +152,10 @@ export function formatStatsPretty(
       .filter(d => d.domain !== '-')
       .sort((a, b) => b.total - a.total);
 
-    // Calculate max domain length for alignment
-    const maxDomainLen = Math.max(...sortedDomains.map(d => d.domain.length), 0);
+    // Calculate max domain length for alignment (guard against empty array)
+    const maxDomainLen = sortedDomains.length > 0
+      ? Math.max(...sortedDomains.map(d => d.domain.length))
+      : 0;
 
     for (const domainStats of sortedDomains) {
       const padded = domainStats.domain.padEnd(maxDomainLen + 2);

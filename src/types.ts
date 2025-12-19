@@ -659,6 +659,11 @@ export interface ParsedLogEntry {
 export type OutputFormat = 'raw' | 'pretty' | 'json';
 
 /**
+ * Output format for log stats and summary commands
+ */
+export type LogStatsFormat = 'json' | 'markdown' | 'pretty';
+
+/**
  * Source of log data (running container or preserved log files)
  */
 export interface LogSource {
