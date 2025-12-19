@@ -36,11 +36,12 @@ RUN groupadd -g ${USER_GID} awfuser && \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script and docker wrapper
+# Copy iptables setup script, docker wrapper, and PID logger
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker-wrapper.sh /usr/local/bin/docker-wrapper.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/docker-wrapper.sh
+COPY pid-logger.sh /usr/local/bin/pid-logger.sh
+RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/docker-wrapper.sh /usr/local/bin/pid-logger.sh
 
 # Install docker wrapper to intercept docker commands
 # Rename real docker binary and replace with wrapper

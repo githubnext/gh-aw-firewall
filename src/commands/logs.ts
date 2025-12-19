@@ -25,6 +25,8 @@ export interface LogsCommandOptions {
   source?: string;
   /** List available log sources without streaming */
   list?: boolean;
+  /** Enrich logs with PID/process info (real-time only) */
+  withPid?: boolean;
 }
 
 /**
@@ -94,6 +96,7 @@ export async function logsCommand(options: LogsCommandOptions): Promise<void> {
       source,
       formatter,
       parse,
+      withPid: options.withPid || false,
     });
   } catch (error) {
     logger.error(`Failed to stream logs: ${error instanceof Error ? error.message : error}`);

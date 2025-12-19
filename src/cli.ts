@@ -670,10 +670,20 @@ const logsCmd = program
   )
   .option('--source <path>', 'Path to log directory or "running" for live container')
   .option('--list', 'List available log sources', false)
+  .option(
+    '--with-pid',
+    'Enrich logs with PID/process info (real-time only, requires -f)',
+    false
+  )
   .action(async (options) => {
     // Validate format option
     const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
     validateFormat(options.format, validFormats);
+
+    // Warn if --with-pid is used without -f
+    if (options.withPid && !options.follow) {
+      logger.warn('--with-pid only works with real-time streaming (-f). PID tracking disabled.');
+    }
 
     // Dynamic import to avoid circular dependencies
     const { logsCommand } = await import('./commands/logs');
@@ -682,6 +692,7 @@ const logsCmd = program
       format: options.format as OutputFormat,
       source: options.source,
       list: options.list,
+      withPid: options.withPid && options.follow, // Only enable if also following
     });
   });
 

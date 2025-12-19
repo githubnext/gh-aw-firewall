@@ -6,10 +6,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 import execa from 'execa';
-import { LogSource } from '../types';
+import { LogSource, EnhancedLogEntry } from '../types';
 import { LogFormatter } from './log-formatter';
 import { parseLogLine } from './log-parser';
 import { logger } from '../logger';
+import { trackPidForPortSync, isPidTrackingAvailable } from '../pid-tracker';
 
 /**
  * Options for streaming logs
@@ -23,6 +24,8 @@ export interface StreamOptions {
   formatter: LogFormatter;
   /** Whether to parse logs (false for raw format) */
   parse?: boolean;
+  /** Whether to enrich logs with PID/process info (real-time only) */
+  withPid?: boolean;
 }
 
 /**
@@ -31,12 +34,17 @@ export interface StreamOptions {
  * @param options - Streaming options
  */
 export async function streamLogs(options: StreamOptions): Promise<void> {
-  const { follow, source, formatter, parse = true } = options;
+  const { follow, source, formatter, parse = true, withPid = false } = options;
+
+  // Check if PID tracking is available when requested
+  if (withPid && !isPidTrackingAvailable()) {
+    logger.warn('PID tracking not available on this system (requires /proc filesystem)');
+  }
 
   if (source.type === 'running') {
-    await streamFromContainer(source.containerName!, follow, formatter, parse);
+    await streamFromContainer(source.containerName!, follow, formatter, parse, withPid);
   } else {
-    await streamFromFile(source.path!, follow, formatter, parse);
+    await streamFromFile(source.path!, follow, formatter, parse, withPid);
   }
 }
 
@@ -47,7 +55,8 @@ async function streamFromContainer(
   containerName: string,
   follow: boolean,
   formatter: LogFormatter,
-  parse: boolean
+  parse: boolean,
+  withPid: boolean
 ): Promise<void> {
   logger.debug(`Streaming logs from container: ${containerName}`);
 
@@ -76,7 +85,7 @@ async function streamFromContainer(
       });
 
       for await (const line of rl) {
-        processLine(line, formatter, parse);
+        processLine(line, formatter, parse, withPid);
       }
     }
 
@@ -100,7 +109,8 @@ async function streamFromFile(
   logDir: string,
   follow: boolean,
   formatter: LogFormatter,
-  parse: boolean
+  parse: boolean,
+  withPid: boolean
 ): Promise<void> {
   const filePath = path.join(logDir, 'access.log');
 
@@ -113,10 +123,10 @@ async function streamFromFile(
 
   if (follow) {
     // Use tail -f for live following
-    await tailFile(filePath, formatter, parse);
+    await tailFile(filePath, formatter, parse, withPid);
   } else {
     // Read entire file at once
-    await readFile(filePath, formatter, parse);
+    await readFile(filePath, formatter, parse, withPid);
   }
 }
 
@@ -126,14 +136,15 @@ async function streamFromFile(
 async function readFile(
   filePath: string,
   formatter: LogFormatter,
-  parse: boolean
+  parse: boolean,
+  withPid: boolean
 ): Promise<void> {
   const content = fs.readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
 
   for (const line of lines) {
     if (line.trim() === '') continue;
-    processLine(line, formatter, parse);
+    processLine(line, formatter, parse, withPid);
   }
 }
 
@@ -143,7 +154,8 @@ async function readFile(
 async function tailFile(
   filePath: string,
   formatter: LogFormatter,
-  parse: boolean
+  parse: boolean,
+  withPid: boolean
 ): Promise<void> {
   const proc = execa('tail', ['-f', filePath], {
     reject: false,
@@ -163,7 +175,7 @@ async function tailFile(
       });
 
       for await (const line of rl) {
-        processLine(line, formatter, parse);
+        processLine(line, formatter, parse, withPid);
       }
     }
 
@@ -180,9 +192,35 @@ async function tailFile(
 }
 
 /**
- * Processes a single log line - parses (if enabled) and outputs
+ * Enriches a parsed log entry with PID tracking information
+ *
+ * @param entry - Parsed log entry
+ * @returns Enhanced log entry with PID info (if available)
  */
-function processLine(line: string, formatter: LogFormatter, parse: boolean): void {
+function enrichWithPid(entry: EnhancedLogEntry): EnhancedLogEntry {
+  const port = parseInt(entry.clientPort, 10);
+  if (isNaN(port) || port <= 0 || port > 65535) {
+    return entry;
+  }
+
+  const pidInfo = trackPidForPortSync(port);
+  if (pidInfo.pid !== -1) {
+    return {
+      ...entry,
+      pid: pidInfo.pid,
+      cmdline: pidInfo.cmdline,
+      comm: pidInfo.comm,
+      inode: pidInfo.inode,
+    };
+  }
+
+  return entry;
+}
+
+/**
+ * Processes a single log line - parses (if enabled), enriches with PID (if enabled), and outputs
+ */
+function processLine(line: string, formatter: LogFormatter, parse: boolean, withPid: boolean): void {
   if (!parse) {
     // Raw format - output as-is
     process.stdout.write(formatter.formatRaw(line));
@@ -192,7 +230,9 @@ function processLine(line: string, formatter: LogFormatter, parse: boolean): voi
   // Parse and format
   const entry = parseLogLine(line);
   if (entry) {
-    process.stdout.write(formatter.formatEntry(entry));
+    // Enrich with PID info if enabled
+    const enhancedEntry = withPid ? enrichWithPid(entry) : entry;
+    process.stdout.write(formatter.formatEntry(enhancedEntry));
   } else {
     // Failed to parse, output as raw with a warning indicator
     logger.debug(`Failed to parse log line: ${line}`);

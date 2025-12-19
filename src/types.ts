@@ -761,3 +761,39 @@ export interface LogSource {
   /** Human-readable date string (for preserved type) */
   dateStr?: string;
 }
+
+/**
+ * Result of PID tracking operation
+ *
+ * Contains information about the process that made a network request,
+ * identified by correlating the source port with /proc filesystem data.
+ */
+export interface PidTrackResult {
+  /** Process ID that owns the socket, or -1 if not found */
+  pid: number;
+  /** Full command line of the process, or 'unknown' if not found */
+  cmdline: string;
+  /** Short command name (from /proc/[pid]/comm), or 'unknown' if not found */
+  comm: string;
+  /** Socket inode number, or undefined if not found */
+  inode?: string;
+  /** Error message if tracking failed, or undefined on success */
+  error?: string;
+}
+
+/**
+ * Extended log entry with PID tracking information
+ *
+ * Combines the standard parsed log entry with process attribution
+ * for complete request tracking.
+ */
+export interface EnhancedLogEntry extends ParsedLogEntry {
+  /** Process ID that made the request, or -1 if unknown */
+  pid?: number;
+  /** Full command line of the process that made the request */
+  cmdline?: string;
+  /** Short command name (from /proc/[pid]/comm) */
+  comm?: string;
+  /** Socket inode associated with the connection */
+  inode?: string;
+}
