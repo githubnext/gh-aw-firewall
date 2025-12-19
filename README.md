@@ -93,6 +93,29 @@ awf logs --format json
 awf logs --list
 ```
 
+### Log Statistics and Summaries
+
+Generate aggregated statistics and summaries from firewall logs:
+
+```bash
+# Show statistics in terminal (pretty format)
+awf logs stats
+
+# Output statistics as JSON for scripting
+awf logs stats --format json
+
+# Generate markdown summary (default for GitHub Actions)
+awf logs summary
+
+# Generate summary for GitHub Actions step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+**Output Formats:**
+- `pretty` - Colorized terminal output (default for `stats`)
+- `markdown` - GitHub-flavored markdown (default for `summary`)
+- `json` - Structured JSON for programmatic use
+
 ## Domain Whitelisting
 
 Domains automatically match all subdomains:
