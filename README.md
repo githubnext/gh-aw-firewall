@@ -10,6 +10,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 - **Docker-in-Docker Support**: Spawned containers inherit firewall restrictions
+- **Optional Docker Isolation**: Disable Docker socket access with `--no-docker` for additional security
 
 ## Quick Start
 
@@ -214,6 +215,24 @@ sudo awf \
   --dns-servers 1.1.1.1,1.0.0.1 \
   -- curl https://api.github.com
 ```
+
+### Disabling Docker-in-Docker
+
+By default, the agent container has access to the Docker socket, allowing it to spawn additional containers (which inherit firewall restrictions). For additional security, you can disable this with the `--no-docker` flag:
+
+```bash
+# Disable Docker-in-Docker - Docker socket is not mounted
+sudo awf \
+  --allow-domains github.com \
+  --no-docker \
+  -- curl https://api.github.com
+```
+
+When `--no-docker` is enabled:
+- The Docker socket (`/var/run/docker.sock`) is not mounted
+- Commands cannot spawn new Docker containers from within the firewall
+- Provides additional security by preventing container escapes via Docker
+- Useful when running untrusted code that shouldn't have Docker access
 
 ## Development & Testing
 

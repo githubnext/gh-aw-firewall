@@ -375,5 +375,80 @@ describe('docker-manager', () => {
         expect(result.services.agent.working_dir).toBe('/var/lib/app/data');
       });
     });
+
+    describe('disableDocker option', () => {
+      it('should mount Docker socket by default (disableDocker not set)', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
+        expect(volumes.some((v: string) => v.includes('.docker:/workspace/.docker'))).toBe(true);
+      });
+
+      it('should mount Docker socket when disableDocker is false', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: false,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
+        expect(volumes.some((v: string) => v.includes('.docker:/workspace/.docker'))).toBe(true);
+      });
+
+      it('should NOT mount Docker socket when disableDocker is true', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: true,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        expect(volumes).not.toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
+        expect(volumes.some((v: string) => v.includes('docker.sock'))).toBe(false);
+      });
+
+      it('should NOT mount Docker config when disableDocker is true', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: true,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        // Should not have .docker mounts
+        expect(volumes.some((v: string) => v.includes('.docker:/workspace/.docker'))).toBe(false);
+        expect(volumes.some((v: string) => v.includes('.docker:') && v.includes('/.docker:'))).toBe(false);
+      });
+
+      it('should still mount essential volumes when disableDocker is true', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: true,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        // Essential mounts should still be present
+        expect(volumes).toContain('/tmp:/tmp:rw');
+        expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+      });
+
+      it('should work with custom volume mounts when disableDocker is true', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: true,
+          volumeMounts: ['/workspace:/workspace:ro'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const volumes = result.services.agent.volumes as string[];
+
+        // Custom mount should be present
+        expect(volumes).toContain('/workspace:/workspace:ro');
+        // Docker socket should still be absent
+        expect(volumes.some((v: string) => v.includes('docker.sock'))).toBe(false);
+      });
+    });
   });
 });

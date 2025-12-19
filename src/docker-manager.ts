@@ -264,16 +264,22 @@ export function generateDockerCompose(
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
     `${process.env.HOME}:${process.env.HOME}:rw`,
-    // Mount Docker socket for MCP servers that need to run containers
-    '/var/run/docker.sock:/var/run/docker.sock:rw',
-    // Mount clean Docker config to override host's context
-    `${config.workDir}/.docker:/workspace/.docker:rw`,
-    // Override host's .docker directory with clean config to prevent Docker CLI
-    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
+
+  // Mount Docker socket and config unless --no-docker is specified
+  if (!config.disableDocker) {
+    // Mount Docker socket for MCP servers that need to run containers
+    agentVolumes.push('/var/run/docker.sock:/var/run/docker.sock:rw');
+    // Mount clean Docker config to override host's context
+    agentVolumes.push(`${config.workDir}/.docker:/workspace/.docker:rw`);
+    // Override host's .docker directory with clean config to prevent Docker CLI
+    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
+    agentVolumes.push(`${config.workDir}/.docker:${process.env.HOME}/.docker:rw`);
+  } else {
+    logger.info('Docker-in-Docker disabled: Docker socket not mounted');
+  }
 
   // Add custom volume mounts if specified
   if (config.volumeMounts && config.volumeMounts.length > 0) {

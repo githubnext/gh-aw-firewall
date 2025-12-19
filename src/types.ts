@@ -220,6 +220,23 @@ export interface WrapperConfig {
    * @example '/tmp/my-proxy-logs'
    */
   proxyLogsDir?: string;
+
+  /**
+   * Whether to disable Docker-in-Docker functionality
+   *
+   * When true:
+   * - Docker socket is NOT mounted into the agent container
+   * - Commands cannot spawn new Docker containers from within the firewall
+   * - Provides additional security by preventing container escapes via Docker
+   *
+   * When false (default):
+   * - Docker socket is mounted at /var/run/docker.sock
+   * - Commands can spawn new containers (with firewall restrictions)
+   * - Spawned containers are subject to the same network restrictions
+   *
+   * @default false
+   */
+  disableDocker?: boolean;
 }
 
 /**

@@ -374,6 +374,11 @@ program
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
+  .option(
+    '--no-docker',
+    'Disable Docker-in-Docker: do not mount Docker socket, preventing container spawning',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -506,6 +511,7 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      disableDocker: options.noDocker,
     };
 
     // Warn if --env-all is used
