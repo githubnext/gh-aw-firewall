@@ -98,6 +98,19 @@ if [ -f /etc/resolv.conf ]; then
   echo "[entrypoint] DNS configured with Docker embedded DNS (127.0.0.11) and trusted servers: $DNS_SERVERS"
 fi
 
+# Update CA certificates if SSL Bump is enabled
+# The CA certificate is mounted at /usr/local/share/ca-certificates/awf-ca.crt
+if [ "${AWF_SSL_BUMP_ENABLED}" = "true" ]; then
+  echo "[entrypoint] SSL Bump mode detected - updating CA certificates..."
+  if [ -f /usr/local/share/ca-certificates/awf-ca.crt ]; then
+    update-ca-certificates 2>/dev/null
+    echo "[entrypoint] CA certificates updated for SSL Bump"
+    echo "[entrypoint] ⚠️  WARNING: HTTPS traffic will be intercepted for URL inspection"
+  else
+    echo "[entrypoint][WARN] SSL Bump enabled but CA certificate not found"
+  fi
+fi
+
 # Setup Docker socket permissions if Docker socket is mounted
 # This allows MCP servers that run as Docker containers to work
 # Store DOCKER_GID once to avoid redundant stat calls

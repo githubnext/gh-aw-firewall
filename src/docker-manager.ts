@@ -6,6 +6,7 @@ import execa from 'execa';
 import { DockerComposeConfig, WrapperConfig, BlockedTarget } from './types';
 import { logger } from './logger';
 import { generateSquidConfig } from './squid-config';
+import { generateSessionCa, initSslDb, CaFiles } from './ssl-bump';
 
 const SQUID_PORT = 3128;
 
@@ -147,12 +148,21 @@ async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: strin
 }
 
 /**
+ * SSL configuration for Docker Compose (when SSL Bump is enabled)
+ */
+export interface SslConfig {
+  caFiles: CaFiles;
+  sslDbPath: string;
+}
+
+/**
  * Generates Docker Compose configuration
  * Note: Uses external network 'awf-net' created by host-iptables setup
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; agentIp: string }
+  networkConfig: { subnet: string; squidIp: string; agentIp: string },
+  sslConfig?: SslConfig
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
 
@@ -164,6 +174,19 @@ export function generateDockerCompose(
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
 
+  // Build Squid volumes list
+  const squidVolumes = [
+    `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
+    `${squidLogsPath}:/var/log/squid:rw`,
+  ];
+
+  // Add SSL-related volumes if SSL Bump is enabled
+  if (sslConfig) {
+    squidVolumes.push(`${sslConfig.caFiles.certPath}:${sslConfig.caFiles.certPath}:ro`);
+    squidVolumes.push(`${sslConfig.caFiles.keyPath}:${sslConfig.caFiles.keyPath}:ro`);
+    squidVolumes.push(`${sslConfig.sslDbPath}:${sslConfig.sslDbPath}:rw`);
+  }
+
   // Squid service configuration
   const squidService: any = {
     container_name: 'awf-squid',
@@ -172,10 +195,7 @@ export function generateDockerCompose(
         ipv4_address: networkConfig.squidIp,
       },
     },
-    volumes: [
-      `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
-      `${squidLogsPath}:/var/log/squid:rw`,
-    ],
+    volumes: squidVolumes,
     healthcheck: {
       test: ['CMD', 'nc', '-z', 'localhost', '3128'],
       interval: '5s',
@@ -196,7 +216,8 @@ export function generateDockerCompose(
   }
 
   // Use GHCR image or build locally
-  if (useGHCR) {
+  // For SSL Bump, we always build locally to include OpenSSL tools
+  if (useGHCR && !config.sslBump) {
     squidService.image = `${registry}/squid:${tag}`;
   } else {
     squidService.build = {
@@ -283,6 +304,14 @@ export function generateDockerCompose(
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
+
+  // Add SSL CA certificate mount if SSL Bump is enabled
+  // This allows the agent container to trust the dynamically-generated CA
+  if (sslConfig) {
+    agentVolumes.push(`${sslConfig.caFiles.certPath}:/usr/local/share/ca-certificates/awf-ca.crt:ro`);
+    // Set environment variable to indicate SSL Bump is enabled
+    environment.AWF_SSL_BUMP_ENABLED = 'true';
+  }
 
   // Add custom volume mounts if specified
   if (config.volumeMounts && config.volumeMounts.length > 0) {
@@ -453,18 +482,40 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     }
   }
 
+  // Generate SSL Bump certificates if enabled
+  let sslConfig: SslConfig | undefined;
+  if (config.sslBump) {
+    logger.info('SSL Bump enabled - generating per-session CA certificate...');
+    try {
+      const caFiles = await generateSessionCa({ workDir: config.workDir });
+      const sslDbPath = await initSslDb(config.workDir);
+      sslConfig = { caFiles, sslDbPath };
+      logger.info('SSL Bump CA certificate generated successfully');
+      logger.warn('⚠️  SSL Bump mode: HTTPS traffic will be intercepted for URL inspection');
+      logger.warn('   A per-session CA certificate has been generated (valid for 1 day)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to generate SSL Bump CA: ${message}`);
+      throw new Error(`SSL Bump initialization failed: ${message}`);
+    }
+  }
+
   // Write Squid config
   const squidConfig = generateSquidConfig({
     domains: config.allowedDomains,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
+    sslBump: config.sslBump,
+    caFiles: sslConfig?.caFiles,
+    sslDbPath: sslConfig?.sslDbPath,
+    urlPatterns: config.allowedUrls,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);
   logger.debug(`Squid config written to: ${squidConfigPath}`);
 
   // Write Docker Compose config
-  const dockerCompose = generateDockerCompose(config, networkConfig);
+  const dockerCompose = generateDockerCompose(config, networkConfig, sslConfig);
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
   fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose));
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
