@@ -623,3 +623,63 @@ docker exec awf-squid cat /var/log/squid/access.log
 - SNI is captured via CONNECT method for HTTPS (no SSL inspection)
 - iptables logs go to kernel buffer (view with `dmesg`)
 - PID not directly available (UID can be used for correlation)
+
+## Log Analysis Commands
+
+The CLI includes built-in commands for aggregating and summarizing firewall logs.
+
+### Commands
+
+**`awf logs stats`** - Show aggregated statistics from firewall logs
+- Default format: `pretty` (colorized terminal output)
+- Outputs: total requests, allowed/denied counts, unique domains, per-domain breakdown
+
+**`awf logs summary`** - Generate summary report (optimized for GitHub Actions)
+- Default format: `markdown` (GitHub-flavored markdown)
+- Designed for piping directly to `$GITHUB_STEP_SUMMARY`
+
+### Output Formats
+
+Both commands support `--format <format>`:
+- `pretty` - Colorized terminal output with percentages and aligned columns
+- `markdown` - GitHub-flavored markdown with collapsible details section
+- `json` - Structured JSON for programmatic consumption
+
+### Key Files
+
+- `src/logs/log-aggregator.ts` - Aggregation logic (`aggregateLogs()`, `loadAllLogs()`, `loadAndAggregate()`)
+- `src/logs/stats-formatter.ts` - Format output (`formatStatsJson()`, `formatStatsMarkdown()`, `formatStatsPretty()`)
+- `src/commands/logs-stats.ts` - Stats command handler
+- `src/commands/logs-summary.ts` - Summary command handler
+
+### Data Structures
+
+```typescript
+// Per-domain statistics
+interface DomainStats {
+  domain: string;
+  allowed: number;
+  denied: number;
+  total: number;
+}
+
+// Aggregated statistics
+interface AggregatedStats {
+  totalRequests: number;
+  allowedRequests: number;
+  deniedRequests: number;
+  uniqueDomains: number;
+  byDomain: Map<string, DomainStats>;
+  timeRange: { start: number; end: number } | null;
+}
+```
+
+### GitHub Actions Usage
+
+```yaml
+- name: Generate firewall summary
+  if: always()
+  run: awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+This replaces 150+ lines of custom JavaScript parsing with a single command.

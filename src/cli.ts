@@ -644,10 +644,24 @@ program
     }
   });
 
+/**
+ * Validates that a format string is one of the allowed values
+ * 
+ * @param format - Format string to validate
+ * @param validFormats - Array of valid format options
+ * @throws Exits process with error if format is invalid
+ */
+function validateFormat(format: string, validFormats: string[]): void {
+  if (!validFormats.includes(format)) {
+    logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // Logs subcommand - view Squid proxy logs
-program
+const logsCmd = program
   .command('logs')
-  .description('View Squid proxy logs from current or previous runs')
+  .description('View and analyze Squid proxy logs from current or previous runs')
   .option('-f, --follow', 'Follow log output in real-time (like tail -f)', false)
   .option(
     '--format <format>',
@@ -659,10 +673,7 @@ program
   .action(async (options) => {
     // Validate format option
     const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
-    if (!validFormats.includes(options.format)) {
-      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
-      process.exit(1);
-    }
+    validateFormat(options.format, validFormats);
 
     // Dynamic import to avoid circular dependencies
     const { logsCommand } = await import('./commands/logs');
@@ -671,6 +682,53 @@ program
       format: options.format as OutputFormat,
       source: options.source,
       list: options.list,
+    });
+  });
+
+// Logs stats subcommand - show aggregated statistics
+logsCmd
+  .command('stats')
+  .description('Show aggregated statistics from firewall logs')
+  .option(
+    '--format <format>',
+    'Output format: json, markdown, pretty',
+    'pretty'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .action(async (options) => {
+    // Validate format option
+    const validFormats = ['json', 'markdown', 'pretty'];
+    if (!validFormats.includes(options.format)) {
+      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
+      process.exit(1);
+    }
+
+    const { statsCommand } = await import('./commands/logs-stats');
+    await statsCommand({
+      format: options.format as 'json' | 'markdown' | 'pretty',
+      source: options.source,
+    });
+  });
+
+// Logs summary subcommand - generate summary report (optimized for GitHub Actions)
+logsCmd
+  .command('summary')
+  .description('Generate summary report (defaults to markdown for GitHub Actions)')
+  .option(
+    '--format <format>',
+    'Output format: json, markdown, pretty',
+    'markdown'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .action(async (options) => {
+    // Validate format option
+    const validFormats = ['json', 'markdown', 'pretty'];
+    validateFormat(options.format, validFormats);
+
+    const { summaryCommand } = await import('./commands/logs-summary');
+    await summaryCommand({
+      format: options.format as 'json' | 'markdown' | 'pretty',
+      source: options.source,
     });
   });
 
