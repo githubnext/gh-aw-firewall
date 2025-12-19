@@ -449,6 +449,30 @@ describe('docker-manager', () => {
         // Docker socket should still be absent
         expect(volumes.some((v: string) => v.includes('docker.sock'))).toBe(false);
       });
+
+      it('should NOT set Docker environment variables when disableDocker is true', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: true,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.DOCKER_HOST).toBeUndefined();
+        expect(env.DOCKER_CONTEXT).toBeUndefined();
+      });
+
+      it('should set Docker environment variables when disableDocker is false', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          disableDocker: false,
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.DOCKER_HOST).toBe('unix:///var/run/docker.sock');
+        expect(env.DOCKER_CONTEXT).toBe('default');
+      });
     });
   });
 });

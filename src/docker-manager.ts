@@ -221,9 +221,13 @@ export function generateDockerCompose(
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     HOME: process.env.HOME || '/root',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-    DOCKER_HOST: 'unix:///var/run/docker.sock',
-    DOCKER_CONTEXT: 'default',
   };
+
+  // Only set Docker environment variables when Docker is enabled
+  if (!config.disableDocker) {
+    environment.DOCKER_HOST = 'unix:///var/run/docker.sock';
+    environment.DOCKER_CONTEXT = 'default';
+  }
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
   if (config.envAll) {
