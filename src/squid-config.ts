@@ -93,10 +93,24 @@ function generateSslBumpSection(
     urlAclSection = `\n# URL pattern ACLs for HTTPS content inspection\n${urlAcls}\n`;
 
     // Build access rules for URL patterns
+    // When URL patterns are specified, we:
+    // 1. Allow requests matching the URL patterns
+    // 2. Deny all other requests to allowed_domains (they didn't match URL patterns)
     const urlAccessLines = urlPatterns
       .map((_, i) => `http_access allow allowed_url_${i}`)
       .join('\n');
-    urlAccessRules = `\n# Allow HTTPS requests matching URL patterns\n${urlAccessLines}\n`;
+
+    // Deny requests to allowed domains that don't match URL patterns
+    // This ensures URL-level filtering is enforced
+    // IMPORTANT: Use !CONNECT to only deny actual HTTP requests after bump,
+    // not the CONNECT request itself (which must be allowed for SSL bump to work)
+    const denyNonMatching = hasPlainDomains
+      ? 'http_access deny !CONNECT allowed_domains'
+      : hasPatterns
+        ? 'http_access deny !CONNECT allowed_domains_regex'
+        : '';
+
+    urlAccessRules = `\n# Allow HTTPS requests matching URL patterns\n${urlAccessLines}\n\n# Deny requests that don't match URL patterns\n${denyNonMatching}\n`;
   }
 
   return `

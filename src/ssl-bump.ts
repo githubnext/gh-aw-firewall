@@ -184,11 +184,18 @@ export function parseUrlPatterns(patterns: string[]): string[] {
     // Remove trailing slash for consistency
     let p = pattern.replace(/\/$/, '');
 
+    // Preserve .* patterns by using a placeholder before escaping
+    const WILDCARD_PLACEHOLDER = '\x00WILDCARD\x00';
+    p = p.replace(/\.\*/g, WILDCARD_PLACEHOLDER);
+
     // Escape regex special characters except *
     p = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
     // Convert * wildcards to .* regex
     p = p.replace(/\*/g, '.*');
+
+    // Restore .* patterns from placeholder
+    p = p.replace(new RegExp(WILDCARD_PLACEHOLDER, 'g'), '.*');
 
     // Anchor the pattern
     // If pattern ends with .* (from wildcard), don't add end anchor
