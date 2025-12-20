@@ -110,17 +110,43 @@ export async function generateSessionCa(config: SslBumpConfig): Promise<CaFiles>
  * Initializes Squid's SSL certificate database
  *
  * Squid requires a certificate database to store dynamically generated
- * certificates for SSL Bump mode.
+ * certificates for SSL Bump mode. The database structure expected by Squid is:
+ * - ssl_db/certs/ - Directory for storing generated certificates
+ * - ssl_db/index.txt - Index file for certificate lookups
+ * - ssl_db/size - File tracking current database size
+ *
+ * NOTE: We create this structure on the host because security_file_certgen
+ * (Squid's DB initialization tool) requires the directory to NOT exist when
+ * it runs. Since Docker volume mounts create the directory, we need to
+ * pre-populate the structure ourselves.
  *
  * @param workDir - Working directory
  * @returns Path to the SSL database directory
  */
 export async function initSslDb(workDir: string): Promise<string> {
   const sslDbPath = path.join(workDir, 'ssl_db');
+  const certsPath = path.join(sslDbPath, 'certs');
+  const indexPath = path.join(sslDbPath, 'index.txt');
+  const sizePath = path.join(sslDbPath, 'size');
 
-  // Create directory if it doesn't exist
+  // Create the database structure
   if (!fs.existsSync(sslDbPath)) {
     fs.mkdirSync(sslDbPath, { recursive: true, mode: 0o700 });
+  }
+
+  // Create certs subdirectory
+  if (!fs.existsSync(certsPath)) {
+    fs.mkdirSync(certsPath, { mode: 0o700 });
+  }
+
+  // Create index.txt (empty file for certificate index)
+  if (!fs.existsSync(indexPath)) {
+    fs.writeFileSync(indexPath, '', { mode: 0o600 });
+  }
+
+  // Create size file (tracks current DB size, starts at 0)
+  if (!fs.existsSync(sizePath)) {
+    fs.writeFileSync(sizePath, '0\n', { mode: 0o600 });
   }
 
   logger.debug(`SSL certificate database initialized at: ${sslDbPath}`);

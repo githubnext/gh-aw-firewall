@@ -399,11 +399,11 @@ access_log /var/log/squid/access.log firewall_detailed
 cache_log /var/log/squid/cache.log
 cache deny all
 
+${aclSection}
+
 # Port configuration
 ${portConfig}
 ${sslBumpSection}
-
-${aclSection}
 
 # Network ACLs
 acl localnet src 10.0.0.0/8
