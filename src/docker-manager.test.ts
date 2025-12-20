@@ -206,6 +206,9 @@ describe('docker-manager', () => {
       // Verify seccomp profile is configured
       expect(agent.security_opt).toContain('seccomp=/tmp/awf-test/seccomp-profile.json');
 
+      // Verify no-new-privileges is enabled to prevent privilege escalation
+      expect(agent.security_opt).toContain('no-new-privileges:true');
+
       // Verify resource limits
       expect(agent.mem_limit).toBe('4g');
       expect(agent.memswap_limit).toBe('4g');
