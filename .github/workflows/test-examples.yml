@@ -1,0 +1,89 @@
+name: Examples Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'examples/**'
+      - '.github/workflows/test-examples.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-examples:
+    name: Test Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install awf globally
+        run: sudo npm link
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Make examples executable
+        run: chmod +x examples/*.sh
+
+      - name: Test basic-curl.sh
+        run: |
+          echo "=== Testing basic-curl.sh ==="
+          sudo ./examples/basic-curl.sh
+
+      - name: Test using-domains-file.sh
+        run: |
+          echo "=== Testing using-domains-file.sh ==="
+          sudo ./examples/using-domains-file.sh
+
+      - name: Test debugging.sh
+        run: |
+          echo "=== Testing debugging.sh ==="
+          sudo ./examples/debugging.sh
+
+      - name: Test blocked-domains.sh
+        run: |
+          echo "=== Testing blocked-domains.sh ==="
+          sudo ./examples/blocked-domains.sh
+
+      - name: Test docker-in-docker.sh
+        run: |
+          echo "=== Testing docker-in-docker.sh ==="
+          sudo ./examples/docker-in-docker.sh
+
+      # Note: github-copilot.sh is skipped as it requires GITHUB_TOKEN for Copilot CLI
+      # To test it, you would need to set up a secret with a valid Copilot token
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: examples-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/awf-agent-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
