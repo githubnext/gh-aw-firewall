@@ -18,6 +18,8 @@ This directory contains example scripts demonstrating common ways to use the Age
 | [using-domains-file.sh](using-domains-file.sh) | Using a file to specify allowed domains |
 | [blocked-domains.sh](blocked-domains.sh) | Blocking specific domains with allowlist/blocklist |
 | [debugging.sh](debugging.sh) | Debug mode with log inspection |
+| [server-inside-firewall.sh](server-inside-firewall.sh) | Run HTTP server inside firewall, connect from host |
+| [client-inside-firewall.sh](client-inside-firewall.sh) | Run server on host, connect from inside firewall |
 | [domains.txt](domains.txt) | Example domain allowlist file |
 
 ## Running Examples
