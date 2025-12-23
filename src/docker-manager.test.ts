@@ -317,6 +317,13 @@ describe('docker-manager', () => {
       expect(agent.dns_search).toEqual([]);
     });
 
+    it('should configure extra_hosts for host.docker.internal', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+    });
+
     it('should override environment variables with additionalEnv', () => {
       const originalEnv = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'original_token';

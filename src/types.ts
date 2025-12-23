@@ -418,10 +418,20 @@ export interface DockerService {
 
   /**
    * DNS search domains for the container
-   * 
+   *
    * Appended to unqualified hostnames during DNS resolution.
    */
   dns_search?: string[];
+
+  /**
+   * Extra hosts to add to /etc/hosts in the container
+   *
+   * Array of host:ip mappings. Used to enable host.docker.internal
+   * on Linux where it's not available by default.
+   *
+   * @example ['host.docker.internal:host-gateway']
+   */
+  extra_hosts?: string[];
 
   /**
    * Volume mount specifications

@@ -297,6 +297,7 @@ export function generateDockerCompose(
     },
     dns: dnsServers, // Use configured DNS servers (prevents DNS exfiltration)
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
+    extra_hosts: ['host.docker.internal:host-gateway'], // Enable host.docker.internal on Linux
     volumes: agentVolumes,
     environment,
     depends_on: {
