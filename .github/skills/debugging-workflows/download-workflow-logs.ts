@@ -29,11 +29,38 @@ interface Args {
 }
 
 /**
- * Validate that a value contains only safe characters for shell arguments.
- * Allows alphanumeric characters, dashes, underscores, dots, slashes, and colons.
+ * Validate that a run ID contains only numeric characters.
  */
-function isValidArgValue(value: string): boolean {
-  return /^[a-zA-Z0-9._\-/:]+$/.test(value);
+function isValidRunId(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
+/**
+ * Validate that a workflow name contains only safe characters.
+ * Allows alphanumeric characters, dashes, underscores, and dots.
+ */
+function isValidWorkflow(value: string): boolean {
+  return /^[a-zA-Z0-9._-]+$/.test(value);
+}
+
+/**
+ * Validate that an output path contains only safe characters.
+ * Allows alphanumeric characters, dashes, underscores, dots, and path separators.
+ * Prevents path traversal by disallowing '..' sequences.
+ */
+function isValidOutputPath(value: string): boolean {
+  if (value.includes('..')) {
+    return false;
+  }
+  return /^[a-zA-Z0-9._\-/]+$/.test(value);
+}
+
+/**
+ * Validate that a repo name is in owner/repo format.
+ * Allows alphanumeric characters, dashes, underscores, and dots.
+ */
+function isValidRepo(value: string): boolean {
+  return /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(value);
 }
 
 function parseArgs(args: string[]): Args {
@@ -48,8 +75,8 @@ function parseArgs(args: string[]): Args {
           process.exit(1);
         }
         result.runId = args[++i];
-        if (!isValidArgValue(result.runId)) {
-          console.error('Error: Invalid run-id format');
+        if (!isValidRunId(result.runId)) {
+          console.error('Error: Invalid run-id format (must be numeric)');
           process.exit(1);
         }
         break;
@@ -59,7 +86,7 @@ function parseArgs(args: string[]): Args {
           process.exit(1);
         }
         result.workflow = args[++i];
-        if (!isValidArgValue(result.workflow)) {
+        if (!isValidWorkflow(result.workflow)) {
           console.error('Error: Invalid workflow format');
           process.exit(1);
         }
@@ -70,8 +97,8 @@ function parseArgs(args: string[]): Args {
           process.exit(1);
         }
         result.output = args[++i];
-        if (!isValidArgValue(result.output)) {
-          console.error('Error: Invalid output format');
+        if (!isValidOutputPath(result.output)) {
+          console.error('Error: Invalid output path format');
           process.exit(1);
         }
         break;
@@ -81,8 +108,8 @@ function parseArgs(args: string[]): Args {
           process.exit(1);
         }
         result.repo = args[++i];
-        if (!isValidArgValue(result.repo)) {
-          console.error('Error: Invalid repo format');
+        if (!isValidRepo(result.repo)) {
+          console.error('Error: Invalid repo format (use owner/repo)');
           process.exit(1);
         }
         break;
