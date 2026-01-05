@@ -16,7 +16,7 @@
  *   --help              Show this help message
  */
 
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -28,6 +28,14 @@ interface Args {
   help?: boolean;
 }
 
+/**
+ * Validate that a value contains only safe characters for shell arguments.
+ * Allows alphanumeric characters, dashes, underscores, dots, slashes, and colons.
+ */
+function isValidArgValue(value: string): boolean {
+  return /^[a-zA-Z0-9._\-/:]+$/.test(value);
+}
+
 function parseArgs(args: string[]): Args {
   const result: Args = {};
 
@@ -35,16 +43,48 @@ function parseArgs(args: string[]): Args {
     const arg = args[i];
     switch (arg) {
       case '--run-id':
+        if (i + 1 >= args.length) {
+          console.error('Error: --run-id requires a value');
+          process.exit(1);
+        }
         result.runId = args[++i];
+        if (!isValidArgValue(result.runId)) {
+          console.error('Error: Invalid run-id format');
+          process.exit(1);
+        }
         break;
       case '--workflow':
+        if (i + 1 >= args.length) {
+          console.error('Error: --workflow requires a value');
+          process.exit(1);
+        }
         result.workflow = args[++i];
+        if (!isValidArgValue(result.workflow)) {
+          console.error('Error: Invalid workflow format');
+          process.exit(1);
+        }
         break;
       case '--output':
+        if (i + 1 >= args.length) {
+          console.error('Error: --output requires a value');
+          process.exit(1);
+        }
         result.output = args[++i];
+        if (!isValidArgValue(result.output)) {
+          console.error('Error: Invalid output format');
+          process.exit(1);
+        }
         break;
       case '--repo':
+        if (i + 1 >= args.length) {
+          console.error('Error: --repo requires a value');
+          process.exit(1);
+        }
         result.repo = args[++i];
+        if (!isValidArgValue(result.repo)) {
+          console.error('Error: Invalid repo format');
+          process.exit(1);
+        }
         break;
       case '--help':
       case '-h':
@@ -88,31 +128,29 @@ Examples:
 }
 
 function checkGhCli(): boolean {
-  try {
-    execSync('gh --version', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync('gh', ['--version'], { stdio: 'pipe' });
+  return result.status === 0;
 }
 
 function checkGhAuth(): boolean {
-  try {
-    execSync('gh auth status', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync('gh', ['auth', 'status'], { stdio: 'pipe' });
+  return result.status === 0;
 }
 
 function getLatestRunId(workflow?: string, repo?: string): string | null {
-  const repoFlag = repo ? `--repo ${repo}` : '';
-  const workflowFlag = workflow ? `--workflow ${workflow}` : '';
-
   try {
-    const cmd = `gh run list ${repoFlag} ${workflowFlag} --limit 1 --json databaseId --jq '.[0].databaseId'`;
-    const result = execSync(cmd, { encoding: 'utf-8' }).trim();
-    return result || null;
+    const args = ['run', 'list', '--limit', '1', '--json', 'databaseId', '--jq', '.[0].databaseId'];
+    if (repo) {
+      args.push('--repo', repo);
+    }
+    if (workflow) {
+      args.push('--workflow', workflow);
+    }
+    const result = spawnSync('gh', args, { encoding: 'utf-8' });
+    if (result.status !== 0) {
+      return null;
+    }
+    return result.stdout?.trim() || null;
   } catch (error) {
     console.error('Failed to get latest run ID:', error);
     return null;
@@ -123,12 +161,16 @@ function getRunInfo(
   runId: string,
   repo?: string
 ): { name: string; conclusion: string; status: string; createdAt: string } | null {
-  const repoFlag = repo ? `--repo ${repo}` : '';
-
   try {
-    const cmd = `gh run view ${runId} ${repoFlag} --json name,conclusion,status,createdAt`;
-    const result = execSync(cmd, { encoding: 'utf-8' });
-    return JSON.parse(result);
+    const args = ['run', 'view', runId, '--json', 'name,conclusion,status,createdAt'];
+    if (repo) {
+      args.push('--repo', repo);
+    }
+    const result = spawnSync('gh', args, { encoding: 'utf-8' });
+    if (result.status !== 0) {
+      return null;
+    }
+    return JSON.parse(result.stdout);
   } catch (error) {
     console.error('Failed to get run info:', error);
     return null;
@@ -136,8 +178,6 @@ function getRunInfo(
 }
 
 function downloadLogs(runId: string, outputDir: string, repo?: string): boolean {
-  const repoFlag = repo ? `--repo ${repo}` : '';
-
   // Create output directory if it doesn't exist
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -146,9 +186,12 @@ function downloadLogs(runId: string, outputDir: string, repo?: string): boolean 
   console.log(`\nDownloading logs to: ${outputDir}`);
 
   try {
-    // Download all artifacts
-    const cmd = `gh run download ${runId} ${repoFlag} --dir "${outputDir}"`;
-    const result = spawnSync('sh', ['-c', cmd], {
+    // Download all artifacts using array arguments (prevents shell injection)
+    const downloadArgs = ['run', 'download', runId, '--dir', outputDir];
+    if (repo) {
+      downloadArgs.push('--repo', repo);
+    }
+    const result = spawnSync('gh', downloadArgs, {
       stdio: 'inherit',
       encoding: 'utf-8',
     });
@@ -157,12 +200,16 @@ function downloadLogs(runId: string, outputDir: string, repo?: string): boolean 
       console.error('Warning: Some artifacts may not have been downloaded');
     }
 
-    // Also try to download the job logs
+    // Also try to download the job logs using array arguments
     console.log('\nDownloading job logs...');
-    const logsCmd = `gh run view ${runId} ${repoFlag} --log > "${path.join(outputDir, 'job-logs.txt')}" 2>&1`;
-    try {
-      execSync(logsCmd, { encoding: 'utf-8' });
-    } catch {
+    const viewArgs = ['run', 'view', runId, '--log'];
+    if (repo) {
+      viewArgs.push('--repo', repo);
+    }
+    const logsResult = spawnSync('gh', viewArgs, { encoding: 'utf-8' });
+    if (logsResult.status === 0 && logsResult.stdout) {
+      fs.writeFileSync(path.join(outputDir, 'job-logs.txt'), logsResult.stdout);
+    } else {
       console.log('Note: Job logs may not be available or already included in artifacts');
     }
 
@@ -259,7 +306,11 @@ async function main(): Promise<void> {
     listDownloadedFiles(outputDir);
     console.log(`\nLogs saved to: ${path.resolve(outputDir)}`);
     console.log(`\nView run on GitHub:`);
-    const repoPath = args.repo || execSync('gh repo view --json nameWithOwner --jq .nameWithOwner', { encoding: 'utf-8' }).trim();
+    let repoPath = args.repo;
+    if (!repoPath) {
+      const repoResult = spawnSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { encoding: 'utf-8' });
+      repoPath = repoResult.stdout?.trim() || 'unknown';
+    }
     console.log(`  https://github.com/${repoPath}/actions/runs/${runId}`);
   } else {
     console.error('\n❌ Download failed');

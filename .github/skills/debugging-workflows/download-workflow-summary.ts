@@ -17,7 +17,7 @@
  *   --help              Show this help message
  */
 
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 interface Args {
   runId?: string;
@@ -70,6 +70,14 @@ interface RunDetails {
   jobs: Job[];
 }
 
+/**
+ * Validate that a value contains only safe characters for shell arguments.
+ * Allows alphanumeric characters, dashes, underscores, dots, slashes, and colons.
+ */
+function isValidArgValue(value: string): boolean {
+  return /^[a-zA-Z0-9._\-/:]+$/.test(value);
+}
+
 function parseArgs(args: string[]): Args {
   const result: Args = {};
 
@@ -77,19 +85,59 @@ function parseArgs(args: string[]): Args {
     const arg = args[i];
     switch (arg) {
       case '--run-id':
+        if (i + 1 >= args.length) {
+          console.error('Error: --run-id requires a value');
+          process.exit(1);
+        }
         result.runId = args[++i];
+        if (!isValidArgValue(result.runId)) {
+          console.error('Error: Invalid run-id format');
+          process.exit(1);
+        }
         break;
       case '--workflow':
+        if (i + 1 >= args.length) {
+          console.error('Error: --workflow requires a value');
+          process.exit(1);
+        }
         result.workflow = args[++i];
+        if (!isValidArgValue(result.workflow)) {
+          console.error('Error: Invalid workflow format');
+          process.exit(1);
+        }
         break;
       case '--limit':
+        if (i + 1 >= args.length) {
+          console.error('Error: --limit requires a value');
+          process.exit(1);
+        }
         result.limit = parseInt(args[++i], 10);
+        if (isNaN(result.limit) || result.limit < 1) {
+          console.error('Error: Invalid limit value');
+          process.exit(1);
+        }
         break;
       case '--format':
+        if (i + 1 >= args.length) {
+          console.error('Error: --format requires a value');
+          process.exit(1);
+        }
         result.format = args[++i] as 'pretty' | 'json' | 'markdown';
+        if (!['pretty', 'json', 'markdown'].includes(result.format)) {
+          console.error('Error: Invalid format (use pretty, json, or markdown)');
+          process.exit(1);
+        }
         break;
       case '--repo':
+        if (i + 1 >= args.length) {
+          console.error('Error: --repo requires a value');
+          process.exit(1);
+        }
         result.repo = args[++i];
+        if (!isValidArgValue(result.repo)) {
+          console.error('Error: Invalid repo format');
+          process.exit(1);
+        }
         break;
       case '--help':
       case '-h':
@@ -137,31 +185,36 @@ Examples:
 }
 
 function checkGhCli(): boolean {
-  try {
-    execSync('gh --version', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync('gh', ['--version'], { stdio: 'pipe' });
+  return result.status === 0;
 }
 
 function checkGhAuth(): boolean {
-  try {
-    execSync('gh auth status', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync('gh', ['auth', 'status'], { stdio: 'pipe' });
+  return result.status === 0;
 }
 
 function getWorkflowRuns(workflow: string | undefined, limit: number, repo?: string): WorkflowRun[] {
-  const repoFlag = repo ? `--repo ${repo}` : '';
-  const workflowFlag = workflow ? `--workflow ${workflow}` : '';
-
   try {
-    const cmd = `gh run list ${repoFlag} ${workflowFlag} --limit ${limit} --json databaseId,name,displayTitle,status,conclusion,createdAt,updatedAt,headBranch,headSha,url,event`;
-    const result = execSync(cmd, { encoding: 'utf-8' });
-    return JSON.parse(result);
+    const args = [
+      'run',
+      'list',
+      '--limit',
+      limit.toString(),
+      '--json',
+      'databaseId,name,displayTitle,status,conclusion,createdAt,updatedAt,headBranch,headSha,url,event',
+    ];
+    if (repo) {
+      args.push('--repo', repo);
+    }
+    if (workflow) {
+      args.push('--workflow', workflow);
+    }
+    const result = spawnSync('gh', args, { encoding: 'utf-8' });
+    if (result.status !== 0) {
+      return [];
+    }
+    return JSON.parse(result.stdout);
   } catch (error) {
     console.error('Failed to get workflow runs:', error);
     return [];
@@ -169,12 +222,22 @@ function getWorkflowRuns(workflow: string | undefined, limit: number, repo?: str
 }
 
 function getRunDetails(runId: string, repo?: string): RunDetails | null {
-  const repoFlag = repo ? `--repo ${repo}` : '';
-
   try {
-    const cmd = `gh run view ${runId} ${repoFlag} --json name,displayTitle,status,conclusion,createdAt,updatedAt,headBranch,event,jobs`;
-    const result = execSync(cmd, { encoding: 'utf-8' });
-    return JSON.parse(result);
+    const args = [
+      'run',
+      'view',
+      runId,
+      '--json',
+      'name,displayTitle,status,conclusion,createdAt,updatedAt,headBranch,event,jobs',
+    ];
+    if (repo) {
+      args.push('--repo', repo);
+    }
+    const result = spawnSync('gh', args, { encoding: 'utf-8' });
+    if (result.status !== 0) {
+      return null;
+    }
+    return JSON.parse(result.stdout);
   } catch (error) {
     console.error('Failed to get run details:', error);
     return null;
