@@ -20,6 +20,6 @@ jobs:
     steps:
       - name: Install gh-aw extension
         run: |
-          curl -fsSL https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/install-gh-aw.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/githubnext/gh-aw/refs/tags/v0.34.5/install-gh-aw.sh | bash -s -- v0.34.5
       - name: Verify gh-aw installation
         run: gh aw version
