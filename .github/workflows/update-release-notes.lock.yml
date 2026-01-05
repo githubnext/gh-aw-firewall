@@ -19,7 +19,7 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Updates release notes based on the diff between the latest tag and the prior tag
+# Updates release notes based on the diff between the latest tag and the previous tag
 
 name: "Update Release Notes"
 "on":
@@ -433,8 +433,9 @@ jobs:
              - Get the release details using GitHub tools
           
           2. **Find the Previous Tag**:
-             - Use `git tag --sort=-version:refname` to list tags sorted by version
+             - Use `git tag --sort=-version:refname` to list tags sorted by version (requires semantic versioning format like v1.0.0)
              - Identify the previous tag (the tag before `__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__`)
+             - If no previous tag exists, this is the first release - skip the diff analysis and note this in the summary
           
           3. **Analyze the Diff**:
              - Use `git log <previous_tag>..__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__ --oneline` to see the commits between the two tags
@@ -874,7 +875,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           WORKFLOW_NAME: "Update Release Notes"
-          WORKFLOW_DESCRIPTION: "Updates release notes based on the diff between the latest tag and the prior tag"
+          WORKFLOW_DESCRIPTION: "Updates release notes based on the diff between the latest tag and the previous tag"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |

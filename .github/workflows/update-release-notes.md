@@ -1,5 +1,5 @@
 ---
-description: Updates release notes based on the diff between the latest tag and the prior tag
+description: Updates release notes based on the diff between the latest tag and the previous tag
 on:
   release:
     types: [published]
@@ -33,8 +33,9 @@ You are an AI agent that enhances release notes by analyzing the code changes be
    - Get the release details using GitHub tools
 
 2. **Find the Previous Tag**:
-   - Use `git tag --sort=-version:refname` to list tags sorted by version
+   - Use `git tag --sort=-version:refname` to list tags sorted by version (requires semantic versioning format like v1.0.0)
    - Identify the previous tag (the tag before `${{ github.event.release.tag_name }}`)
+   - If no previous tag exists, this is the first release - skip the diff analysis and note this in the summary
 
 3. **Analyze the Diff**:
    - Use `git log <previous_tag>..${{ github.event.release.tag_name }} --oneline` to see the commits between the two tags
