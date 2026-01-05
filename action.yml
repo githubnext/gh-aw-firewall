@@ -1,0 +1,128 @@
+name: 'Setup AWF'
+description: 'Install the Agentic Workflow Firewall (awf) CLI tool'
+author: 'GitHub'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Version to install (e.g., v1.0.0). Defaults to latest release.'
+    required: false
+    default: 'latest'
+
+outputs:
+  version:
+    description: 'The version of awf that was installed'
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate runner OS
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" != "Linux" ]; then
+          echo "::error::This action only supports Linux runners. Current OS: $RUNNER_OS"
+          exit 1
+        fi
+
+    - name: Install awf
+      id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        REPO="githubnext/gh-aw-firewall"
+        BINARY_NAME="awf-linux-x64"
+        INSTALL_DIR="${RUNNER_TEMP}/awf-bin"
+
+        # Create install directory
+        mkdir -p "$INSTALL_DIR"
+
+        # Determine version
+        if [ "$INPUT_VERSION" = "latest" ] || [ -z "$INPUT_VERSION" ]; then
+          echo "Fetching latest release version..."
+          VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Failed to fetch latest version from GitHub API"
+            exit 1
+          fi
+          echo "Latest version: $VERSION"
+        else
+          VERSION="$INPUT_VERSION"
+          # Validate version format
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid version format: $VERSION. Expected format: v1.0.0"
+            exit 1
+          fi
+        fi
+
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+        # Download URLs
+        BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+        BINARY_URL="${BASE_URL}/${BINARY_NAME}"
+        CHECKSUMS_URL="${BASE_URL}/checksums.txt"
+
+        # Download binary
+        echo "Downloading awf ${VERSION}..."
+        if ! curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/awf"; then
+          echo "::error::Failed to download binary from $BINARY_URL"
+          exit 1
+        fi
+
+        # Download checksums
+        echo "Downloading checksums..."
+        if ! curl -fsSL "$CHECKSUMS_URL" -o "$INSTALL_DIR/checksums.txt"; then
+          echo "::error::Failed to download checksums from $CHECKSUMS_URL"
+          exit 1
+        fi
+
+        # Verify checksum
+        echo "Verifying SHA256 checksum..."
+        EXPECTED_SUM=$(awk -v fname="$BINARY_NAME" '$2 == fname {print $1; exit}' "$INSTALL_DIR/checksums.txt")
+
+        if [ -z "$EXPECTED_SUM" ]; then
+          echo "::error::Could not find checksum for $BINARY_NAME in checksums.txt"
+          exit 1
+        fi
+
+        # Validate checksum format (64 hex characters)
+        if ! echo "$EXPECTED_SUM" | grep -qE '^[a-fA-F0-9]{64}$'; then
+          echo "::error::Invalid checksum format: $EXPECTED_SUM"
+          exit 1
+        fi
+
+        # Normalize to lowercase for comparison
+        EXPECTED_SUM=$(echo "$EXPECTED_SUM" | tr 'A-F' 'a-f')
+        ACTUAL_SUM=$(sha256sum "$INSTALL_DIR/awf" | awk '{print $1}' | tr 'A-F' 'a-f')
+
+        if [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
+          echo "::error::Checksum verification failed!"
+          echo "Expected: $EXPECTED_SUM"
+          echo "Got:      $ACTUAL_SUM"
+          exit 1
+        fi
+
+        echo "Checksum verification passed ✓"
+
+        # Verify it's a valid ELF executable
+        if ! file "$INSTALL_DIR/awf" | grep -q "ELF.*executable"; then
+          echo "::error::Downloaded file is not a valid Linux executable"
+          exit 1
+        fi
+
+        # Make executable
+        chmod +x "$INSTALL_DIR/awf"
+
+        # Clean up checksums file
+        rm -f "$INSTALL_DIR/checksums.txt"
+
+        # Add to PATH
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+        echo "Successfully installed awf ${VERSION} to $INSTALL_DIR"
+        echo "awf is now available in PATH for subsequent steps"

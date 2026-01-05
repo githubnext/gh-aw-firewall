@@ -10,9 +10,30 @@ Get started with the firewall in 5 minutes!
 
 ## Installation
 
+### Option 1: Install Script (Recommended for Local Use)
+
+```bash
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+
+# Verify installation
+sudo awf --version
+```
+
+### Option 2: GitHub Action (Recommended for CI/CD)
+
+```yaml
+- name: Setup awf
+  uses: githubnext/gh-aw-firewall@main
+```
+
+See [GitHub Actions Integration](github_actions.md) for more details.
+
+### Option 3: Build from Source
+
 ```bash
 # Clone the repository
-git clone <your-repo-url> awf
+git clone https://github.com/githubnext/gh-aw-firewall.git awf
 cd awf
 
 # Install dependencies
