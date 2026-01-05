@@ -13,17 +13,16 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 ## Get started fast
 
-- **Requirement:** Docker running on your machine
-- **Install:**  
+- **Prerequisite:** Docker is running
+- **Install:**
   ```bash
   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
   ```
-  Review the script before running, or download the latest release binary and verify it with the published `checksums.txt` before installing.
-- **Run your first command:**  
+- **Run your first command:**
   ```bash
   sudo awf --allow-domains github.com -- curl https://api.github.com
   ```
-  Use the `--` separator to pass the command you want to run behind the firewall.
+  The `--` separator passes the command you want to run behind the firewall.
 
 ### GitHub Copilot CLI in one line
 
@@ -33,47 +32,9 @@ sudo -E awf \
   -- copilot --prompt "List my repositories"
 ```
 
-### Installation Options
+For checksum verification, version pinning, and manual installation steps, see [Quick start](docs/quickstart.md).
 
-```bash
-# Install latest version
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
-
-# Install a specific version
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
-
-# Or using environment variable
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
-```
-
-This installer automatically:
-- Downloads the latest release binary (or a specified version)
-- Verifies SHA256 checksum to detect corruption or tampering
-- Validates the file is a valid Linux executable
-- Protects against 404 error pages being saved as binaries
-- Installs to `/usr/local/bin/awf`
-
-**Alternative: Manual installation**
-
-```bash
-# Download the latest release binary
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
-
-# Download checksums for verification
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
-
-# Verify SHA256 checksum
-sha256sum -c checksums.txt --ignore-missing
-
-# Install
-chmod +x awf
-sudo mv awf /usr/local/bin/
-
-# Verify installation
-sudo awf --help
-```
-
-**Docker Image Verification:** All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
+All published container images are cryptographically signed with cosign. See [docs/image-verification.md](docs/image-verification.md) for verification instructions.
 
 ## Explore the docs
 
