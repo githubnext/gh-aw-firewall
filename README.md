@@ -42,11 +42,30 @@ Use the setup action in your workflows:
 steps:
   - name: Setup awf
     uses: githubnext/gh-aw-firewall@main
-    # with:
-    #   version: 'v1.0.0'  # Optional: defaults to latest
+    with:
+      # version: 'v1.0.0'    # Optional: defaults to latest
+      # pull-images: 'true'  # Optional: pre-pull Docker images for the version
 
   - name: Run command with firewall
     run: sudo awf --allow-domains github.com -- curl https://api.github.com
+```
+
+To pin Docker images to match the installed version, use `pull-images: 'true'` and pass the image tag to awf:
+
+```yaml
+steps:
+  - name: Setup awf
+    id: setup-awf
+    uses: githubnext/gh-aw-firewall@main
+    with:
+      version: 'v0.7.0'
+      pull-images: 'true'
+
+  - name: Run with pinned images
+    run: |
+      sudo awf --allow-domains github.com \
+        --image-tag ${{ steps.setup-awf.outputs.image-tag }} \
+        -- curl https://api.github.com
 ```
 
 #### Shell script

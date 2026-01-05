@@ -11,7 +11,8 @@ steps:
   - name: Setup awf
     uses: githubnext/gh-aw-firewall@main
     # with:
-    #   version: 'v1.0.0'  # Optional: defaults to latest
+    #   version: 'v1.0.0'    # Optional: defaults to latest
+    #   pull-images: 'true'  # Optional: pre-pull Docker images
 
   - name: Run command with firewall
     run: sudo awf --allow-domains github.com -- curl https://api.github.com
@@ -21,6 +22,41 @@ The action:
 - Downloads the specified version (or latest) from GitHub releases
 - Verifies SHA256 checksum
 - Installs to PATH for subsequent steps
+- Optionally pre-pulls Docker images for the installed version
+
+#### Action Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `version` | Version to install (e.g., `v1.0.0`) | `latest` |
+| `pull-images` | Pre-pull Docker images for the version | `false` |
+
+#### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `version` | The version that was installed (e.g., `v0.7.0`) |
+| `image-tag` | The image tag matching the version (e.g., `0.7.0`) |
+
+#### Pinning Docker Image Versions
+
+For reproducible builds, you can pin both the awf binary and Docker images:
+
+```yaml
+steps:
+  - name: Setup awf
+    id: setup-awf
+    uses: githubnext/gh-aw-firewall@main
+    with:
+      version: 'v0.7.0'
+      pull-images: 'true'
+
+  - name: Run with pinned images
+    run: |
+      sudo awf --allow-domains github.com \
+        --image-tag ${{ steps.setup-awf.outputs.image-tag }} \
+        -- curl https://api.github.com
+```
 
 ### Using the Install Script
 

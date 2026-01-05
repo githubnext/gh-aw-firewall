@@ -10,11 +10,18 @@ inputs:
     description: 'Version to install (e.g., v1.0.0). Defaults to latest release.'
     required: false
     default: 'latest'
+  pull-images:
+    description: 'Pull Docker images for the installed version. Set to "true" to pre-pull squid and agent images.'
+    required: false
+    default: 'false'
 
 outputs:
   version:
     description: 'The version of awf that was installed'
     value: ${{ steps.install.outputs.version }}
+  image-tag:
+    description: 'The image tag that matches the installed version (without the v prefix)'
+    value: ${{ steps.install.outputs.image_tag }}
 
 runs:
   using: 'composite'
@@ -73,6 +80,10 @@ runs:
         fi
 
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        
+        # Extract image tag (version without 'v' prefix)
+        IMAGE_TAG="${VERSION#v}"
+        echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
         # Download URLs
         BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
@@ -145,3 +156,31 @@ runs:
 
         echo "Successfully installed awf ${VERSION} to $INSTALL_DIR"
         echo "awf is now available in PATH for subsequent steps"
+
+    - name: Pull Docker images
+      if: ${{ inputs.pull-images == 'true' }}
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ steps.install.outputs.image_tag }}
+      run: |
+        set -euo pipefail
+        
+        REGISTRY="ghcr.io/githubnext/gh-aw-firewall"
+        
+        echo "Pulling awf Docker images with tag: ${IMAGE_TAG}"
+        
+        # Pull squid image
+        echo "Pulling ${REGISTRY}/squid:${IMAGE_TAG}..."
+        if ! docker pull "${REGISTRY}/squid:${IMAGE_TAG}"; then
+          echo "::warning::Failed to pull squid image with tag ${IMAGE_TAG}, trying 'latest'"
+          docker pull "${REGISTRY}/squid:latest"
+        fi
+        
+        # Pull agent image
+        echo "Pulling ${REGISTRY}/agent:${IMAGE_TAG}..."
+        if ! docker pull "${REGISTRY}/agent:${IMAGE_TAG}"; then
+          echo "::warning::Failed to pull agent image with tag ${IMAGE_TAG}, trying 'latest'"
+          docker pull "${REGISTRY}/agent:latest"
+        fi
+        
+        echo "Docker images pulled successfully ✓"
