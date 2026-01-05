@@ -47,27 +47,31 @@ sudo awf --allow-domains api.example.com -- \
 The firewall only allows ports 80 (HTTP) and 443 (HTTPS). Non-standard gRPC ports like 50051 are blocked.
 :::
 
+## Connecting to host services
+
+Use `host.docker.internal` to connect from inside awf to services running on your host machine:
+
+```bash
+# Connect to a server running on the host (e.g., localhost:3000)
+sudo awf --allow-domains host.docker.internal -- \
+  curl http://host.docker.internal:3000/api
+```
+
+:::tip
+`host.docker.internal` is automatically configured in awf containers and resolves to the host machine.
+:::
+
 ## Server inside, client outside
 
-To run a server inside awf that accepts external connections, use `--keep-containers` and connect via the Docker network.
+To run a server inside awf that accepts external connections, use `--keep-containers` and connect via Docker:
 
 ```bash
 # Start server inside awf (stays running)
 sudo awf --allow-domains example.com --keep-containers -- \
   python3 -m http.server 8080 &
 
-# Connect from another terminal via Docker network
+# Connect from host using docker exec
 docker exec awf-agent curl http://localhost:8080
-```
-
-For host-to-container connections, use Docker's network inspection:
-
-```bash
-# Get container IP
-docker inspect awf-agent --format '{{.NetworkSettings.Networks.awf_net.IPAddress}}'
-
-# Connect from host (requires access to Docker network)
-curl http://<container-ip>:8080
 ```
 
 :::caution
