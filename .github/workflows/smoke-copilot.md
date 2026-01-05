@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "0 0,7,13,19 * * *"  # Every 6 hours
   workflow_dispatch:
-  pull_request:
-    types: [labeled]
-    names: ["smoke"]
   reaction: "eyes"
 permissions:
   contents: read
