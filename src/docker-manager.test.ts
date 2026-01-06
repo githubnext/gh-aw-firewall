@@ -317,11 +317,44 @@ describe('docker-manager', () => {
       expect(agent.dns_search).toEqual([]);
     });
 
-    it('should configure extra_hosts for host.docker.internal', () => {
+    it('should NOT configure extra_hosts by default (opt-in for security)', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
+      const squid = result.services['squid-proxy'];
 
-      expect(agent.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+      expect(agent.extra_hosts).toBeUndefined();
+      expect(squid.extra_hosts).toBeUndefined();
+    });
+
+    describe('enableHostAccess option', () => {
+      it('should configure extra_hosts when enableHostAccess is true', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+        expect(squid.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+      });
+
+      it('should NOT configure extra_hosts when enableHostAccess is false', () => {
+        const config = { ...mockConfig, enableHostAccess: false };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toBeUndefined();
+        expect(squid.extra_hosts).toBeUndefined();
+      });
+
+      it('should NOT configure extra_hosts when enableHostAccess is undefined', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toBeUndefined();
+        expect(squid.extra_hosts).toBeUndefined();
+      });
     });
 
     it('should override environment variables with additionalEnv', () => {

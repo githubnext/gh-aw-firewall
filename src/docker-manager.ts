@@ -186,6 +186,15 @@ export function generateDockerCompose(
     ports: [`${SQUID_PORT}:${SQUID_PORT}`],
   };
 
+  // Only enable host.docker.internal when explicitly requested via --enable-host-access
+  // This allows containers to reach services on the host machine (e.g., MCP gateways)
+  // Security note: When combined with allowing host.docker.internal domain,
+  // containers can access any port on the host
+  if (config.enableHostAccess) {
+    squidService.extra_hosts = ['host.docker.internal:host-gateway'];
+    logger.debug('Host access enabled: host.docker.internal will resolve to host gateway');
+  }
+
   // Use GHCR image or build locally
   if (useGHCR) {
     squidService.image = `${registry}/squid:${tag}`;
@@ -297,7 +306,6 @@ export function generateDockerCompose(
     },
     dns: dnsServers, // Use configured DNS servers (prevents DNS exfiltration)
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
-    extra_hosts: ['host.docker.internal:host-gateway'], // Enable host.docker.internal on Linux
     volumes: agentVolumes,
     environment,
     depends_on: {
@@ -335,6 +343,11 @@ export function generateDockerCompose(
   if (config.containerWorkDir) {
     agentService.working_dir = config.containerWorkDir;
     logger.debug(`Set container working directory to: ${config.containerWorkDir}`);
+  }
+
+  // Enable host.docker.internal for agent when --enable-host-access is set
+  if (config.enableHostAccess) {
+    agentService.extra_hosts = ['host.docker.internal:host-gateway'];
   }
 
   // Use GHCR image or build locally

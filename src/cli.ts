@@ -384,6 +384,13 @@ program
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
+  .option(
+    '--enable-host-access',
+    'Enable access to host services via host.docker.internal. ' +
+    'Security warning: When combined with --allow-domains host.docker.internal, ' +
+    'containers can access ANY service on the host machine.',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -549,12 +556,25 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      enableHostAccess: options.enableHostAccess,
     };
 
     // Warn if --env-all is used
     if (config.envAll) {
       logger.warn('⚠️  Using --env-all: All host environment variables will be passed to container');
       logger.warn('   This may expose sensitive credentials if logs or configs are shared');
+    }
+
+    // Warn if --enable-host-access is used with host.docker.internal in allowed domains
+    if (config.enableHostAccess) {
+      const hasHostDomain = allowedDomains.some(d =>
+        d === 'host.docker.internal' || d.endsWith('.host.docker.internal')
+      );
+      if (hasHostDomain) {
+        logger.warn('⚠️  Host access enabled with host.docker.internal in allowed domains');
+        logger.warn('   Containers can access ANY service running on the host machine');
+        logger.warn('   Only use this for trusted workloads (e.g., MCP gateways)');
+      }
     }
 
     // Log config with redacted secrets

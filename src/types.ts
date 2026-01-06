@@ -233,6 +233,27 @@ export interface WrapperConfig {
    * @example '/tmp/my-proxy-logs'
    */
   proxyLogsDir?: string;
+
+  /**
+   * Enable access to host services via host.docker.internal
+   *
+   * When true, adds `host.docker.internal` hostname resolution to containers,
+   * allowing traffic to reach services running on the host machine.
+   *
+   * **Security Warning**: When enabled and `host.docker.internal` is added to
+   * --allow-domains, containers can access ANY service running on the host,
+   * including databases, APIs, and other sensitive services. Only enable this
+   * when you specifically need container-to-host communication (e.g., for MCP
+   * gateways running on the host).
+   *
+   * @default false
+   * @example
+   * ```bash
+   * # Enable host access for MCP gateway on host
+   * awf --enable-host-access --allow-domains host.docker.internal -- curl http://host.docker.internal:8080
+   * ```
+   */
+  enableHostAccess?: boolean;
 }
 
 /**
