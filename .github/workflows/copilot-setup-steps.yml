@@ -19,7 +19,9 @@ jobs:
 
     steps:
       - name: Install gh-aw extension
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/install-gh-aw.sh | bash
+          gh api repos/githubnext/gh-aw/contents/install-gh-aw.sh --jq '.content' | base64 -d | bash
       - name: Verify gh-aw installation
         run: gh aw version
