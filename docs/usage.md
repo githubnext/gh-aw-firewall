@@ -8,9 +8,19 @@ sudo awf [options] <command>
 Options:
   --allow-domains <domains>  Comma-separated list of allowed domains (required)
                              Example: github.com,api.github.com,arxiv.org
+  --allow-domains-file <path>  Path to file containing allowed domains
+  --block-domains <domains>  Comma-separated list of blocked domains
+  --block-domains-file <path>  Path to file containing blocked domains
+  --enable-host-access       Enable access to host services via host.docker.internal
+                             (see "Host Access" section for security implications)
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
+  --dns-servers <servers>    Comma-separated list of DNS servers (default: 8.8.8.8,8.8.4.4)
+  -e, --env <KEY=VALUE>      Additional environment variables (can repeat)
+  --env-all                  Pass all host environment variables to container
+  -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
+  --tty                      Allocate a pseudo-TTY for interactive tools
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
@@ -253,6 +263,48 @@ sudo awf \
 - Allow a broad domain (e.g., `*.example.com`) but block specific sensitive subdomains
 - Block known bad domains while allowing a curated list
 - Prevent access to internal services from AI agents
+
+## Host Access (MCP Gateways)
+
+When running MCP gateways or other services on your host machine that need to be accessible from inside the firewall, use the `--enable-host-access` flag.
+
+### Enabling Host Access
+
+```bash
+# Enable access to services running on the host via host.docker.internal
+sudo awf \
+  --enable-host-access \
+  --allow-domains host.docker.internal \
+  -- curl http://host.docker.internal:8080
+```
+
+### Security Considerations
+
+> ⚠️ **Security Warning**: When `--enable-host-access` is combined with `host.docker.internal` in `--allow-domains`, containers can access **ANY service** running on the host machine, including:
+> - Local databases (PostgreSQL, MySQL, Redis)
+> - Development servers
+> - Other sensitive services
+>
+> Only enable this for trusted workloads like MCP gateways.
+
+**Why opt-in?** By default, `host.docker.internal` hostname resolution is disabled to prevent containers from accessing host services. This is a defense-in-depth measure against malicious code attempting to access local resources.
+
+### Example: MCP Gateway on Host
+
+```bash
+# Start your MCP gateway on the host (port 8080)
+./my-mcp-gateway --port 8080 &
+
+# Run awf with host access enabled
+sudo awf \
+  --enable-host-access \
+  --allow-domains host.docker.internal,api.github.com \
+  -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
+```
+
+### CONNECT Method on Port 80
+
+The firewall allows the HTTP CONNECT method on both ports 80 and 443. This is required because some HTTP clients (e.g., Node.js fetch) use the CONNECT method even for HTTP connections when going through a proxy. Domain ACLs remain the primary security control.
 
 ## Limitations
 

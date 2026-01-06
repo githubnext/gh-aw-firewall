@@ -309,7 +309,11 @@ acl CONNECT method CONNECT
 # Access rules
 # Deny unsafe ports first
 http_access deny !Safe_ports
-http_access deny CONNECT !SSL_ports
+# Allow CONNECT to Safe_ports (80 and 443) instead of just SSL_ports (443)
+# This is required because some HTTP clients (e.g., Node.js fetch) use CONNECT
+# method even for HTTP connections when going through a proxy.
+# See: gh-aw-firewall issue #189
+http_access deny CONNECT !Safe_ports
 
 ${accessRulesSection}# Deny requests to unknown domains (not in allow-list)
 # This applies to all sources including localnet

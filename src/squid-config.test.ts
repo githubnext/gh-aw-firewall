@@ -332,6 +332,24 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('logformat firewall_detailed');
     });
 
+    it('should allow CONNECT to Safe_ports (80 and 443) for HTTP proxy compatibility', () => {
+      // See: https://github.com/githubnext/gh-aw-firewall/issues/189
+      // Node.js fetch uses CONNECT method even for HTTP connections when proxied
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+
+      // Should deny CONNECT to non-Safe_ports (not just SSL_ports)
+      expect(result).toContain('http_access deny CONNECT !Safe_ports');
+      // Should NOT deny CONNECT to non-SSL_ports (would block port 80)
+      expect(result).not.toContain('http_access deny CONNECT !SSL_ports');
+      // Safe_ports should include both 80 and 443
+      expect(result).toContain('acl Safe_ports port 80');
+      expect(result).toContain('acl Safe_ports port 443');
+    });
+
     it('should deny access to domains not in the allowlist', () => {
       const config: SquidConfig = {
         domains: ['example.com'],
