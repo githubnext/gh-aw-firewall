@@ -326,8 +326,11 @@ export function generateDockerCompose(
       'SYS_RAWIO',    // Prevents raw I/O access
       'MKNOD',        // Prevents device node creation
     ],
-    // Apply seccomp profile to restrict dangerous syscalls
-    security_opt: [`seccomp=${config.workDir}/seccomp-profile.json`],
+    // Apply seccomp profile and no-new-privileges to restrict dangerous syscalls and prevent privilege escalation
+    security_opt: [
+      'no-new-privileges:true',
+      `seccomp=${config.workDir}/seccomp-profile.json`,
+    ],
     // Resource limits to prevent DoS attacks (conservative defaults)
     mem_limit: '4g',           // 4GB memory limit
     memswap_limit: '4g',       // No swap (same as mem_limit)

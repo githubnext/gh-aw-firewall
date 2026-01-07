@@ -8,6 +8,16 @@
   "syscalls": [
     {
       "names": [
+        "ptrace",
+        "process_vm_readv",
+        "process_vm_writev"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block process inspection/modification"
+    },
+    {
+      "names": [
         "kexec_load",
         "kexec_file_load",
         "reboot",
