@@ -254,6 +254,35 @@ export interface WrapperConfig {
    * ```
    */
   enableHostAccess?: boolean;
+
+  /**
+   * Whether to enable SSL Bump for HTTPS content inspection
+   *
+   * When true, Squid will intercept HTTPS connections and generate
+   * per-host certificates on-the-fly, allowing inspection of URL paths,
+   * query parameters, and request methods for HTTPS traffic.
+   *
+   * Security implications:
+   * - A per-session CA certificate is generated (valid for 1 day)
+   * - The CA certificate is injected into the agent container's trust store
+   * - HTTPS traffic is decrypted at the proxy for inspection
+   * - The CA private key is stored only in the temporary work directory
+   *
+   * @default false
+   */
+  sslBump?: boolean;
+
+  /**
+   * URL patterns to allow for HTTPS traffic (requires sslBump: true)
+   *
+   * When SSL Bump is enabled, these patterns are used to filter HTTPS
+   * traffic by URL path, not just domain. Supports wildcards (*).
+   *
+   * If not specified, falls back to domain-only filtering.
+   *
+   * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
+   */
+  allowedUrls?: string[];
 }
 
 /**
@@ -305,6 +334,41 @@ export interface SquidConfig {
    * @default 3128
    */
   port: number;
+
+  /**
+   * Whether to enable SSL Bump for HTTPS content inspection
+   *
+   * When true, Squid will intercept HTTPS connections and generate
+   * per-host certificates on-the-fly, allowing inspection of URL paths.
+   *
+   * @default false
+   */
+  sslBump?: boolean;
+
+  /**
+   * Paths to CA certificate files for SSL Bump
+   *
+   * Required when sslBump is true.
+   */
+  caFiles?: {
+    certPath: string;
+    keyPath: string;
+  };
+
+  /**
+   * Path to SSL certificate database for dynamic certificate generation
+   *
+   * Required when sslBump is true.
+   */
+  sslDbPath?: string;
+
+  /**
+   * URL patterns for HTTPS traffic filtering (requires sslBump)
+   *
+   * When SSL Bump is enabled, these regex patterns are used to filter
+   * HTTPS traffic by URL path, not just domain.
+   */
+  urlPatterns?: string[];
 }
 
 /**

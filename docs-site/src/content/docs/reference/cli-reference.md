@@ -23,6 +23,8 @@ awf [options] -- <command>
 | `--allow-domains-file <path>` | string | — | Path to file containing allowed domains |
 | `--block-domains <domains>` | string | — | Comma-separated list of blocked domains (takes precedence over allowed) |
 | `--block-domains-file <path>` | string | — | Path to file containing blocked domains |
+| `--ssl-bump` | flag | `false` | Enable SSL Bump for HTTPS content inspection |
+| `--allow-urls <urls>` | string | — | Comma-separated list of allowed URL patterns (requires `--ssl-bump`) |
 | `--log-level <level>` | string | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `--keep-containers` | flag | `false` | Keep containers running after command exits |
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
@@ -97,6 +99,47 @@ Path to file with blocked domains. Supports the same format as `--allow-domains-
 ```bash
 --block-domains-file ./blocked-domains.txt
 ```
+
+### `--ssl-bump`
+
+Enable SSL Bump for HTTPS content inspection. When enabled, the firewall generates a per-session CA certificate and intercepts HTTPS connections, allowing URL path filtering.
+
+```bash
+--ssl-bump --allow-urls "https://github.com/githubnext/*"
+```
+
+:::caution[HTTPS Interception]
+SSL Bump decrypts HTTPS traffic at the proxy. The proxy can see full URLs, headers, and request bodies. Applications with certificate pinning will fail to connect.
+:::
+
+**How it works:**
+1. A unique CA certificate is generated (valid for 1 day)
+2. The CA is injected into the agent container's trust store
+3. Squid intercepts HTTPS using SSL Bump (peek, stare, bump)
+4. Full URLs become visible for filtering via `--allow-urls`
+
+**See also:** [SSL Bump Reference](/gh-aw-firewall/reference/ssl-bump/) for complete documentation.
+
+### `--allow-urls <urls>`
+
+Comma-separated list of allowed URL patterns for HTTPS traffic. Requires `--ssl-bump`.
+
+```bash
+# Single pattern
+--allow-urls "https://github.com/githubnext/*"
+
+# Multiple patterns
+--allow-urls "https://github.com/org1/*,https://api.github.com/repos/*"
+```
+
+**Pattern syntax:**
+- Must include scheme (`https://`)
+- `*` matches any characters in a path segment
+- Patterns are matched against the full request URL
+
+:::note
+Without `--ssl-bump`, the firewall can only see domain names (via SNI). Enable `--ssl-bump` to filter by URL path.
+:::
 
 ### `--log-level <level>`
 
@@ -397,4 +440,8 @@ awf logs summary --format pretty
 ## See Also
 
 - [Domain Filtering Guide](/gh-aw-firewall/guides/domain-filtering) - Allowlists, blocklists, and wildcards
+- [SSL Bump Reference](/gh-aw-firewall/reference/ssl-bump/) - HTTPS content inspection and URL filtering
+- [Quick Start Guide](/gh-aw-firewall/quickstart) - Getting started with examples
+- [Usage Guide](/gh-aw-firewall/usage) - Detailed usage patterns and examples
+- [Troubleshooting](/gh-aw-firewall/troubleshooting) - Common issues and solutions
 - [Security Architecture](/gh-aw-firewall/reference/security-architecture) - How the firewall works internally

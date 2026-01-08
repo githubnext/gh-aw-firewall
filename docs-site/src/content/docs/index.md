@@ -15,6 +15,7 @@ When AI agents like GitHub Copilot CLI run with access to tools and MCP servers,
 
 **Key Capabilities:**
 - **Domain Allowlist & Blocklist**: Allow specific domains and block exceptions with wildcard pattern support
+- **URL Path Filtering**: Restrict access to specific URL paths with [SSL Bump](/gh-aw-firewall/reference/ssl-bump/)
 - **Docker-in-Docker Enforcement**: Spawned containers inherit firewall restrictions
 - **Host-Level Protection**: Uses iptables DOCKER-USER chain for defense-in-depth
 - **Zero Trust**: Block all traffic by default, allow only what you explicitly permit

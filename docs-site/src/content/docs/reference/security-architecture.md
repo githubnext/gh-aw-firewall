@@ -186,6 +186,63 @@ We considered isolating the agent in a network namespace with zero external conn
 
 mitmproxy would let us inspect HTTPS payloads, potentially catching exfiltration in POST bodies. But it requires injecting a CA certificate and breaks certificate pinning (common in security-sensitive clients). Squid's CONNECT method reads SNI without decryption—less powerful but zero client-side changes, and we maintain end-to-end encryption.
 
+:::tip[SSL Bump for URL Filtering]
+When you need URL path filtering (not just domain filtering), enable `--ssl-bump`. This uses Squid's SSL Bump feature with a per-session CA certificate, providing full URL visibility while maintaining security through short-lived, session-specific certificates.
+:::
+
+---
+
+## SSL Bump Security Model
+
+When `--ssl-bump` is enabled, the firewall intercepts HTTPS traffic for URL path filtering. This changes the security model significantly.
+
+### How SSL Bump Works
+
+1. **CA Generation**: A unique CA key pair is generated at session start
+2. **Trust Store Injection**: The CA certificate is added to the agent container's trust store
+3. **TLS Interception**: Squid terminates TLS and re-establishes encrypted connections to destinations
+4. **URL Filtering**: Full request URLs (including paths) become visible for ACL matching
+
+### Security Safeguards
+
+| Safeguard | Description |
+|-----------|-------------|
+| **Per-session CA** | Each awf execution generates a unique CA certificate |
+| **Short validity** | CA certificate valid for 1 day maximum |
+| **Ephemeral key storage** | CA private key exists only in temp directory, deleted on cleanup |
+| **Container-only trust** | CA injected only into agent container, not host system |
+
+### Trade-offs vs. SNI-Only Mode
+
+| Aspect | SNI-Only (Default) | SSL Bump |
+|--------|-------------------|----------|
+| Filtering granularity | Domain only | Full URL path |
+| End-to-end encryption | ✓ Preserved | Modified (proxy-terminated) |
+| Certificate pinning | Works | Broken |
+| Proxy visibility | Domain:port | Full request (URL, headers) |
+| Performance | Faster | Slight overhead |
+
+:::caution[When to Use SSL Bump]
+Only enable SSL Bump when you specifically need URL path filtering. For most use cases, domain-based filtering provides sufficient control with stronger encryption guarantees.
+:::
+
+### SSL Bump Threat Considerations
+
+**What SSL Bump enables:**
+- Fine-grained access control (e.g., allow only `/githubnext/*` paths)
+- Better audit logging with full URLs
+- Detection of path-based exfiltration attempts
+
+**What SSL Bump exposes:**
+- Full HTTP request/response content visible to proxy
+- Applications with certificate pinning will fail
+- Slightly increased attack surface (CA key compromise)
+
+**Mitigations:**
+- CA key never leaves the temporary work directory
+- Session isolation: each execution uses a fresh CA
+- Automatic cleanup removes all key material
+
 ---
 
 ## Failure Modes

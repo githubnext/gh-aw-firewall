@@ -114,6 +114,7 @@ sudo awf --help
 
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, Docker-in-Docker examples
+- [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together

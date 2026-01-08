@@ -391,6 +391,16 @@ program
     'containers can access ANY service on the host machine.',
     false
   )
+  .option(
+    '--ssl-bump',
+    'Enable SSL Bump for HTTPS content inspection (allows URL path filtering for HTTPS)',
+    false
+  )
+  .option(
+    '--allow-urls <urls>',
+    'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
+    '                                   Supports wildcards: https://github.com/githubnext/*'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -539,6 +549,59 @@ program
       process.exit(1);
     }
 
+    // Parse --allow-urls for SSL Bump mode
+    let allowedUrls: string[] | undefined;
+    if (options.allowUrls) {
+      allowedUrls = parseDomains(options.allowUrls);
+      if (allowedUrls.length > 0 && !options.sslBump) {
+        logger.error('--allow-urls requires --ssl-bump to be enabled');
+        process.exit(1);
+      }
+
+      // Validate URL patterns for security
+      for (const url of allowedUrls) {
+        // URL patterns must start with https://
+        if (!url.startsWith('https://')) {
+          logger.error(`URL patterns must start with https:// (got: ${url})`);
+          logger.error('Use --allow-domains for domain-level filtering without SSL Bump');
+          process.exit(1);
+        }
+
+        // Reject overly broad patterns that would bypass security
+        const dangerousPatterns = [
+          /^https:\/\/\*$/,           // https://*
+          /^https:\/\/\*\.\*$/,       // https://*.*
+          /^https:\/\/\.\*$/,         // https://.*
+          /^\.\*$/,                   // .*
+          /^\*$/,                     // *
+          /^https:\/\/[^/]*\*[^/]*$/, // https://*anything* without path
+        ];
+
+        for (const pattern of dangerousPatterns) {
+          if (pattern.test(url)) {
+            logger.error(`URL pattern "${url}" is too broad and would bypass security controls`);
+            logger.error('URL patterns must include a specific domain and path, e.g., https://github.com/org/*');
+            process.exit(1);
+          }
+        }
+
+        // Ensure pattern has a path component (not just domain)
+        const urlWithoutScheme = url.replace(/^https:\/\//, '');
+        if (!urlWithoutScheme.includes('/')) {
+          logger.error(`URL pattern "${url}" must include a path component`);
+          logger.error('For domain-only filtering, use --allow-domains instead');
+          logger.error('Example: https://github.com/githubnext/* (includes path)');
+          process.exit(1);
+        }
+      }
+    }
+
+    // Validate SSL Bump option
+    if (options.sslBump) {
+      logger.info('SSL Bump mode enabled - HTTPS content inspection will be performed');
+      logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -557,6 +620,8 @@ program
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
       enableHostAccess: options.enableHostAccess,
+      sslBump: options.sslBump,
+      allowedUrls,
     };
 
     // Warn if --env-all is used

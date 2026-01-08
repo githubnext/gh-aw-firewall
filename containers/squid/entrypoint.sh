@@ -6,5 +6,18 @@ set -e
 chown -R proxy:proxy /var/log/squid
 chmod -R 755 /var/log/squid
 
+# Fix permissions on SSL certificate database if SSL Bump is enabled
+# The database is initialized on the host side by awf, but the permissions
+# need to be fixed for the proxy user inside the container.
+if [ -d "/var/spool/squid_ssl_db" ]; then
+  echo "[squid-entrypoint] SSL Bump mode detected - fixing SSL database permissions..."
+
+  # Fix ownership for Squid (runs as proxy user)
+  chown -R proxy:proxy /var/spool/squid_ssl_db
+  chmod -R 700 /var/spool/squid_ssl_db
+
+  echo "[squid-entrypoint] SSL certificate database ready"
+fi
+
 # Start Squid
 exec squid -N -d 1
