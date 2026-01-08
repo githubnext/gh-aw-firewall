@@ -248,9 +248,10 @@ jobs:
       - name: Run MCP egress tests
         id: run-tests
         env:
+          MCP_TEST_FILE: mcp-github.test.ts
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          sudo -E npm run test:integration -- mcp-github.test.ts 2>&1 | tee test-output.log
+          sudo -E npm run test:integration -- "${MCP_TEST_FILE}" 2>&1 | tee test-output.log
         continue-on-error: true
 
       - name: Clean npm cache

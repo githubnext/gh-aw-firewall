@@ -14,9 +14,9 @@ import { createLogParser } from '../fixtures/log-parser';
 import { cleanup } from '../fixtures/cleanup';
 
 const requiredDomains = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'ghcr.io'];
-const githubToken = process.env.GITHUB_TOKEN || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+const githubAuthToken = process.env.GITHUB_TOKEN || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
-const maybeDescribe = githubToken ? describe : describe.skip;
+const maybeDescribe = githubAuthToken ? describe : describe.skip;
 
 maybeDescribe('GitHub MCP server egress control', () => {
   let runner: AwfRunner;
@@ -39,14 +39,14 @@ maybeDescribe('GitHub MCP server egress control', () => {
     'allows GitHub API access for MCP workload with GitHub token',
     async () => {
       const result = await runner.runWithSudo(
-        'docker run --rm -e GITHUB_TOKEN=$GITHUB_TOKEN curlimages/curl:latest -fsS -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit',
+        'docker run --rm -e GITHUB_TOKEN curlimages/curl:latest sh -c \'curl -fsS -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit\'',
         {
           allowDomains: requiredDomains,
           logLevel: 'warn',
           timeout: 60000,
           env: {
             ...process.env,
-            GITHUB_TOKEN: githubToken as string,
+            GITHUB_TOKEN: githubAuthToken as string,
           },
         }
       );

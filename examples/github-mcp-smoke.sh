@@ -24,7 +24,7 @@ echo "=== Calling GitHub API through AWF (allowed) ==="
 sudo -E awf \
   --allow-domains "${ALLOW_DOMAINS}" \
   --log-level warn \
-  -- 'docker run --rm -e GITHUB_TOKEN=$GITHUB_TOKEN curlimages/curl:latest -fsS -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit'
+  -- 'docker run --rm -e GITHUB_TOKEN curlimages/curl:latest sh -c '"'"'curl -fsS -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit'"'"''
 
 echo "=== Attempting blocked domain through AWF (should fail) ==="
 if sudo -E awf \
