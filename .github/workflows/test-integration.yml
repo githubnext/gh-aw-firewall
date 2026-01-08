@@ -263,7 +263,7 @@ jobs:
       - name: Generate test summary
         if: always()
         run: |
-          npx tsx scripts/ci/generate-test-summary.ts "mcp-github.test.ts" "GitHub MCP Egress Tests" test-output.log
+          npx tsx scripts/ci/generate-test-summary.ts "${MCP_TEST_FILE}" "GitHub MCP Egress Tests" test-output.log
 
       - name: Check test results
         if: steps.run-tests.outcome == 'failure'
