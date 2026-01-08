@@ -38,6 +38,9 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
+      - name: Pre-pull GitHub MCP image
+        run: docker pull ghcr.io/github/github-mcp-server:v0.19.0
+
       - name: Make examples executable
         run: chmod +x examples/*.sh
 

@@ -243,7 +243,9 @@ jobs:
         run: sudo ./scripts/ci/cleanup.sh
 
       - name: Pull helper images
-        run: docker pull curlimages/curl:latest
+        run: |
+          docker pull curlimages/curl:latest
+          docker pull ghcr.io/github/github-mcp-server:v0.19.0
 
       - name: Run MCP egress tests
         id: run-tests

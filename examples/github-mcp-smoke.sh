@@ -26,6 +26,12 @@ sudo -E awf \
   --log-level warn \
   -- 'docker run --rm -e GITHUB_TOKEN curlimages/curl:latest sh -c '"'"'curl -fsS -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit'"'"''
 
+echo "=== Starting GitHub MCP Server inside AWF (version check) ==="
+sudo -E awf \
+  --allow-domains "${ALLOW_DOMAINS}" \
+  --log-level warn \
+  -- 'timeout 12s docker run --rm -e GITHUB_TOKEN ghcr.io/github/github-mcp-server:v0.19.0 --version'
+
 echo "=== Attempting blocked domain through AWF (should fail) ==="
 if sudo -E awf \
   --allow-domains "${ALLOW_DOMAINS}" \

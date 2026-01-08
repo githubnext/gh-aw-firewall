@@ -64,6 +64,27 @@ maybeDescribe('GitHub MCP server egress control', () => {
   );
 
   test(
+    'starts GitHub MCP server container inside firewall',
+    async () => {
+      const result = await runner.runWithSudo(
+        'timeout 12s docker run --rm -e GITHUB_TOKEN ghcr.io/github/github-mcp-server:v0.19.0 --version',
+        {
+          allowDomains: requiredDomains,
+          logLevel: 'warn',
+          timeout: 60000,
+          env: {
+            ...process.env,
+            GITHUB_TOKEN: githubAuthToken as string,
+          },
+        }
+      );
+
+      expect(result).toSucceed();
+    },
+    120000
+  );
+
+  test(
     'blocks non-GitHub domains for MCP workload',
     async () => {
       const result = await runner.runWithSudo(
