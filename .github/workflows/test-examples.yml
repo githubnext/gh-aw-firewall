@@ -38,6 +38,9 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
+      - name: Pre-pull GitHub MCP image
+        run: docker pull ghcr.io/github/github-mcp-server:v0.19.0
+
       - name: Make examples executable
         run: chmod +x examples/*.sh
 
@@ -65,6 +68,13 @@ jobs:
         run: |
           echo "=== Testing docker-in-docker.sh ==="
           sudo ./examples/docker-in-docker.sh
+
+      - name: Test github-mcp-smoke.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== Testing github-mcp-smoke.sh ==="
+          sudo ./examples/github-mcp-smoke.sh
 
       # Note: github-copilot.sh is skipped as it requires GITHUB_TOKEN for Copilot CLI
       # To test it, you would need to set up a secret with a valid Copilot token
