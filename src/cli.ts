@@ -557,11 +557,49 @@ program
         logger.error('--allow-urls requires --ssl-bump to be enabled');
         process.exit(1);
       }
+
+      // Validate URL patterns for security
+      for (const url of allowedUrls) {
+        // URL patterns must start with https://
+        if (!url.startsWith('https://')) {
+          logger.error(`URL patterns must start with https:// (got: ${url})`);
+          logger.error('Use --allow-domains for domain-level filtering without SSL Bump');
+          process.exit(1);
+        }
+
+        // Reject overly broad patterns that would bypass security
+        const dangerousPatterns = [
+          /^https:\/\/\*$/,           // https://*
+          /^https:\/\/\*\.\*$/,       // https://*.*
+          /^https:\/\/\.\*$/,         // https://.*
+          /^\.\*$/,                   // .*
+          /^\*$/,                     // *
+          /^https:\/\/[^/]*\*[^/]*$/, // https://*anything* without path
+        ];
+
+        for (const pattern of dangerousPatterns) {
+          if (pattern.test(url)) {
+            logger.error(`URL pattern "${url}" is too broad and would bypass security controls`);
+            logger.error('URL patterns must include a specific domain and path, e.g., https://github.com/org/*');
+            process.exit(1);
+          }
+        }
+
+        // Ensure pattern has a path component (not just domain)
+        const urlWithoutScheme = url.replace(/^https:\/\//, '');
+        if (!urlWithoutScheme.includes('/')) {
+          logger.error(`URL pattern "${url}" must include a path component`);
+          logger.error('For domain-only filtering, use --allow-domains instead');
+          logger.error('Example: https://github.com/githubnext/* (includes path)');
+          process.exit(1);
+        }
+      }
     }
 
     // Validate SSL Bump option
     if (options.sslBump) {
       logger.info('SSL Bump mode enabled - HTTPS content inspection will be performed');
+      logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
     }
 
     const config: WrapperConfig = {

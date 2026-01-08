@@ -205,6 +205,17 @@ export function generateDockerCompose(
       start_period: '10s',
     },
     ports: [`${SQUID_PORT}:${SQUID_PORT}`],
+    // Security hardening: Drop unnecessary capabilities
+    // Squid only needs network capabilities, not system administration capabilities
+    cap_drop: [
+      'NET_RAW',      // No raw socket access needed
+      'SYS_ADMIN',    // No system administration needed
+      'SYS_PTRACE',   // No process tracing needed
+      'SYS_MODULE',   // No kernel module loading
+      'MKNOD',        // No device node creation
+      'AUDIT_WRITE',  // No audit log writing
+      'SETFCAP',      // No setting file capabilities
+    ],
   };
 
   // Only enable host.docker.internal when explicitly requested via --enable-host-access

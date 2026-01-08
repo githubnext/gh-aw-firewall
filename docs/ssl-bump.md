@@ -2,6 +2,13 @@
 
 > ⚠️ **Power-User Feature**: SSL Bump is an advanced feature that intercepts HTTPS traffic. It requires local Docker image builds and adds performance overhead. Only enable this when you need URL path filtering for HTTPS traffic. For most use cases, domain-based filtering (default mode) is sufficient.
 
+> 🔐 **Security Warning**: SSL Bump fundamentally changes the security model by performing HTTPS interception. **Do not use SSL Bump for:**
+> - Multi-tenant environments (other tenants could potentially access the CA key)
+> - Untrusted workloads (malicious code with container access could extract the CA key)
+> - Multi-user systems where `/tmp` may be readable by other users
+>
+> See [Security Considerations](#security-considerations) below for details.
+
 SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering instead of just domain-based filtering.
 
 ## Overview
@@ -138,33 +145,74 @@ With SSL Bump enabled, Squid logs show complete URLs, not just domain:port.
 
 ## Security Considerations
 
-### CA Private Key Protection
+### Threat Model Change
 
-- The CA private key is generated fresh for each session
-- It's stored only in the temporary work directory (`/tmp/awf-<timestamp>/`)
-- The key is never persisted beyond the session
-- Cleanup removes the key when the session ends
+**SSL Bump fundamentally changes the security model.** Without SSL Bump, the firewall only sees encrypted traffic and domain names (via SNI). With SSL Bump enabled, the proxy terminates TLS connections and can see all HTTPS traffic in plaintext.
+
+**When SSL Bump is appropriate:**
+- Single-user development environments
+- Controlled CI/CD pipelines where you trust the workload
+- Testing and debugging URL-based access patterns
+
+**When SSL Bump is NOT appropriate:**
+- Multi-tenant environments (shared infrastructure)
+- Running untrusted code or AI agents
+- Multi-user systems with shared `/tmp` directories
+- Production security-critical workloads
+
+### CA Private Key Exposure Risk
+
+The CA private key grants the ability to impersonate any HTTPS site for the duration of its validity.
+
+**Key storage:**
+- Stored in `/tmp/awf-<timestamp>/ssl/ca-key.pem`
+- Protected with file permissions `0600` (owner read/write only)
+- Exists only for the session duration
+
+**Risk scenarios:**
+1. **Multi-user systems**: Other users may be able to read `/tmp` contents depending on system configuration
+2. **Container escape**: If an attacker escapes the container, they can access the key from the host filesystem
+3. **Squid compromise**: The Squid proxy process has access to the key; a vulnerability in Squid could expose it
+4. **Incomplete cleanup**: If awf is killed with SIGKILL, cleanup may not complete
+
+**Mitigations implemented:**
+- Per-session unique CA (not shared across sessions)
+- Short validity period (1 day)
+- Restrictive file permissions (0600)
+- Key is mounted read-only into Squid container
+- Container security hardening (dropped capabilities, seccomp)
 
 ### Certificate Validity
 
 - Session CA certificates are valid for 1 day maximum
 - Short validity limits the window of exposure if a key is compromised
 - Each execution generates a new CA, so old certificates become useless
+- Future versions may support shorter validity periods (hours)
 
 ### Trust Store Modification
 
 - The session CA is injected only into the agent container's trust store
-- Host system trust stores are not modified
+- Host system trust stores are NOT modified
 - Spawned containers inherit the modified trust store via volume mounts
+- This means spawned containers can also have HTTPS traffic intercepted
 
 ### Traffic Visibility
 
 When SSL Bump is enabled:
 - Full HTTP request/response headers are visible to the proxy
 - Request bodies can be logged (if configured)
+- Full URLs appear in Squid access logs
 - This is necessary for URL path filtering
 
 **Warning**: SSL Bump means the proxy can see decrypted HTTPS traffic. Only use this feature when you control the environment and understand the implications.
+
+### URL Pattern Validation
+
+To prevent security bypasses, URL patterns (`--allow-urls`) are validated:
+- Must start with `https://` (no HTTP or other protocols)
+- Must include a path component (e.g., `https://github.com/org/*`)
+- Overly broad patterns like `https://*` are rejected
+- Domain-only patterns should use `--allow-domains` instead
 
 ### Comparison: SNI-Only vs SSL Bump
 

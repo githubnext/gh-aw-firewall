@@ -7,6 +7,15 @@ description: Enable HTTPS content inspection for URL path filtering with per-ses
 SSL Bump is an advanced feature that intercepts HTTPS traffic. It requires local Docker image builds and adds performance overhead. Only enable this when you need URL path filtering for HTTPS traffic. For most use cases, domain-based filtering (default mode) is sufficient.
 :::
 
+:::danger[Security Warning]
+SSL Bump fundamentally changes the security model by performing HTTPS interception. **Do not use SSL Bump for:**
+- Multi-tenant environments (other tenants could potentially access the CA key)
+- Untrusted workloads (malicious code with container access could extract the CA key)
+- Multi-user systems where `/tmp` may be readable by other users
+
+See [Security Model](#security-model) below for details.
+:::
+
 SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering instead of just domain-based filtering.
 
 ## Overview
@@ -102,16 +111,44 @@ Squid terminates the TLS connection and establishes a new encrypted connection t
 
 ## Security Model
 
-### Per-Session CA Certificate
+### Threat Model Change
 
-Each awf execution generates a unique CA certificate:
+**SSL Bump fundamentally changes the security model.** Without SSL Bump, the firewall only sees encrypted traffic and domain names (via SNI). With SSL Bump enabled, the proxy terminates TLS connections and can see all HTTPS traffic in plaintext.
+
+**When SSL Bump is appropriate:**
+- Single-user development environments
+- Controlled CI/CD pipelines where you trust the workload
+- Testing and debugging URL-based access patterns
+
+**When SSL Bump is NOT appropriate:**
+- Multi-tenant environments (shared infrastructure)
+- Running untrusted code or AI agents
+- Multi-user systems with shared `/tmp` directories
+- Production security-critical workloads
+
+### CA Private Key Exposure Risk
+
+The CA private key grants the ability to impersonate any HTTPS site for the duration of its validity.
 
 | Property | Value |
 |----------|-------|
-| Generation | Fresh key pair at session start |
+| Storage Location | `/tmp/awf-<timestamp>/ssl/ca-key.pem` |
+| File Permissions | `0600` (owner read/write only) |
 | Validity | 1 day maximum |
-| Storage | Temporary work directory only |
 | Cleanup | Deleted when session ends |
+
+**Risk scenarios:**
+1. **Multi-user systems**: Other users may read `/tmp` contents
+2. **Container escape**: Attacker can access key from host filesystem
+3. **Squid compromise**: Squid process has key access; vulnerabilities could expose it
+4. **Incomplete cleanup**: SIGKILL may prevent cleanup
+
+**Mitigations implemented:**
+- Per-session unique CA (not shared across sessions)
+- Short validity period (1 day)
+- Restrictive file permissions (0600)
+- Key mounted read-only into Squid container
+- Container security hardening (dropped capabilities)
 
 :::tip[Session Isolation]
 Each awf execution uses a unique CA certificate. Old session certificates become useless after cleanup.
@@ -120,8 +157,9 @@ Each awf execution uses a unique CA certificate. Old session certificates become
 ### Trust Store Modification
 
 - The session CA is injected only into the agent container's trust store
-- Host system trust stores are not modified
+- Host system trust stores are NOT modified
 - Spawned containers inherit the modified trust store
+- This means spawned containers can also have HTTPS traffic intercepted
 
 ### Traffic Visibility
 
@@ -136,6 +174,14 @@ When SSL Bump is enabled:
 :::danger[Security Consideration]
 Full HTTP request/response content is visible to the proxy when SSL Bump is enabled. Ensure you understand this before enabling for sensitive workloads.
 :::
+
+### URL Pattern Validation
+
+To prevent security bypasses, URL patterns (`--allow-urls`) are validated:
+- Must start with `https://` (no HTTP or other protocols)
+- Must include a path component (e.g., `https://github.com/org/*`)
+- Overly broad patterns like `https://*` are rejected
+- Domain-only patterns should use `--allow-domains` instead
 
 ## Example Use Cases
 
