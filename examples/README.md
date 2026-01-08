@@ -18,6 +18,7 @@ This directory contains example scripts demonstrating common ways to use the Age
 | [using-domains-file.sh](using-domains-file.sh) | Using a file to specify allowed domains |
 | [blocked-domains.sh](blocked-domains.sh) | Blocking specific domains with allowlist/blocklist |
 | [debugging.sh](debugging.sh) | Debug mode with log inspection |
+| [github-mcp-smoke.sh](github-mcp-smoke.sh) | GitHub MCP-style traffic allowed while other domains are blocked |
 | [domains.txt](domains.txt) | Example domain allowlist file |
 
 ## Running Examples
