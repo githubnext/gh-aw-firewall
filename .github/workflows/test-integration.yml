@@ -217,3 +217,71 @@ jobs:
             /tmp/awf-agent-logs-*/
             /tmp/squid-logs-*/
           retention-days: 7
+
+  test-mcpg-integration:
+    name: MCPG Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Pull MCP Gateway image
+        run: docker pull ghcr.io/githubnext/gh-aw-mcpg:v0.0.10
+
+      - name: Run MCPG integration tests
+        id: run-tests
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo -E npm run test:integration -- mcpg-integration.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "mcpg-integration.test.ts" "MCPG Integration Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Post-test cleanup
+        if: always()
+        run: |
+          docker rm -f mcpg-gateway-test 2>/dev/null || true
+          sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mcpg-integration-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/awf-agent-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7

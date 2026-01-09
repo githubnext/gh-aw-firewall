@@ -12,9 +12,11 @@ export interface AwfOptions {
   imageTag?: string;
   timeout?: number; // milliseconds
   env?: Record<string, string>;
+  envAll?: boolean; // Pass all host environment variables to container
   volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
   containerWorkDir?: string; // Working directory inside the container
   tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
+  enableHostAccess?: boolean; // Enable access to host services via host.docker.internal
 }
 
 export interface AwfResult {
@@ -84,6 +86,16 @@ export class AwfRunner {
     // Add TTY flag
     if (options.tty) {
       args.push('--tty');
+    }
+
+    // Add env-all flag
+    if (options.envAll) {
+      args.push('--env-all');
+    }
+
+    // Add enable-host-access flag
+    if (options.enableHostAccess) {
+      args.push('--enable-host-access');
     }
 
     // Add -- separator before command
@@ -198,6 +210,16 @@ export class AwfRunner {
     // Add TTY flag
     if (options.tty) {
       args.push('--tty');
+    }
+
+    // Add env-all flag
+    if (options.envAll) {
+      args.push('--env-all');
+    }
+
+    // Add enable-host-access flag
+    if (options.enableHostAccess) {
+      args.push('--enable-host-access');
     }
 
     // Add -- separator before command
