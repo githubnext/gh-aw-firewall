@@ -845,10 +845,15 @@ program
   .action(async (options) => {
     // Dynamic import to avoid circular dependencies
     const { preloadCommand } = await import('./commands/preload');
-    await preloadCommand({
-      imageRegistry: options.imageRegistry,
-      imageTag: options.imageTag,
-    });
+    try {
+      await preloadCommand({
+        imageRegistry: options.imageRegistry,
+        imageTag: options.imageTag,
+      });
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   });
 
 // Only parse arguments if this file is run directly (not imported as a module)

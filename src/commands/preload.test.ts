@@ -89,7 +89,7 @@ describe('preloadCommand', () => {
     );
   });
 
-  it('should exit with error when an image fails to pull', async () => {
+  it('should throw error when an image fails to pull', async () => {
     // First image succeeds, second fails
     mockedExeca
       .mockResolvedValueOnce({
@@ -104,9 +104,8 @@ describe('preloadCommand', () => {
         imageRegistry: 'ghcr.io/githubnext/gh-aw-firewall',
         imageTag: 'latest',
       })
-    ).rejects.toThrow('process.exit called');
+    ).rejects.toThrow('Failed to download 1 image(s)');
 
-    expect(processExitSpy).toHaveBeenCalledWith(1);
     expect(mockedLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to pull image')
     );

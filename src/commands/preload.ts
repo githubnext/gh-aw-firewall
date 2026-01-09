@@ -55,28 +55,31 @@ async function pullImage(image: string): Promise<void> {
  * Main handler for the `awf preload` subcommand
  *
  * Pre-downloads all container images used by the firewall to the local Docker cache.
+ * Images are pulled sequentially to provide clear, readable output (parallel pulls
+ * would cause interleaved output from multiple docker pull processes).
  *
  * @param options - Command options
+ * @throws Error if any images fail to download
  */
 export async function preloadCommand(options: PreloadCommandOptions): Promise<void> {
   const images = getFirewallImages(options.imageRegistry, options.imageTag);
 
   logger.info(`Pre-downloading ${images.length} firewall container image(s)...`);
 
-  let hasErrors = false;
+  const failedImages: string[] = [];
 
+  // Pull images sequentially to keep output readable (parallel would interleave)
   for (const image of images) {
     try {
       await pullImage(image);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
-      hasErrors = true;
+      failedImages.push(image);
     }
   }
 
-  if (hasErrors) {
-    logger.error('Some images failed to download');
-    process.exit(1);
+  if (failedImages.length > 0) {
+    throw new Error(`Failed to download ${failedImages.length} image(s): ${failedImages.join(', ')}`);
   }
 
   logger.success('All container images pre-downloaded successfully');
