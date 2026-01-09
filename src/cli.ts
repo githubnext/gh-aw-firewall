@@ -828,6 +828,29 @@ logsCmd
     });
   });
 
+// Preload subcommand - pre-download container images
+program
+  .command('preload')
+  .description('Pre-download container images to the local Docker cache for faster startup')
+  .option(
+    '--image-registry <registry>',
+    'Container image registry',
+    'ghcr.io/githubnext/gh-aw-firewall'
+  )
+  .option(
+    '--image-tag <tag>',
+    'Container image tag',
+    'latest'
+  )
+  .action(async (options) => {
+    // Dynamic import to avoid circular dependencies
+    const { preloadCommand } = await import('./commands/preload');
+    await preloadCommand({
+      imageRegistry: options.imageRegistry,
+      imageTag: options.imageTag,
+    });
+  });
+
 // Only parse arguments if this file is run directly (not imported as a module)
 if (require.main === module) {
   program.parse();
