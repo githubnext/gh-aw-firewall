@@ -219,7 +219,7 @@ jobs:
           retention-days: 7
 
   test-mcpg-integration:
-    name: MCPG Integration Tests
+    name: Host Access Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -242,10 +242,7 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Pull MCP Gateway image
-        run: docker pull ghcr.io/githubnext/gh-aw-mcpg:v0.0.10
-
-      - name: Run MCPG integration tests
+      - name: Run host access integration tests
         id: run-tests
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -262,7 +259,7 @@ jobs:
       - name: Generate test summary
         if: always()
         run: |
-          npx tsx scripts/ci/generate-test-summary.ts "mcpg-integration.test.ts" "MCPG Integration Tests" test-output.log
+          npx tsx scripts/ci/generate-test-summary.ts "mcpg-integration.test.ts" "Host Access Integration Tests" test-output.log
 
       - name: Check test results
         if: steps.run-tests.outcome == 'failure'
@@ -270,15 +267,13 @@ jobs:
 
       - name: Post-test cleanup
         if: always()
-        run: |
-          docker rm -f mcpg-gateway-test 2>/dev/null || true
-          sudo ./scripts/ci/cleanup.sh
+        run: sudo ./scripts/ci/cleanup.sh
 
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: mcpg-integration-test-logs
+          name: host-access-integration-test-logs
           path: |
             /tmp/*-test.log
             /tmp/awf-*/

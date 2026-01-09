@@ -98,6 +98,13 @@ export class AwfRunner {
       args.push('--enable-host-access');
     }
 
+    // Add environment variables to pass to container
+    if (options.env) {
+      for (const [key, value] of Object.entries(options.env)) {
+        args.push('--env', `${key}=${value}`);
+      }
+    }
+
     // Add -- separator before command
     args.push('--');
 
@@ -220,6 +227,13 @@ export class AwfRunner {
     // Add enable-host-access flag
     if (options.enableHostAccess) {
       args.push('--enable-host-access');
+    }
+
+    // Add environment variables to pass to container
+    if (options.env) {
+      for (const [key, value] of Object.entries(options.env)) {
+        args.push('--env', `${key}=${value}`);
+      }
     }
 
     // Add -- separator before command
