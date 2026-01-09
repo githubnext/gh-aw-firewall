@@ -17,11 +17,14 @@ import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
 import { createDockerHelper, DockerHelper } from '../fixtures/docker-helper';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('Host Access Integration Tests', () => {
   let runner: AwfRunner;
   let docker: DockerHelper;
   let testConfigPath: string;
+  const tmpDir = os.tmpdir();
 
   beforeAll(async () => {
     // Clean up any leftover resources
@@ -31,7 +34,7 @@ describe('Host Access Integration Tests', () => {
     docker = createDockerHelper();
 
     // Create a test config file for volume mount tests
-    testConfigPath = `/tmp/awf-test-config-${Date.now()}.json`;
+    testConfigPath = path.join(tmpDir, `awf-test-config-${Date.now()}.json`);
     const testConfig = {
       testKey: 'testValue',
       servers: {
@@ -108,7 +111,7 @@ describe('Host Access Integration Tests', () => {
         `cat ${testConfigPath}`,
         {
           allowDomains: ['github.com'],
-          volumeMounts: [`/tmp:/tmp:ro`],
+          volumeMounts: [`${tmpDir}:${tmpDir}:ro`],
           logLevel: 'debug',
           timeout: 60000,
         }
@@ -121,29 +124,29 @@ describe('Host Access Integration Tests', () => {
 
     test('Config file with host.docker.internal URL accessible', async () => {
       const result = await runner.runWithSudo(
-        `cat ${testConfigPath} | grep host.docker.internal`,
+        `cat ${testConfigPath} | grep -q host.docker.internal && echo "Found host.docker.internal"`,
         {
           allowDomains: ['github.com'],
           enableHostAccess: true,
-          volumeMounts: [`/tmp:/tmp:ro`],
+          volumeMounts: [`${tmpDir}:${tmpDir}:ro`],
           logLevel: 'debug',
           timeout: 60000,
         }
       );
 
       expect(result).toSucceed();
-      expect(result.stdout).toContain('host.docker.internal');
+      expect(result.stdout).toContain('Found host.docker.internal');
     }, 120000);
 
     test('Read-write mount allows file creation', async () => {
-      const testFile = `/tmp/awf-rw-test-${Date.now()}.txt`;
+      const testFile = path.join(tmpDir, `awf-rw-test-${Date.now()}.txt`);
       const testContent = 'AWF read-write mount test';
 
       const result = await runner.runWithSudo(
         `echo "${testContent}" > ${testFile} && cat ${testFile}`,
         {
           allowDomains: ['github.com'],
-          volumeMounts: [`/tmp:/tmp:rw`],
+          volumeMounts: [`${tmpDir}:${tmpDir}:rw`],
           logLevel: 'debug',
           timeout: 60000,
         }
@@ -246,7 +249,7 @@ describe('Host Access Integration Tests', () => {
         {
           allowDomains: ['github.com', 'api.github.com'],
           enableHostAccess: true,
-          volumeMounts: [`/tmp:/tmp:ro`],
+          volumeMounts: [`${tmpDir}:${tmpDir}:ro`],
           env: {
             TEST_VAR: testEnvValue,
           },
@@ -265,7 +268,7 @@ describe('Host Access Integration Tests', () => {
       // This test verifies that the enableHostAccess option is correctly
       // passed through the runner and into the AWF CLI
       const result = await runner.runWithSudo(
-        'cat /etc/hosts | grep host.docker',
+        'cat /etc/hosts | grep -q host.docker && echo "host.docker.internal configured"',
         {
           allowDomains: ['github.com'],
           enableHostAccess: true,
@@ -276,7 +279,7 @@ describe('Host Access Integration Tests', () => {
 
       expect(result).toSucceed();
       // The /etc/hosts file should contain the host.docker.internal entry
-      expect(result.stdout).toContain('host.docker.internal');
+      expect(result.stdout).toContain('host.docker.internal configured');
     }, 120000);
   });
 });
