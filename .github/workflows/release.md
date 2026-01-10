@@ -6,6 +6,12 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode - builds artifacts but skips pushing images and creating releases'
+        required: false
+        default: 'false'
+        type: boolean
 permissions:
   contents: read
   pull-requests: read
@@ -84,7 +90,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./containers/squid
-          push: true
+          push: ${{ github.event.inputs.dry_run != 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}
             ghcr.io/${{ github.repository }}/squid:latest
@@ -92,11 +98,13 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Sign Squid image with cosign
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
 
       - name: Generate SBOM for Squid image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
         with:
           image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
@@ -104,6 +112,7 @@ jobs:
           output-file: squid-sbom.spdx.json
 
       - name: Attest SBOM for Squid image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign attest --yes \
             --predicate squid-sbom.spdx.json \
@@ -115,18 +124,20 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./containers/agent
-          push: true
+          push: ${{ github.event.inputs.dry_run != 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
             ghcr.io/${{ github.repository }}/agent:latest
           no-cache: true
 
       - name: Sign Agent image with cosign
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
       - name: Generate SBOM for Agent image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
         with:
           image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
@@ -134,6 +145,7 @@ jobs:
           output-file: agent-sbom.spdx.json
 
       - name: Attest SBOM for Agent image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign attest --yes \
             --predicate agent-sbom.spdx.json \
@@ -260,8 +272,17 @@ jobs:
           echo "Release notes preview (first 20 lines):"
           head -20 release_notes.md
 
+      - name: Preview release notes (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: Release notes that would be published ==="
+          cat release_notes.md
+          echo ""
+          echo "=== DRY RUN: Skipping actual release creation ==="
+
       - name: Create GitHub Release
         id: create_release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version_early.outputs.version }}
@@ -284,7 +305,16 @@ jobs:
           path: release/
           retention-days: 7
 steps:
+  - name: Check dry run mode
+    run: |
+      if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+        echo "=== DRY RUN MODE ==="
+        echo "Skipping AI agent - no release to update in dry run mode"
+        echo "The release job has already previewed what would be created."
+        exit 0
+      fi
   - name: Setup environment and fetch release data
+    if: ${{ github.event.inputs.dry_run != 'true' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     run: |

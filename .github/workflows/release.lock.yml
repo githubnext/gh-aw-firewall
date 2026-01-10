@@ -27,6 +27,12 @@ name: "Release"
     tags:
     - v*.*.*
   workflow_dispatch:
+    inputs:
+      dry_run:
+        default: "false"
+        description: "Dry run mode - builds artifacts but skips pushing images and creating releases"
+        required: false
+        type: boolean
 
 permissions:
   actions: read
@@ -96,8 +102,11 @@ jobs:
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - name: Check dry run mode
+        run: "if [ \"${{ github.event.inputs.dry_run }}\" = \"true\" ]; then\n  echo \"=== DRY RUN MODE ===\"\n  echo \"Skipping AI agent - no release to update in dry run mode\"\n  echo \"The release job has already previewed what would be created.\"\n  exit 0\nfi\n"
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         name: Setup environment and fetch release data
         run: "set -e\nmkdir -p /tmp/gh-aw/release-data\n\n# Get the release tag from the push event\nif [[ \"$GITHUB_REF\" == refs/tags/* ]]; then\n  RELEASE_TAG=\"${GITHUB_REF#refs/tags/}\"\nelse\n  # For workflow_dispatch, get from package.json\n  RELEASE_TAG=\"v$(node -p \"require('./package.json').version\")\"\nfi\necho \"Processing release: $RELEASE_TAG\"\necho \"RELEASE_TAG=$RELEASE_TAG\" >> \"$GITHUB_ENV\"\n\n# Get the current release information\ngh release view \"$RELEASE_TAG\" --json name,tagName,createdAt,publishedAt,url,body > /tmp/gh-aw/release-data/current_release.json\necho \"✓ Fetched current release information\"\n\n# Get the previous release to determine the range\nPREV_RELEASE_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName // empty')\n\nif [ -z \"$PREV_RELEASE_TAG\" ]; then\n  echo \"No previous release found. This appears to be the first release.\"\n  echo \"PREV_RELEASE_TAG=\" >> \"$GITHUB_ENV\"\n  echo \"[]\" > /tmp/gh-aw/release-data/pull_requests.json\nelse\n  echo \"Previous release: $PREV_RELEASE_TAG\"\n  echo \"PREV_RELEASE_TAG=$PREV_RELEASE_TAG\" >> \"$GITHUB_ENV\"\n  \n  # Get all merged PRs between the two releases\n  echo \"Fetching pull requests merged between releases...\"\n  PREV_PUBLISHED_AT=$(gh release view \"$PREV_RELEASE_TAG\" --json publishedAt --jq .publishedAt)\n  CURR_PUBLISHED_AT=$(gh release view \"$RELEASE_TAG\" --json publishedAt --jq .publishedAt)\n  gh pr list \\\n    --state merged \\\n    --limit 1000 \\\n    --json number,title,author,labels,mergedAt,url,body \\\n    --jq \"[.[] | select(.mergedAt >= \\\"$PREV_PUBLISHED_AT\\\" and .mergedAt <= \\\"$CURR_PUBLISHED_AT\\\")]\" \\\n    > /tmp/gh-aw/release-data/pull_requests.json\n  \n  PR_COUNT=$(jq length \"/tmp/gh-aw/release-data/pull_requests.json\")\n  echo \"✓ Fetched $PR_COUNT pull requests\"\nfi\n\n# Get the CHANGELOG.md content if it exists\nif [ -f \"CHANGELOG.md\" ]; then\n  cp CHANGELOG.md /tmp/gh-aw/release-data/CHANGELOG.md\n  echo \"✓ Copied CHANGELOG.md for reference\"\nfi\n\n# Get README for project context\nif [ -f \"README.md\" ]; then\n  cp README.md /tmp/gh-aw/release-data/README.md\n  echo \"✓ Copied README.md for context\"\nfi\n\necho \"✓ Setup complete. Data available in /tmp/gh-aw/release-data/\""
 
@@ -1117,21 +1126,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           context: ./containers/squid
-          push: true
+          push: ${{ github.event.inputs.dry_run != 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}
             ghcr.io/${{ github.repository }}/squid:latest
       - name: Sign Squid image with cosign
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
       - name: Generate SBOM for Squid image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5
         with:
           format: spdx-json
           image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
           output-file: squid-sbom.spdx.json
       - name: Attest SBOM for Squid image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign attest --yes \
             --predicate squid-sbom.spdx.json \
@@ -1143,21 +1155,24 @@ jobs:
         with:
           context: ./containers/agent
           no-cache: true
-          push: true
+          push: ${{ github.event.inputs.dry_run != 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
             ghcr.io/${{ github.repository }}/agent:latest
       - name: Sign Agent image with cosign
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
       - name: Generate SBOM for Agent image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5
         with:
           format: spdx-json
           image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
           output-file: agent-sbom.spdx.json
       - name: Attest SBOM for Agent image
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           cosign attest --yes \
             --predicate agent-sbom.spdx.json \
@@ -1274,8 +1289,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           VERSION: ${{ steps.version_early.outputs.version }}
           VERSION_NUMBER: ${{ steps.version_early.outputs.version_number }}
+      - name: Preview release notes (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== DRY RUN: Release notes that would be published ==="
+          cat release_notes.md
+          echo ""
+          echo "=== DRY RUN: Skipping actual release creation ==="
       - name: Create GitHub Release
         id: create_release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
