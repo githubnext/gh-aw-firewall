@@ -19,24 +19,25 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Generate an engaging release highlights summary for new releases
+# Build, test, and release AWF extension, then generate and prepend release highlights
 
-name: "Release Highlights Generator"
+name: "Release"
 "on":
-  release:
-    types:
-    - published
+  push:
+    tags:
+    - v*.*.*
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: read
   pull-requests: read
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}"
+  group: "gh-aw-${{ github.workflow }}-${{ github.ref }}"
 
-run-name: "Release Highlights Generator"
+run-name: "Release"
 
 jobs:
   activation:
@@ -56,7 +57,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "release-highlights.lock.yml"
+          GH_AW_WORKFLOW_FILE: "release.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -65,14 +66,15 @@ jobs:
             await main();
 
   agent:
-    needs: activation
+    needs:
+      - activation
+      - release
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: read
       pull-requests: read
-    concurrency:
-      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       GH_AW_MCP_LOG_DIR: /tmp/gh-aw/mcp-logs/safeoutputs
       GH_AW_SAFE_OUTPUTS: /tmp/gh-aw/safeoutputs/outputs.jsonl
@@ -94,6 +96,11 @@ jobs:
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: Setup environment and fetch release data
+        run: "set -e\nmkdir -p /tmp/gh-aw/release-data\n\n# Get the release tag from the push event\nif [[ \"$GITHUB_REF\" == refs/tags/* ]]; then\n  RELEASE_TAG=\"${GITHUB_REF#refs/tags/}\"\nelse\n  # For workflow_dispatch, get from package.json\n  RELEASE_TAG=\"v$(node -p \"require('./package.json').version\")\"\nfi\necho \"Processing release: $RELEASE_TAG\"\necho \"RELEASE_TAG=$RELEASE_TAG\" >> \"$GITHUB_ENV\"\n\n# Get the current release information\ngh release view \"$RELEASE_TAG\" --json name,tagName,createdAt,publishedAt,url,body > /tmp/gh-aw/release-data/current_release.json\necho \"✓ Fetched current release information\"\n\n# Get the previous release to determine the range\nPREV_RELEASE_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName // empty')\n\nif [ -z \"$PREV_RELEASE_TAG\" ]; then\n  echo \"No previous release found. This appears to be the first release.\"\n  echo \"PREV_RELEASE_TAG=\" >> \"$GITHUB_ENV\"\n  echo \"[]\" > /tmp/gh-aw/release-data/pull_requests.json\nelse\n  echo \"Previous release: $PREV_RELEASE_TAG\"\n  echo \"PREV_RELEASE_TAG=$PREV_RELEASE_TAG\" >> \"$GITHUB_ENV\"\n  \n  # Get all merged PRs between the two releases\n  echo \"Fetching pull requests merged between releases...\"\n  PREV_PUBLISHED_AT=$(gh release view \"$PREV_RELEASE_TAG\" --json publishedAt --jq .publishedAt)\n  CURR_PUBLISHED_AT=$(gh release view \"$RELEASE_TAG\" --json publishedAt --jq .publishedAt)\n  gh pr list \\\n    --state merged \\\n    --limit 1000 \\\n    --json number,title,author,labels,mergedAt,url,body \\\n    --jq \"[.[] | select(.mergedAt >= \\\"$PREV_PUBLISHED_AT\\\" and .mergedAt <= \\\"$CURR_PUBLISHED_AT\\\")]\" \\\n    > /tmp/gh-aw/release-data/pull_requests.json\n  \n  PR_COUNT=$(jq length \"/tmp/gh-aw/release-data/pull_requests.json\")\n  echo \"✓ Fetched $PR_COUNT pull requests\"\nfi\n\n# Get the CHANGELOG.md content if it exists\nif [ -f \"CHANGELOG.md\" ]; then\n  cp CHANGELOG.md /tmp/gh-aw/release-data/CHANGELOG.md\n  echo \"✓ Copied CHANGELOG.md for reference\"\nfi\n\n# Get README for project context\nif [ -f \"README.md\" ]; then\n  cp README.md /tmp/gh-aw/release-data/README.md\n  echo \"✓ Copied README.md for context\"\nfi\n\necho \"✓ Setup complete. Data available in /tmp/gh-aw/release-data/\""
+
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}
@@ -379,7 +386,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Release Highlights Generator",
+              workflow_name: "Release",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -420,65 +427,129 @@ jobs:
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
           # Release Highlights Generator
           
-          You are an AI agent that generates engaging, user-friendly release highlights for this repository.
+          Generate an engaging release highlights summary for **__GH_AW_GITHUB_REPOSITORY__** release `${RELEASE_TAG}`.
           
-          ## Your Task
+          ## Data Available
           
-          1. **Get Release Context**:
-             - The release that triggered this workflow is for tag `__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__`
-             - Get the release details using GitHub tools to understand what's already in the release notes
+          All data is pre-fetched in `/tmp/gh-aw/release-data/`:
+          - `current_release.json` - Release metadata (tag, name, dates, existing body)
+          - `pull_requests.json` - PRs merged between `${PREV_RELEASE_TAG}` and `${RELEASE_TAG}` (empty array if first release)
+          - `CHANGELOG.md` - Full changelog for context (if exists)
+          - `README.md` - Project overview for context
           
-          2. **Find the Previous Tag**:
-             - Use `git tag --sort=-version:refname` to list tags sorted by version
-             - Identify the previous tag (the one before `__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__`)
-             - If no previous tag exists, this is the first release
+          ## Output Requirements
           
-          3. **Analyze the Changes**:
-             - Use `git log <previous_tag>..__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__ --oneline` to see commits
-             - Use `git diff <previous_tag>..__GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME__ --stat` to see file changes
-             - Focus on understanding the **impact** of changes, not just the technical details
+          Create a **"🚀 Release Highlights"** section that:
+          - Is concise and scannable (users grasp key changes in 30 seconds)
+          - Uses professional, enthusiastic tone (not overly casual)
+          - Categorizes changes logically (features, fixes, security, breaking changes)
+          - Focuses on user impact (why changes matter, not just what changed)
           
-          4. **Generate Release Highlights**:
-             Create an engaging, marketing-style highlights section that includes:
+          ## Workflow
           
-             ## 🚀 Release Highlights
+          ### 1. Load Data
           
-             Write 3-5 bullet points that highlight the **most impactful changes** in this release. Each highlight should:
-             - Start with an emoji that represents the type of change
-             - Be written in user-friendly language (avoid technical jargon where possible)
-             - Focus on **benefits** and **value** to users, not just what changed
-             - Be concise but informative (1-2 sentences max per highlight)
+          ```bash
+          # View release metadata
+          cat /tmp/gh-aw/release-data/current_release.json | jq
           
-             Example format:
-             - 🔒 **Enhanced Security**: Improved container isolation with capability dropping for safer execution
-             - ⚡ **Faster Builds**: Optimized Docker caching reduces build times by up to 50%
-             - 🛠️ **Better Developer Experience**: New `--debug` flag provides detailed logging for troubleshooting
+          # List PRs (empty if first release)
+          cat /tmp/gh-aw/release-data/pull_requests.json | jq -r '.[] | "- #\(.number): \(.title) by @\(.author.login)"'
           
-          5. **Update the Release**:
-             Use the `update-release` safe output to **prepend** your highlights to the existing release notes. Use the `prepend` operation so the highlights appear at the top of the release description.
+          # Check CHANGELOG context
+          head -100 /tmp/gh-aw/release-data/CHANGELOG.md 2>/dev/null || echo "No CHANGELOG"
+          ```
           
-          ## Guidelines
+          ### 2. Categorize & Prioritize
           
-          - Keep highlights concise and scannable
-          - Use emojis appropriately (🚀 for features, 🔒 for security, 🐛 for bug fixes, 📚 for docs, ⚡ for performance)
-          - Write for the end user, not the developer
-          - Highlight breaking changes prominently with ⚠️
-          - If this is the first release, mention it's the initial release and highlight the core features
-          - Do NOT duplicate information that's already in the release notes
-          - Focus on the "why it matters" not just the "what changed"
+          Group PRs by category (omit categories with no items):
+          - **⚠️ Breaking Changes** - Requires user action (ALWAYS list first if present)
+          - **✨ New Features** - User-facing capabilities
+          - **🔒 Security** - Security improvements
+          - **🐛 Bug Fixes** - Issue resolutions
+          - **⚡ Performance** - Speed/efficiency improvements
+          - **📚 Documentation** - Guide/reference updates
+          
+          ### 3. Write Highlights
+          
+          Structure:
+          ```markdown
+          ## 🚀 Release Highlights
+          
+          [1-2 sentence summary of the release theme/focus]
+          
+          ### ⚠️ Breaking Changes
+          [If any - list FIRST with migration guidance]
+          
+          ### ✨ What's New
+          [Top 3-5 features with user benefit]
+          
+          ### 🔒 Security Improvements
+          [Notable security fixes - focus on user impact]
+          
+          ### 🐛 Bug Fixes & Improvements
+          [Notable fixes - focus on user impact]
+          
+          ---
+          ```
+          
+          **Writing Guidelines:**
+          - Lead with benefits: "Container isolation now drops NET_ADMIN capability" not "Added capability dropping"
+          - Be specific: "Reduced build times by 40%" not "Faster builds"
+          - Skip internal changes unless they have user impact
+          - Keep breaking changes prominent with action items
+          - Use emojis appropriately to make it scannable
+          
+          ### 4. Handle Special Cases
+          
+          **First Release** (no `${PREV_RELEASE_TAG}`):
+          ```markdown
+          ## 🎉 First Release
+          
+          Welcome to the inaugural release of AWF (Agent Workflow Firewall)!
+          
+          ### Key Features
+          [List primary features with brief descriptions]
+          ```
+          
+          **Maintenance Release** (no user-facing changes):
+          ```markdown
+          ## 🔧 Maintenance Release
+          
+          Dependency updates and internal improvements to keep things running smoothly.
+          ```
+          
+          ## Output Format
+          
+          **CRITICAL**: You MUST call the `update_release` tool to update the release with the generated highlights:
+          
+          ```javascript
+          update_release({
+            tag: "${RELEASE_TAG}",
+            operation: "prepend",
+            body: "## 🚀 Release Highlights\n\n[Your complete markdown highlights here]"
+          })
+          ```
+          
+          **Required Parameters:**
+          - `tag` - Release tag from `${RELEASE_TAG}` environment variable
+          - `operation` - Must be `"prepend"` to add before existing notes
+          - `body` - Complete markdown content (include all formatting, emojis)
+          
+          **WARNING**: If you don't call the `update_release` tool, the release notes will NOT be updated!
           
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
@@ -487,7 +558,7 @@ jobs:
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
               substitutions: {
-                GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME: process.env.GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME
+                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY
               }
             });
       - name: Append XPIA security instructions to prompt
@@ -595,7 +666,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -609,30 +680,11 @@ jobs:
       - name: Execute GitHub Copilot CLI
         id: agentic_execution
         # Copilot CLI tool arguments (sorted):
-        # --allow-tool github
-        # --allow-tool safeoutputs
-        # --allow-tool shell(cat)
-        # --allow-tool shell(date)
-        # --allow-tool shell(echo)
-        # --allow-tool shell(git diff:*)
-        # --allow-tool shell(git log:*)
-        # --allow-tool shell(git show:*)
-        # --allow-tool shell(git tag:*)
-        # --allow-tool shell(grep)
-        # --allow-tool shell(head)
-        # --allow-tool shell(ls)
-        # --allow-tool shell(pwd)
-        # --allow-tool shell(sort)
-        # --allow-tool shell(tail)
-        # --allow-tool shell(uniq)
-        # --allow-tool shell(wc)
-        # --allow-tool shell(yq)
-        # --allow-tool write
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: |
           set -o pipefail
           sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
-            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-tool github --allow-tool safeoutputs --allow-tool 'shell(cat)' --allow-tool 'shell(date)' --allow-tool 'shell(echo)' --allow-tool 'shell(git diff:*)' --allow-tool 'shell(git log:*)' --allow-tool 'shell(git show:*)' --allow-tool 'shell(git tag:*)' --allow-tool 'shell(grep)' --allow-tool 'shell(head)' --allow-tool 'shell(ls)' --allow-tool 'shell(pwd)' --allow-tool 'shell(sort)' --allow-tool 'shell(tail)' --allow-tool 'shell(uniq)' --allow-tool 'shell(wc)' --allow-tool 'shell(yq)' --allow-tool write --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
+            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
@@ -796,7 +848,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Release Highlights Generator"
+          GH_AW_WORKFLOW_NAME: "Release"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -809,7 +861,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Release Highlights Generator"
+          GH_AW_WORKFLOW_NAME: "Release"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -825,7 +877,7 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Release Highlights Generator"
+          GH_AW_WORKFLOW_NAME: "Release"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
         with:
@@ -841,8 +893,6 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
-    concurrency:
-      group: "gh-aw-copilot-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -871,8 +921,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Release Highlights Generator"
-          WORKFLOW_DESCRIPTION: "Generate an engaging release highlights summary for new releases"
+          WORKFLOW_NAME: "Release"
+          WORKFLOW_DESCRIPTION: "Build, test, and release AWF extension, then generate and prepend release highlights"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -1002,7 +1052,7 @@ jobs:
         id: check_membership
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_REQUIRED_ROLES: admin,maintainer,write
+          GH_AW_REQUIRED_ROLES: admin,maintainer
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1010,6 +1060,242 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
             await main();
+
+  release:
+    needs: activation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      release_tag: ${{ steps.version_early.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          cache: npm
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build TypeScript
+        run: npm run build
+      - name: Extract version from tag
+        id: version_early
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=v$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION_NUMBER="${VERSION#v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION_NUMBER" >> $GITHUB_OUTPUT
+          fi
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # 59acb6260d9c0ba8f4a2f9d9b48431a222b68e20
+      - name: Build and push Squid image
+        id: build_squid
+        uses: docker/build-push-action@v5
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: ./containers/squid
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/squid:latest
+      - name: Sign Squid image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+      - name: Generate SBOM for Squid image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5
+        with:
+          format: spdx-json
+          image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+          output-file: squid-sbom.spdx.json
+      - name: Attest SBOM for Squid image
+        run: |
+          cosign attest --yes \
+            --predicate squid-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+      - name: Build and push Agent image
+        id: build_agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/agent
+          no-cache: true
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/agent:latest
+      - name: Sign Agent image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+      - name: Generate SBOM for Agent image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5
+        with:
+          format: spdx-json
+          image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+          output-file: agent-sbom.spdx.json
+      - name: Attest SBOM for Agent image
+        run: |
+          cosign attest --yes \
+            --predicate agent-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+      - name: Install pkg for binary creation
+        run: npm install -g pkg
+      - name: Create binaries
+        run: |
+          mkdir -p release
+
+          # Create standalone executable for Linux
+          pkg . \
+            --targets node18-linux-x64 \
+            --output release/awf-linux-x64
+
+          # Verify the binary was created
+          echo "=== Contents of release directory ==="
+          ls -lh release/
+          echo "=== Verifying binary ==="
+          test -f release/awf-linux-x64 && echo "✓ Binary exists at release/awf-linux-x64" || echo "✗ Binary NOT found!"
+          file release/awf-linux-x64
+      - name: Smoke test binary
+        run: |
+          npx tsx scripts/ci/smoke-test-binary.ts \
+            release/awf-linux-x64 \
+            ${{ steps.version_early.outputs.version_number }}
+      - name: Create tarball for npm package
+        run: |
+          npm pack
+          mv *.tgz release/awf.tgz
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+      - name: Get previous release tag
+        id: previous_tag
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || echo "")
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREVIOUS_TAG (current: $CURRENT_TAG)"
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
+
+          echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              -f previous_tag_name="$PREVIOUS_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          else
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "GitHub API failed, falling back to git log"
+            if [ -n "$PREVIOUS_TAG" ]; then
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" "$PREVIOUS_TAG..HEAD" 2>/dev/null || echo "* Initial release")
+            else
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" 2>/dev/null || echo "* Initial release")
+            fi
+          fi
+
+          echo "$CHANGELOG" > changelog_body.md
+
+          if [ ! -s changelog_body.md ]; then
+            echo "Error: Changelog generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "Changelog generated successfully ($(wc -l < changelog_body.md) lines)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate CLI help output
+        id: cli_help
+        run: |
+          set -euo pipefail
+          node dist/cli.js --help > cli_help.txt
+
+          if [ ! -s cli_help.txt ]; then
+            echo "Error: CLI help generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "CLI help generated ($(wc -l < cli_help.txt) lines):"
+          cat cli_help.txt
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          set -euo pipefail
+          node scripts/generate-release-notes.js \
+            changelog_body.md \
+            cli_help.txt \
+            release_notes.md
+
+          if [ ! -s release_notes.md ]; then
+            echo "Error: Release notes generation failed"
+            exit 1
+          fi
+
+          rm -f changelog_body.md cli_help.txt
+          echo "Release notes preview (first 20 lines):"
+          head -20 release_notes.md
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.version_early.outputs.version }}
+          VERSION_NUMBER: ${{ steps.version_early.outputs.version_number }}
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: release_notes.md
+          draft: false
+          files: |
+            release/awf-linux-x64
+            release/awf.tgz
+            release/checksums.txt
+          name: Release ${{ steps.version_early.outputs.version }}
+          prerelease: ${{ contains(steps.version_early.outputs.version, 'alpha') || contains(steps.version_early.outputs.version, 'beta') || contains(steps.version_early.outputs.version, 'rc') }}
+          tag_name: ${{ steps.version_early.outputs.version }}
+      - name: Upload artifacts (for debugging)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-artifacts
+          path: release/
+          retention-days: 7
 
   safe_outputs:
     needs:
@@ -1022,8 +1308,8 @@ jobs:
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "release-highlights"
-      GH_AW_WORKFLOW_NAME: "Release Highlights Generator"
+      GH_AW_WORKFLOW_ID: "release"
+      GH_AW_WORKFLOW_NAME: "Release"
     outputs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
