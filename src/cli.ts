@@ -401,6 +401,11 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/githubnext/*'
   )
+  .option(
+    '--no-pull',
+    'Skip pulling container images and use locally cached ones (from awf preload)',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -622,6 +627,7 @@ program
       enableHostAccess: options.enableHostAccess,
       sslBump: options.sslBump,
       allowedUrls,
+      skipPull: options.noPull,
     };
 
     // Warn if --env-all is used

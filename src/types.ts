@@ -283,6 +283,20 @@ export interface WrapperConfig {
    * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Whether to skip pulling container images and use locally cached ones
+   *
+   * When true, Docker Compose will use `--pull never` to avoid pulling
+   * images from the registry. This is useful when images have been
+   * pre-downloaded using `awf preload` or are available locally.
+   *
+   * When false (default), Docker Compose uses its default pull policy,
+   * which pulls images if they don't exist locally.
+   *
+   * @default false
+   */
+  skipPull?: boolean;
 }
 
 /**
