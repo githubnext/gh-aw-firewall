@@ -727,6 +727,32 @@ describe('docker-manager', () => {
 
       await expect(startContainers(testDir, ['github.com'])).rejects.toThrow();
     });
+
+    it('should use --pull never when skipPull is true', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, true);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d', '--pull', 'never'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should not use --pull when skipPull is false', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, false);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
   });
 
   describe('stopContainers', () => {

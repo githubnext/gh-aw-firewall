@@ -4,7 +4,7 @@ export interface WorkflowDependencies {
   ensureFirewallNetwork: () => Promise<{ squidIp: string }>;
   setupHostIptables: (squidIp: string, port: number, dnsServers: string[]) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
-  startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string) => Promise<void>;
+  startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string, skipPull?: boolean) => Promise<void>;
   runAgentCommand: (
     workDir: string,
     allowedDomains: string[],
@@ -51,7 +51,7 @@ export async function runMainWorkflow(
   await dependencies.writeConfigs(config);
 
   // Step 2: Start containers
-  await dependencies.startContainers(config.workDir, config.allowedDomains, config.proxyLogsDir);
+  await dependencies.startContainers(config.workDir, config.allowedDomains, config.proxyLogsDir, config.skipPull);
   onContainersStarted?.();
 
   // Step 3: Wait for agent to complete

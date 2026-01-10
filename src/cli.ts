@@ -401,6 +401,11 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/githubnext/*'
   )
+  .option(
+    '--no-pull',
+    'Skip pulling container images and use locally cached ones (from awf preload)',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -622,6 +627,7 @@ program
       enableHostAccess: options.enableHostAccess,
       sslBump: options.sslBump,
       allowedUrls,
+      skipPull: options.noPull,
     };
 
     // Warn if --env-all is used
@@ -826,6 +832,34 @@ logsCmd
       format: options.format as 'json' | 'markdown' | 'pretty',
       source: options.source,
     });
+  });
+
+// Preload subcommand - pre-download container images
+program
+  .command('preload')
+  .description('Pre-download container images to the local Docker cache for faster startup')
+  .option(
+    '--image-registry <registry>',
+    'Container image registry',
+    'ghcr.io/githubnext/gh-aw-firewall'
+  )
+  .option(
+    '--image-tag <tag>',
+    'Container image tag',
+    'latest'
+  )
+  .action(async (options) => {
+    // Dynamic import to avoid circular dependencies
+    const { preloadCommand } = await import('./commands/preload');
+    try {
+      await preloadCommand({
+        imageRegistry: options.imageRegistry,
+        imageTag: options.imageTag,
+      });
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   });
 
 // Only parse arguments if this file is run directly (not imported as a module)
