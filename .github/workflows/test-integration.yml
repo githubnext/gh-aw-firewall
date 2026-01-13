@@ -242,6 +242,9 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
+      - name: Pull MCP Gateway image
+        run: docker pull ghcr.io/githubnext/gh-aw-mcpg:v0.0.48
+
       - name: Run host access integration tests
         id: run-tests
         env:
@@ -267,7 +270,9 @@ jobs:
 
       - name: Post-test cleanup
         if: always()
-        run: sudo ./scripts/ci/cleanup.sh
+        run: |
+          docker rm -f mcpg-gateway-test 2>/dev/null || true
+          sudo ./scripts/ci/cleanup.sh
 
       - name: Upload test logs on failure
         if: failure()
