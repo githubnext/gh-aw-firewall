@@ -212,7 +212,6 @@ Mount host directories into container. Format: `host_path:container_path[:ro|rw]
 **Default mounts:**
 - Host filesystem at `/host` (read-only)
 - User home directory (read-write)
-- Docker socket at `/var/run/docker.sock`
 
 ### `--container-workdir <dir>`
 
