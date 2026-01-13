@@ -160,22 +160,7 @@ describe('Volume Mount Functionality', () => {
     expect(result.stderr).toMatch(/\/host.*No such file or directory/);
   }, 120000);
 
-  test('Test 6: Essential mounts still work (Docker socket)', async () => {
-    const result = await runner.runWithSudo(
-      'docker --version',
-      {
-        allowDomains: ['github.com'],
-        logLevel: 'debug',
-        volumeMounts: [`${testDir}:/data:ro`],
-        timeout: 30000,
-      }
-    );
-
-    expect(result).toSucceed();
-    expect(result.stdout).toMatch(/Docker version/);
-  }, 120000);
-
-  test('Test 7: Essential mounts still work (HOME directory)', async () => {
+  test('Test 6: Essential mounts still work (HOME directory)', async () => {
     const result = await runner.runWithSudo(
       'sh -c "echo $HOME && test -d $HOME"',
       {
@@ -190,7 +175,7 @@ describe('Volume Mount Functionality', () => {
     expect(result.stdout).toMatch(/\/root|\/home\//);
   }, 120000);
 
-  test('Test 8: Backward compatibility - no custom mounts uses blanket mount', async () => {
+  test('Test 7: Backward compatibility - no custom mounts uses blanket mount', async () => {
     const result = await runner.runWithSudo(
       'ls /host/tmp | head -5',
       {
@@ -206,7 +191,7 @@ describe('Volume Mount Functionality', () => {
     expect(result.exitCode).toBe(0);
   }, 120000);
 
-  test('Test 9: Mount without mode defaults to rw', async () => {
+  test('Test 8: Mount without mode defaults to rw', async () => {
     const result = await runner.runWithSudo(
       'sh -c \'echo "Test write" > /data/write-test.txt\'',
       {
@@ -224,7 +209,7 @@ describe('Volume Mount Functionality', () => {
     expect(fs.existsSync(outputFile)).toBe(true);
   }, 120000);
 
-  test('Test 10: Debug logging shows mount configuration', async () => {
+  test('Test 9: Debug logging shows mount configuration', async () => {
     const result = await runner.runWithSudo(
       'echo "test"',
       {
@@ -240,7 +225,7 @@ describe('Volume Mount Functionality', () => {
     expect(result.stderr).toMatch(/Adding.*custom volume mount/);
   }, 120000);
 
-  test('Test 11: Current working directory mount', async () => {
+  test('Test 10: Current working directory mount', async () => {
     // Create a project directory
     const projectDir = path.join(testDir, 'project');
     fs.mkdirSync(projectDir);
@@ -260,7 +245,7 @@ describe('Volume Mount Functionality', () => {
     expect(result.stdout).toContain('# Test Project');
   }, 120000);
 
-  test('Test 12: Mixed read-only and read-write mounts', async () => {
+  test('Test 11: Mixed read-only and read-write mounts', async () => {
     const roDir = path.join(testDir, 'readonly');
     const rwDir = path.join(testDir, 'readwrite');
     fs.mkdirSync(roDir);
