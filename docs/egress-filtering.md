@@ -1,4 +1,4 @@
-# Security Model: Port Restrictions vs Domain Allowlist
+# Egress Filtering: Port Restrictions vs Domain Allowlist
 
 ## TL;DR
 
