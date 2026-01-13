@@ -423,10 +423,10 @@ awf logs summary --format pretty
 #### Example Output (Markdown)
 
 ```markdown
-### Firewall Activity
-
 <details>
-<summary>150 requests | 145 allowed | 5 blocked | 12 unique domains</summary>
+<summary>Firewall Activity</summary>
+
+▼ 150 requests | 145 allowed | 5 blocked | 12 unique domains
 
 | Domain | Allowed | Denied |
 |--------|---------|--------|

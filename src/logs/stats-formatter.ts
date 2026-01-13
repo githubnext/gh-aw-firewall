@@ -43,8 +43,6 @@ export function formatStatsJson(stats: AggregatedStats): string {
 export function formatStatsMarkdown(stats: AggregatedStats): string {
   const lines: string[] = [];
 
-  lines.push('### Firewall Activity\n');
-
   // Summary line
   const requestWord = stats.totalRequests === 1 ? 'request' : 'requests';
   const domainWord = stats.uniqueDomains === 1 ? 'domain' : 'domains';
@@ -60,11 +58,12 @@ export function formatStatsMarkdown(stats: AggregatedStats): string {
       : `${stats.uniqueDomains} unique ${domainWord} (${validDomainCount} valid)`;
 
   lines.push('<details>');
+  lines.push('<summary>Firewall Activity</summary>\n');
   lines.push(
-    `<summary>${stats.totalRequests} ${requestWord} | ` +
+    `▼ ${stats.totalRequests} ${requestWord} | ` +
       `${stats.allowedRequests} allowed | ` +
       `${stats.deniedRequests} blocked | ` +
-      `${domainCountText}</summary>\n`
+      `${domainCountText}\n`
   );
 
   // Domain breakdown table
