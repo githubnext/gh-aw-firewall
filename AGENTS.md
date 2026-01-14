@@ -89,6 +89,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - Both commit messages AND PR titles must follow this format
 - PR descriptions should be 1-2 sentences max
 
+**Allowed scopes for PR titles:** `cli`, `docker`, `squid`, `proxy`, `ci`, `deps`
+- Using scopes not in this list will cause the PR Title Check to fail
+- If unsure, omit the scope entirely (e.g., `test: add new tests` instead of `test(security): add new tests`)
+
 **Common types:**
 - `feat`: New feature
 - `fix`: Bug fix
@@ -103,8 +107,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - ✅ `docs(template): fix duplicate heading in release template`
 - ✅ `feat: add new domain whitelist option`
 - ✅ `fix(cleanup): resolve container cleanup race condition`
+- ✅ `test: add NET_ADMIN capability verification tests`
 - ❌ `Fix bug` (missing type)
 - ❌ `docs: Fix template.` (uppercase subject, period at end)
+- ❌ `test(security): add new tests` (scope `security` not in allowed list for PR titles)
 
 ## Development Commands
 
@@ -208,10 +214,11 @@ The codebase follows a modular architecture with clear separation of concerns:
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
-- `NET_ADMIN` capability required for iptables manipulation
+- `NET_ADMIN` capability required for iptables setup during initialization
+- **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
-  2. `entrypoint.sh`: Tests connectivity, then executes user command
+  2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
 - **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
   - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
   - Automatically injects `--network awf-net` to all spawned containers

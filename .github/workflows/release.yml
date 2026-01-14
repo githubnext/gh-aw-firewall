@@ -99,8 +99,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
             ghcr.io/${{ github.repository }}/agent:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Disable cache for agent image to ensure security-critical packages
+          # (like libcap2-bin for capability dropping) are always freshly installed
+          no-cache: true
 
       - name: Sign Agent image with cosign
         run: |
@@ -139,6 +140,12 @@ jobs:
           echo "=== Verifying binary ==="
           test -f release/awf-linux-x64 && echo "✓ Binary exists at release/awf-linux-x64" || echo "✗ Binary NOT found!"
           file release/awf-linux-x64
+
+      - name: Smoke test binary
+        run: |
+          npx tsx scripts/ci/smoke-test-binary.ts \
+            release/awf-linux-x64 \
+            ${{ steps.version_early.outputs.version_number }}
 
       - name: Create tarball for npm package
         run: |

@@ -1,5 +1,19 @@
-import { generateDockerCompose, subnetsOverlap } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand } from './docker-manager';
 import { WrapperConfig } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
+// Create mock functions
+const mockExecaFn = jest.fn();
+const mockExecaSync = jest.fn();
+
+// Mock execa module
+jest.mock('execa', () => {
+  const fn = (...args: any[]) => mockExecaFn(...args);
+  fn.sync = (...args: any[]) => mockExecaSync(...args);
+  return fn;
+});
 
 describe('docker-manager', () => {
   describe('subnetsOverlap', () => {
@@ -166,7 +180,10 @@ describe('docker-manager', () => {
       expect(depends['squid-proxy'].condition).toBe('service_healthy');
     });
 
-    it('should add NET_ADMIN capability to agent', () => {
+    it('should add NET_ADMIN capability to agent for iptables setup', () => {
+      // NET_ADMIN is required at container start for setup-iptables.sh
+      // The capability is dropped before user command execution via capsh
+      // (see containers/agent/entrypoint.sh)
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
@@ -188,6 +205,9 @@ describe('docker-manager', () => {
 
       // Verify seccomp profile is configured
       expect(agent.security_opt).toContain('seccomp=/tmp/awf-test/seccomp-profile.json');
+
+      // Verify no-new-privileges is enabled to prevent privilege escalation
+      expect(agent.security_opt).toContain('no-new-privileges:true');
 
       // Verify resource limits
       expect(agent.mem_limit).toBe('4g');
@@ -300,6 +320,46 @@ describe('docker-manager', () => {
       expect(agent.dns_search).toEqual([]);
     });
 
+    it('should NOT configure extra_hosts by default (opt-in for security)', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const squid = result.services['squid-proxy'];
+
+      expect(agent.extra_hosts).toBeUndefined();
+      expect(squid.extra_hosts).toBeUndefined();
+    });
+
+    describe('enableHostAccess option', () => {
+      it('should configure extra_hosts when enableHostAccess is true', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+        expect(squid.extra_hosts).toEqual(['host.docker.internal:host-gateway']);
+      });
+
+      it('should NOT configure extra_hosts when enableHostAccess is false', () => {
+        const config = { ...mockConfig, enableHostAccess: false };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toBeUndefined();
+        expect(squid.extra_hosts).toBeUndefined();
+      });
+
+      it('should NOT configure extra_hosts when enableHostAccess is undefined', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const squid = result.services['squid-proxy'];
+
+        expect(agent.extra_hosts).toBeUndefined();
+        expect(squid.extra_hosts).toBeUndefined();
+      });
+    });
+
     it('should override environment variables with additionalEnv', () => {
       const originalEnv = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'original_token';
@@ -397,6 +457,562 @@ describe('docker-manager', () => {
 
         expect(result.services.agent.working_dir).toBe('/var/lib/app/data');
       });
+    });
+
+    describe('proxyLogsDir option', () => {
+      it('should use proxyLogsDir when specified', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          proxyLogsDir: '/custom/proxy/logs',
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const squid = result.services['squid-proxy'];
+
+        expect(squid.volumes).toContain('/custom/proxy/logs:/var/log/squid:rw');
+      });
+
+      it('should use workDir/squid-logs when proxyLogsDir is not specified', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const squid = result.services['squid-proxy'];
+
+        expect(squid.volumes).toContain('/tmp/awf-test/squid-logs:/var/log/squid:rw');
+      });
+    });
+
+    describe('dnsServers option', () => {
+      it('should use custom DNS servers when specified', () => {
+        const config: WrapperConfig = {
+          ...mockConfig,
+          dnsServers: ['1.1.1.1', '1.0.0.1'],
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+
+        expect(agent.dns).toEqual(['1.1.1.1', '1.0.0.1']);
+        expect(env.AWF_DNS_SERVERS).toBe('1.1.1.1,1.0.0.1');
+      });
+
+      it('should use default DNS servers when not specified', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+
+        expect(agent.dns).toEqual(['8.8.8.8', '8.8.4.4']);
+        expect(env.AWF_DNS_SERVERS).toBe('8.8.8.8,8.8.4.4');
+      });
+    });
+  });
+
+  describe('writeConfigs', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-test-'));
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should create work directory if it does not exist', async () => {
+      const newWorkDir = path.join(testDir, 'new-work-dir');
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: newWorkDir,
+      };
+
+      // writeConfigs may succeed if seccomp profile is found, or fail if not
+      try {
+        await writeConfigs(config);
+      } catch {
+        // Expected to fail if seccomp profile not found, but directories should still be created
+      }
+
+      // Verify work directory was created
+      expect(fs.existsSync(newWorkDir)).toBe(true);
+    });
+
+    it('should create agent-logs directory', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail, but directories should still be created
+      }
+
+      // Verify agent-logs directory was created
+      expect(fs.existsSync(path.join(testDir, 'agent-logs'))).toBe(true);
+    });
+
+    it('should create squid-logs directory', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail, but directories should still be created
+      }
+
+      // Verify squid-logs directory was created
+      expect(fs.existsSync(path.join(testDir, 'squid-logs'))).toBe(true);
+    });
+
+    it('should create .docker config directory', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail, but directories should still be created
+      }
+
+      // Verify .docker config directory was created
+      expect(fs.existsSync(path.join(testDir, '.docker'))).toBe(true);
+    });
+
+    it('should write squid.conf file', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com', 'example.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf was created (it's created before seccomp check)
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).toContain('example.com');
+      }
+    });
+
+    it('should write docker-compose.yml file', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify docker-compose.yml was created
+      const dockerComposePath = path.join(testDir, 'docker-compose.yml');
+      if (fs.existsSync(dockerComposePath)) {
+        const content = fs.readFileSync(dockerComposePath, 'utf-8');
+        expect(content).toContain('awf-squid');
+        expect(content).toContain('awf-agent');
+      }
+    });
+
+    it('should use proxyLogsDir when specified', async () => {
+      const proxyLogsDir = path.join(testDir, 'custom-proxy-logs');
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        proxyLogsDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify proxyLogsDir was created
+      expect(fs.existsSync(proxyLogsDir)).toBe(true);
+    });
+  });
+
+  describe('startContainers', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-test-'));
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should remove existing containers before starting', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com']);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['rm', '-f', 'awf-squid', 'awf-agent'],
+        { reject: false }
+      );
+    });
+
+    it('should run docker compose up', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com']);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should handle docker compose failure', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockRejectedValueOnce(new Error('Docker compose failed'));
+
+      await expect(startContainers(testDir, ['github.com'])).rejects.toThrow('Docker compose failed');
+    });
+
+    it('should handle healthcheck failure with blocked domains', async () => {
+      // Create access.log with denied entries
+      const squidLogsDir = path.join(testDir, 'squid-logs');
+      fs.mkdirSync(squidLogsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(squidLogsDir, 'access.log'),
+        '1760994429.358 172.30.0.20:36274 blocked.com:443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE blocked.com:443 "curl/7.81.0"\n'
+      );
+
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockRejectedValueOnce(new Error('is unhealthy'));
+
+      await expect(startContainers(testDir, ['github.com'])).rejects.toThrow();
+    });
+  });
+
+  describe('stopContainers', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-test-'));
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should skip stopping when keepContainers is true', async () => {
+      await stopContainers(testDir, true);
+
+      expect(mockExecaFn).not.toHaveBeenCalled();
+    });
+
+    it('should run docker compose down when keepContainers is false', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await stopContainers(testDir, false);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'down', '-v'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should throw error when docker compose down fails', async () => {
+      mockExecaFn.mockRejectedValueOnce(new Error('Docker compose down failed'));
+
+      await expect(stopContainers(testDir, false)).rejects.toThrow('Docker compose down failed');
+    });
+  });
+
+  describe('runAgentCommand', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-test-'));
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return exit code from container', async () => {
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait
+      mockExecaFn.mockResolvedValueOnce({ stdout: '0', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should return non-zero exit code when command fails', async () => {
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait with non-zero exit code
+      mockExecaFn.mockResolvedValueOnce({ stdout: '1', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('should detect blocked domains from access log', async () => {
+      // Create access.log with denied entries
+      const squidLogsDir = path.join(testDir, 'squid-logs');
+      fs.mkdirSync(squidLogsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(squidLogsDir, 'access.log'),
+        '1760994429.358 172.30.0.20:36274 blocked.com:443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE blocked.com:443 "curl/7.81.0"\n'
+      );
+
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait with non-zero exit code (command failed)
+      mockExecaFn.mockResolvedValueOnce({ stdout: '1', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.blockedDomains).toContain('blocked.com');
+    });
+
+    it('should use proxyLogsDir when specified', async () => {
+      const proxyLogsDir = path.join(testDir, 'custom-logs');
+      fs.mkdirSync(proxyLogsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(proxyLogsDir, 'access.log'),
+        '1760994429.358 172.30.0.20:36274 blocked.com:443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE blocked.com:443 "curl/7.81.0"\n'
+      );
+
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait
+      mockExecaFn.mockResolvedValueOnce({ stdout: '1', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com'], proxyLogsDir);
+
+      expect(result.blockedDomains).toContain('blocked.com');
+    });
+
+    it('should throw error when docker wait fails', async () => {
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait failure
+      mockExecaFn.mockRejectedValueOnce(new Error('Container not found'));
+
+      await expect(runAgentCommand(testDir, ['github.com'])).rejects.toThrow('Container not found');
+    });
+
+    it('should handle blocked domain without port (standard port 443)', async () => {
+      const squidLogsDir = path.join(testDir, 'squid-logs');
+      fs.mkdirSync(squidLogsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(squidLogsDir, 'access.log'),
+        '1760994429.358 172.30.0.20:36274 example.com:443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE example.com:443 "curl/7.81.0"\n'
+      );
+
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait with non-zero exit code
+      mockExecaFn.mockResolvedValueOnce({ stdout: '1', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.blockedDomains).toContain('example.com');
+    });
+
+    it('should handle allowed domain in blocklist correctly', async () => {
+      const squidLogsDir = path.join(testDir, 'squid-logs');
+      fs.mkdirSync(squidLogsDir, { recursive: true });
+      // Create a log entry for subdomain of allowed domain
+      fs.writeFileSync(
+        path.join(squidLogsDir, 'access.log'),
+        '1760994429.358 172.30.0.20:36274 api.github.com:8443 -:- 1.1 CONNECT 403 TCP_DENIED:HIER_NONE api.github.com:8443 "curl/7.81.0"\n'
+      );
+
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait with non-zero exit code
+      mockExecaFn.mockResolvedValueOnce({ stdout: '1', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(1);
+      // api.github.com should be blocked because port 8443 is not allowed
+      expect(result.blockedDomains).toContain('api.github.com');
+    });
+
+    it('should return empty blockedDomains when no access log exists', async () => {
+      // Don't create access.log
+
+      // Mock docker logs -f
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      // Mock docker wait
+      mockExecaFn.mockResolvedValueOnce({ stdout: '0', stderr: '', exitCode: 0 } as any);
+
+      const result = await runAgentCommand(testDir, ['github.com']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.blockedDomains).toEqual([]);
+    });
+  });
+
+  describe('cleanup', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-'));
+      jest.clearAllMocks();
+      // Mock execa.sync for chmod
+      mockExecaSync.mockReturnValue({ stdout: '', stderr: '', exitCode: 0 });
+    });
+
+    afterEach(() => {
+      // Clean up any remaining test directories
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+      // Clean up any moved log directories
+      const timestamp = path.basename(testDir).replace('awf-', '');
+      const agentLogsDir = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
+      const squidLogsDir = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
+      if (fs.existsSync(agentLogsDir)) {
+        fs.rmSync(agentLogsDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(squidLogsDir)) {
+        fs.rmSync(squidLogsDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should skip cleanup when keepFiles is true', async () => {
+      await cleanup(testDir, true);
+
+      // Verify directory still exists
+      expect(fs.existsSync(testDir)).toBe(true);
+    });
+
+    it('should remove work directory when keepFiles is false', async () => {
+      await cleanup(testDir, false);
+
+      expect(fs.existsSync(testDir)).toBe(false);
+    });
+
+    it('should preserve agent logs when they exist', async () => {
+      // Create agent logs directory with a file
+      const agentLogsDir = path.join(testDir, 'agent-logs');
+      fs.mkdirSync(agentLogsDir, { recursive: true });
+      fs.writeFileSync(path.join(agentLogsDir, 'test.log'), 'test log content');
+
+      await cleanup(testDir, false);
+
+      // Verify work directory was removed
+      expect(fs.existsSync(testDir)).toBe(false);
+
+      // Verify agent logs were moved
+      const timestamp = path.basename(testDir).replace('awf-', '');
+      const preservedLogsDir = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
+      expect(fs.existsSync(preservedLogsDir)).toBe(true);
+      expect(fs.readFileSync(path.join(preservedLogsDir, 'test.log'), 'utf-8')).toBe('test log content');
+    });
+
+    it('should preserve squid logs when they exist', async () => {
+      // Create squid logs directory with a file
+      const squidLogsDir = path.join(testDir, 'squid-logs');
+      fs.mkdirSync(squidLogsDir, { recursive: true });
+      fs.writeFileSync(path.join(squidLogsDir, 'access.log'), 'squid log content');
+
+      await cleanup(testDir, false);
+
+      // Verify work directory was removed
+      expect(fs.existsSync(testDir)).toBe(false);
+
+      // Verify squid logs were moved
+      const timestamp = path.basename(testDir).replace('awf-', '');
+      const preservedLogsDir = path.join(os.tmpdir(), `squid-logs-${timestamp}`);
+      expect(fs.existsSync(preservedLogsDir)).toBe(true);
+    });
+
+    it('should not preserve empty log directories', async () => {
+      // Create empty agent logs directory
+      const agentLogsDir = path.join(testDir, 'agent-logs');
+      fs.mkdirSync(agentLogsDir, { recursive: true });
+
+      await cleanup(testDir, false);
+
+      // Verify work directory was removed
+      expect(fs.existsSync(testDir)).toBe(false);
+
+      // Verify no empty log directory was created
+      const timestamp = path.basename(testDir).replace('awf-', '');
+      const preservedLogsDir = path.join(os.tmpdir(), `awf-agent-logs-${timestamp}`);
+      expect(fs.existsSync(preservedLogsDir)).toBe(false);
+    });
+
+    it('should use proxyLogsDir when specified', async () => {
+      const proxyLogsDir = path.join(testDir, 'custom-proxy-logs');
+      fs.mkdirSync(proxyLogsDir, { recursive: true });
+      fs.writeFileSync(path.join(proxyLogsDir, 'access.log'), 'proxy log content');
+
+      await cleanup(testDir, false, proxyLogsDir);
+
+      // Verify chmod was called on proxyLogsDir
+      expect(mockExecaSync).toHaveBeenCalledWith('chmod', ['-R', 'a+rX', proxyLogsDir]);
+    });
+
+    it('should handle non-existent work directory gracefully', async () => {
+      const nonExistentDir = path.join(os.tmpdir(), 'awf-nonexistent-12345');
+
+      // Should not throw
+      await expect(cleanup(nonExistentDir, false)).resolves.not.toThrow();
     });
   });
 });

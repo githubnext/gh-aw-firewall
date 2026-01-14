@@ -98,6 +98,19 @@ if [ -f /etc/resolv.conf ]; then
   echo "[entrypoint] DNS configured with Docker embedded DNS (127.0.0.11) and trusted servers: $DNS_SERVERS"
 fi
 
+# Update CA certificates if SSL Bump is enabled
+# The CA certificate is mounted at /usr/local/share/ca-certificates/awf-ca.crt
+if [ "${AWF_SSL_BUMP_ENABLED}" = "true" ]; then
+  echo "[entrypoint] SSL Bump mode detected - updating CA certificates..."
+  if [ -f /usr/local/share/ca-certificates/awf-ca.crt ]; then
+    update-ca-certificates 2>/dev/null
+    echo "[entrypoint] CA certificates updated for SSL Bump"
+    echo "[entrypoint] ⚠️  WARNING: HTTPS traffic will be intercepted for URL inspection"
+  else
+    echo "[entrypoint][WARN] SSL Bump enabled but CA certificate not found"
+  fi
+fi
+
 # Setup Docker socket permissions if Docker socket is mounted
 # This allows MCP servers that run as Docker containers to work
 # Store DOCKER_GID once to avoid redundant stat calls
@@ -149,10 +162,16 @@ fi
 runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
 
 echo "[entrypoint] =================================="
-echo "[entrypoint] Dropping privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
+echo "[entrypoint] Dropping CAP_NET_ADMIN capability and privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Drop privileges and execute the provided command as awfuser
-# Using gosu instead of su/sudo for cleaner signal handling
-exec gosu awfuser "$@"
+# Drop CAP_NET_ADMIN capability and privileges, then execute the user command
+# This prevents malicious code from modifying iptables rules to bypass the firewall
+# Security note: capsh --drop removes the capability from the bounding set,
+# preventing any process (even if it escalates to root) from acquiring it
+# The order of operations:
+# 1. capsh drops CAP_NET_ADMIN from the bounding set (cannot be regained)
+# 2. gosu switches to awfuser (drops root privileges)
+# 3. exec replaces the current process with the user command
+exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser $(printf '%q ' "$@")"

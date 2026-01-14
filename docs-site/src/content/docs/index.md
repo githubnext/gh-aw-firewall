@@ -14,7 +14,8 @@ This project is part of GitHub Next's explorations of [Agentic Workflows](https:
 When AI agents like GitHub Copilot CLI run with access to tools and MCP servers, they can make network requests to any domain. This firewall provides **L7 (HTTP/HTTPS) egress control** using domain whitelisting, ensuring agents can only access approved domains while blocking all unauthorized network traffic.
 
 **Key Capabilities:**
-- **Domain Whitelisting**: Allow only specific domains (automatically includes subdomains)
+- **Domain Allowlist & Blocklist**: Allow specific domains and block exceptions with wildcard pattern support
+- **URL Path Filtering**: Restrict access to specific URL paths with [SSL Bump](/gh-aw-firewall/reference/ssl-bump/)
 - **Docker-in-Docker Enforcement**: Spawned containers inherit firewall restrictions
 - **Host-Level Protection**: Uses iptables DOCKER-USER chain for defense-in-depth
 - **Zero Trust**: Block all traffic by default, allow only what you explicitly permit
@@ -174,21 +175,21 @@ The firewall uses a containerized architecture with three security layers:
 
 <div class="sl-steps">
 
-1. **Understand Security**
+1. **Learn Domain Filtering**
+   
+   Master [allowlists, blocklists, and wildcards](/gh-aw-firewall/guides/domain-filtering/) for fine-grained network control.
+
+2. **Understand Security**
    
    Review the [Security Architecture](/gh-aw-firewall/reference/security-architecture/) to learn how the firewall protects against attacks.
 
-2. **Read Full Documentation**
+3. **CLI Reference**
    
-   Check the [README](https://github.com/githubnext/gh-aw-firewall#readme) for detailed usage examples and configuration options.
+   See the [CLI Reference](/gh-aw-firewall/reference/cli-reference/) for all available options.
 
-3. **Debug Issues**
+4. **Debug Issues**
    
-   See the [troubleshooting guide](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
-
-4. **Explore Examples**
-   
-   Browse the [examples directory](https://github.com/githubnext/gh-aw-firewall/tree/main/examples) for real-world use cases.
+   Check the [troubleshooting guide](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
 
 </div>
 
@@ -196,7 +197,7 @@ The firewall uses a containerized architecture with three security layers:
 
 ### Domain Whitelisting
 
-Domains automatically match all subdomains:
+Domains automatically match all subdomains. Use blocklist for fine-grained control:
 
 ```bash
 # Whitelisting github.com allows:
@@ -204,7 +205,35 @@ Domains automatically match all subdomains:
 # ✓ api.github.com
 # ✓ raw.githubusercontent.com
 # ✗ example.com (not whitelisted)
+
+# Block specific subdomains while allowing parent domain:
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://api.example.com  # ✓ allowed
 ```
+
+### Protocol-Specific Filtering
+
+Restrict domains to HTTP-only or HTTPS-only traffic:
+
+```bash
+# HTTPS only (secure endpoints)
+sudo awf --allow-domains 'https://secure.example.com' -- curl https://secure.example.com
+
+# HTTP only (legacy APIs)
+sudo awf --allow-domains 'http://legacy-api.example.com' -- curl http://legacy-api.example.com
+
+# Both protocols (default, backward compatible)
+sudo awf --allow-domains 'example.com' -- curl https://example.com
+
+# Mixed configuration
+sudo awf \
+  --allow-domains 'example.com,https://secure.example.com,http://legacy.example.com' \
+  -- your-command
+```
+
+Works with wildcards: `https://*.secure.example.com`
 
 ### Host-Level Enforcement
 
@@ -238,6 +267,9 @@ sudo awf --allow-domains github.com,arxiv.org,npmjs.org -- <command>
 
 # From file
 sudo awf --allow-domains-file domains.txt -- <command>
+
+# With blocklist for fine-grained control
+sudo awf --allow-domains '*.example.com' --block-domains 'internal.example.com' -- <command>
 ```
 
 ## Architecture Highlights

@@ -2,6 +2,75 @@
 
 ## Installation in GitHub Actions
 
+### Using the Setup Action (Recommended)
+
+The simplest way to install awf in GitHub Actions is using the setup action:
+
+```yaml
+steps:
+  - name: Setup awf
+    uses: githubnext/gh-aw-firewall@main
+    # with:
+    #   version: 'v1.0.0'    # Optional: defaults to latest
+    #   pull-images: 'true'  # Optional: pre-pull Docker images
+
+  - name: Run command with firewall
+    run: sudo awf --allow-domains github.com -- curl https://api.github.com
+```
+
+The action:
+- Downloads the specified version (or latest) from GitHub releases
+- Verifies SHA256 checksum
+- Installs to PATH for subsequent steps
+- Optionally pre-pulls Docker images for the installed version
+
+#### Action Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `version` | Version to install (e.g., `v1.0.0`) | `latest` |
+| `pull-images` | Pre-pull Docker images for the version | `false` |
+
+#### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `version` | The version that was installed (e.g., `v0.7.0`) |
+| `image-tag` | The image tag matching the version (e.g., `0.7.0`) |
+
+#### Pinning Docker Image Versions
+
+For reproducible builds, you can pin both the awf binary and Docker images:
+
+```yaml
+steps:
+  - name: Setup awf
+    id: setup-awf
+    uses: githubnext/gh-aw-firewall@main
+    with:
+      version: 'v0.7.0'
+      pull-images: 'true'
+
+  - name: Run with pinned images
+    run: |
+      sudo awf --allow-domains github.com \
+        --image-tag ${{ steps.setup-awf.outputs.image-tag }} \
+        -- curl https://api.github.com
+```
+
+### Using the Install Script
+
+Alternatively, use the install script:
+
+```yaml
+steps:
+  - name: Install awf
+    run: |
+      curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+```
+
+### Building from Source
+
 In GitHub Actions workflows, the runner already has root access:
 
 ```yaml
@@ -37,16 +106,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Firewall
-        run: |
-          npm install
-          npm run build
-          npm link
+      - name: Setup awf
+        uses: githubnext/gh-aw-firewall@main
 
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot@latest
@@ -55,7 +116,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
         run: |
-          awf \
+          sudo awf \
             --allow-domains github.com,api.github.com,githubusercontent.com \
             'copilot --help'
 ```
@@ -85,6 +146,78 @@ If you currently have manual Squid proxy configuration, you can replace it with 
     awf \
       --allow-domains github.com,arxiv.org \
       'copilot --prompt "..."'
+```
+
+## Generating Firewall Summaries
+
+The `awf logs summary` command generates markdown output optimized for GitHub Actions step summaries, eliminating the need for manual log parsing scripts.
+
+### Basic Usage
+
+```yaml
+- name: Run command through firewall
+  run: |
+    sudo awf \
+      --allow-domains github.com,api.github.com \
+      'your-command-here'
+
+- name: Generate firewall summary
+  if: always()
+  run: awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+### Complete Example
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup awf
+        uses: githubnext/gh-aw-firewall@main
+
+      - name: Test with Firewall
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+        run: |
+          sudo -E awf \
+            --allow-domains github.com,api.github.com,registry.npmjs.org \
+            'npx @github/copilot@latest --prompt "Hello"'
+
+      - name: Generate firewall summary
+        if: always()
+        run: awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+The summary appears as a collapsible section in your workflow run showing:
+- Total requests, allowed, and blocked counts
+- Table of all domains with their allowed/denied request counts
+
+### Output Formats
+
+```bash
+# Default: Markdown (for $GITHUB_STEP_SUMMARY)
+awf logs summary
+
+# JSON format for programmatic processing
+awf logs summary --format json
+
+# Pretty format for terminal output
+awf logs summary --format pretty
+```
+
+### Getting Statistics
+
+For detailed statistics without adding to step summary:
+
+```bash
+# Pretty terminal output
+awf logs stats
+
+# JSON for scripting
+awf logs stats --format json
 ```
 
 ## MCP Server Configuration for Copilot CLI

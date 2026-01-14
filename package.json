@@ -1,6 +1,6 @@
 {
   "name": "@github/agentic-workflow-firewall",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "description": "Network firewall for agentic workflows with domain whitelisting",
   "main": "dist/cli.js",
   "bin": {
@@ -66,7 +66,8 @@
   "pkg": {
     "scripts": "dist/**/*.js",
     "assets": [
-      "node_modules/chalk/**/*"
+      "node_modules/chalk/**/*",
+      "containers/agent/seccomp-profile.json"
     ],
     "targets": [
       "node18-linux-x64"

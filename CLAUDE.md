@@ -179,10 +179,11 @@ The codebase follows a modular architecture with clear separation of concerns:
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
-- `NET_ADMIN` capability required for iptables manipulation
+- `NET_ADMIN` capability required for iptables setup during initialization
+- **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
-  2. `entrypoint.sh`: Tests connectivity, then executes user command
+  2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
 - **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
   - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
   - Automatically injects `--network awf-net` to all spawned containers
@@ -623,3 +624,63 @@ docker exec awf-squid cat /var/log/squid/access.log
 - SNI is captured via CONNECT method for HTTPS (no SSL inspection)
 - iptables logs go to kernel buffer (view with `dmesg`)
 - PID not directly available (UID can be used for correlation)
+
+## Log Analysis Commands
+
+The CLI includes built-in commands for aggregating and summarizing firewall logs.
+
+### Commands
+
+**`awf logs stats`** - Show aggregated statistics from firewall logs
+- Default format: `pretty` (colorized terminal output)
+- Outputs: total requests, allowed/denied counts, unique domains, per-domain breakdown
+
+**`awf logs summary`** - Generate summary report (optimized for GitHub Actions)
+- Default format: `markdown` (GitHub-flavored markdown)
+- Designed for piping directly to `$GITHUB_STEP_SUMMARY`
+
+### Output Formats
+
+Both commands support `--format <format>`:
+- `pretty` - Colorized terminal output with percentages and aligned columns
+- `markdown` - GitHub-flavored markdown with collapsible details section
+- `json` - Structured JSON for programmatic consumption
+
+### Key Files
+
+- `src/logs/log-aggregator.ts` - Aggregation logic (`aggregateLogs()`, `loadAllLogs()`, `loadAndAggregate()`)
+- `src/logs/stats-formatter.ts` - Format output (`formatStatsJson()`, `formatStatsMarkdown()`, `formatStatsPretty()`)
+- `src/commands/logs-stats.ts` - Stats command handler
+- `src/commands/logs-summary.ts` - Summary command handler
+
+### Data Structures
+
+```typescript
+// Per-domain statistics
+interface DomainStats {
+  domain: string;
+  allowed: number;
+  denied: number;
+  total: number;
+}
+
+// Aggregated statistics
+interface AggregatedStats {
+  totalRequests: number;
+  allowedRequests: number;
+  deniedRequests: number;
+  uniqueDomains: number;
+  byDomain: Map<string, DomainStats>;
+  timeRange: { start: number; end: number } | null;
+}
+```
+
+### GitHub Actions Usage
+
+```yaml
+- name: Generate firewall summary
+  if: always()
+  run: awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+This replaces 150+ lines of custom JavaScript parsing with a single command.
