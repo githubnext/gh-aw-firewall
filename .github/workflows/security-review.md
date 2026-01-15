@@ -9,6 +9,7 @@ permissions:
   issues: read
   pull-requests: read
   discussions: read
+  security-events: read
 imports:
   - shared/mcp-pagination.md
 tools:
@@ -17,7 +18,7 @@ tools:
     toolsets: [default, actions, code_security]
   bash:
   web-fetch:
-cache-memory: true
+  cache-memory: true
 network:
   allowed:
     - github
