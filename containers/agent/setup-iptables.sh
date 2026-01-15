@@ -116,17 +116,45 @@ if [ "$IP6TABLES_AVAILABLE" = true ]; then
   done
 fi
 
-# Allow traffic to Squid proxy itself
+# Allow traffic to Squid proxy itself (prevent redirect loop)
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
-# Redirect HTTP traffic to Squid (IPv4 only - Squid runs on IPv4)
-echo "[iptables] Redirect HTTP (port 80) to Squid..."
+# Redirect standard HTTP/HTTPS ports to Squid
+# This provides defense-in-depth: iptables enforces port policy, Squid enforces domain policy
+echo "[iptables] Redirect HTTP (80) and HTTPS (443) to Squid..."
 iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
-
-# Redirect HTTPS traffic to Squid (IPv4 only - Squid runs on IPv4)
-echo "[iptables] Redirect HTTPS (port 443) to Squid..."
 iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+
+# If user specified additional ports via --allow-host-ports, redirect those too
+if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
+  echo "[iptables] Redirect user-specified ports to Squid..."
+
+  # Parse comma-separated port list
+  IFS=',' read -ra PORTS <<< "$AWF_ALLOW_HOST_PORTS"
+
+  for port_spec in "${PORTS[@]}"; do
+    # Remove leading/trailing spaces
+    port_spec=$(echo "$port_spec" | xargs)
+
+    if [[ $port_spec == *"-"* ]]; then
+      # Port range (e.g., "3000-3010")
+      echo "[iptables]   Redirect port range $port_spec to Squid..."
+      iptables -t nat -A OUTPUT -p tcp -m multiport --dports "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+    else
+      # Single port (e.g., "3000")
+      echo "[iptables]   Redirect port $port_spec to Squid..."
+      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+    fi
+  done
+else
+  echo "[iptables] No additional ports specified (only 80, 443 allowed)"
+fi
+
+# Drop all other TCP traffic (default deny policy)
+# This ensures that only explicitly allowed ports can be accessed
+echo "[iptables] Drop all non-redirected TCP traffic (default deny)..."
+iptables -A OUTPUT -p tcp -j DROP
 
 echo "[iptables] NAT rules applied successfully"
 echo "[iptables] Current IPv4 NAT OUTPUT rules:"

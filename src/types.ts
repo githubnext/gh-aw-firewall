@@ -256,6 +256,31 @@ export interface WrapperConfig {
   enableHostAccess?: boolean;
 
   /**
+   * Additional ports to allow when using --enable-host-access
+   *
+   * Comma-separated list of ports or port ranges to allow in addition to
+   * standard HTTP (80) and HTTPS (443). This provides explicit control over
+   * which non-standard ports can be accessed when using host access.
+   *
+   * By default, only ports 80 and 443 are allowed even with --enable-host-access.
+   * Use this flag to explicitly allow specific ports needed for your use case.
+   *
+   * @default undefined (only 80 and 443 allowed)
+   * @example
+   * ```bash
+   * # Allow MCP gateway on port 3000
+   * awf --enable-host-access --allow-host-ports 3000 --allow-domains host.docker.internal -- command
+   *
+   * # Allow multiple ports
+   * awf --enable-host-access --allow-host-ports 3000,8080,9000 --allow-domains host.docker.internal -- command
+   *
+   * # Allow port ranges
+   * awf --enable-host-access --allow-host-ports 3000-3010,8000-8090 --allow-domains host.docker.internal -- command
+   * ```
+   */
+  allowHostPorts?: string;
+
+  /**
    * Whether to enable SSL Bump for HTTPS content inspection
    *
    * When true, Squid will intercept HTTPS connections and generate
@@ -369,6 +394,29 @@ export interface SquidConfig {
    * HTTPS traffic by URL path, not just domain.
    */
   urlPatterns?: string[];
+
+  /**
+   * Whether to enable host access (allows non-standard ports)
+   *
+   * When true, Squid will allow connections to any port, not just
+   * standard HTTP (80) and HTTPS (443) ports. This is required when
+   * --enable-host-access is used to allow access to host services
+   * running on non-standard ports.
+   *
+   * @default false
+   */
+  enableHostAccess?: boolean;
+
+  /**
+   * Additional ports to allow (comma-separated list)
+   *
+   * Ports or port ranges specified by the user via --allow-host-ports flag.
+   * These are added to the Safe_ports ACL in addition to 80 and 443.
+   *
+   * @example "3000,8080,9000"
+   * @example "3000-3010,8000-8090"
+   */
+  allowHostPorts?: string;
 }
 
 /**
