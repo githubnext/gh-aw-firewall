@@ -10,6 +10,87 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 
+## Breaking Changes
+
+### v0.9.1 - Docker-in-Docker Support Removed
+
+[PR #205](https://github.com/githubnext/gh-aw-firewall/pull/205) removed Docker-in-Docker support to simplify the architecture and improve security. This change affects users who were running Docker commands or Docker-based MCP servers within the firewall.
+
+**What still works:**
+- ✅ **Network egress control** - HTTP/HTTPS domain allowlist enforcement is unchanged
+- ✅ **Most workflows** - GitHub Copilot CLI and Claude with stdio-based MCP servers work perfectly
+- ✅ **Filesystem access** - Full filesystem mounting for reading/writing files
+- ✅ **Command execution** - Any commands that don't require Docker
+
+**What no longer works:**
+- ❌ **Docker commands** - `docker run`, `docker-compose`, and similar commands will fail
+- ❌ **Docker-based MCP servers** - MCP servers configured with `"command": "docker"` will not work
+
+**Migration guide for MCP servers:**
+
+If you were using a Docker-based GitHub MCP server configuration, migrate to stdio-based alternatives:
+
+**Before (Docker-based):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "local",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server:v0.19.0"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**After (stdio-based with npx):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "github-mcp-custom@1.0.20", "stdio"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Alternative (using Go binary):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "/usr/local/bin/github-mcp-server",
+      "args": ["stdio"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Workarounds:**
+
+If you absolutely need Docker functionality:
+1. **Pre-pull images**: Pull required Docker images on the host before running awf
+2. **Run outside firewall**: Execute Docker commands outside the firewall container
+3. **Use alternatives**: Consider non-Docker alternatives for your use case (e.g., stdio-based MCP servers, native binaries)
+
+For more details, see the [architecture documentation](docs/architecture.md).
+
 ## Get started fast
 
 - **Prerequisite:** Docker is running

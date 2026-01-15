@@ -436,24 +436,30 @@ To use a local, writable GitHub MCP server with Copilot CLI, you must:
 
 The agent container mounts the HOME directory, so this config file is automatically accessible to GitHub Copilot CLI running inside the container.
 
-**Format:**
+**Format (stdio-based with npx):**
 ```json
 {
   "mcpServers": {
     "github": {
-      "type": "local",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
-        "GITHUB_TOOLSETS=default",
-        "ghcr.io/github/github-mcp-server:v0.19.0"
-      ],
-      "tools": ["*"],
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "github-mcp-custom@1.0.20", "stdio"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Alternative (using Go binary):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "/usr/local/bin/github-mcp-server",
+      "args": ["stdio"],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
@@ -463,13 +469,13 @@ The agent container mounts the HOME directory, so this config file is automatica
 ```
 
 **Key Requirements:**
-- ✅ **`"tools": ["*"]`** - Required field. Use `["*"]` to enable all tools, or list specific tool names
-  - ⚠️ Empty array `[]` means NO tools will be available
-- ✅ **`"type": "local"`** - Required to specify local MCP server type
+- ✅ **`"type": "stdio"`** - Uses stdio transport (not Docker)
 - ✅ **`"env"` section** - Environment variables must be declared here with `${VAR}` syntax for interpolation
-- ✅ **Environment variable in args** - Use bare variable names in `-e` flags (e.g., `"GITHUB_PERSONAL_ACCESS_TOKEN"` without `$`)
 - ✅ **Shell environment** - Variables must be exported in the shell before running awf
 - ✅ **MCP server name** - Use `"github"` as the server name (must match `--allow-tool` flag)
+- ✅ **npx availability** - The agent container includes Node.js 22 with npx pre-installed
+
+**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/githubnext/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
 
 ### Running Copilot CLI with Local MCP Through Firewall
 
@@ -498,17 +504,17 @@ sudo -E awf \
 1. `awf` needs sudo for iptables manipulation
 2. `-E` preserves GITHUB_TOKEN and GITHUB_PERSONAL_ACCESS_TOKEN
 3. These variables are passed into the agent container via the HOME directory mount
-4. The GitHub MCP server Docker container inherits them from the agent container's environment
+4. The stdio-based MCP server (running via npx) inherits them from the agent container's environment
 
 ### Troubleshooting
 
 **Problem:** MCP server starts but says "GITHUB_PERSONAL_ACCESS_TOKEN not set"
-- **Cause:** Environment variable not passed correctly through sudo or to Docker container
+- **Cause:** Environment variable not passed correctly through sudo
 - **Solution:** Use `sudo -E` when running awf, and ensure the variable is exported before running the command
 
 **Problem:** MCP config validation error: "Invalid input"
-- **Cause:** Missing `"tools"` field
-- **Solution:** Add `"tools": ["*"]` to the MCP server config
+- **Cause:** Invalid configuration format or missing required fields
+- **Solution:** Ensure `"type": "stdio"` and `"env"` section are properly configured
 
 **Problem:** Copilot uses read-only remote MCP instead of local
 - **Cause:** Built-in MCP not disabled
@@ -528,7 +534,7 @@ Check GitHub Copilot CLI logs (use `--log-level debug`) for these indicators:
 
 **Local MCP working:**
 ```
-Starting MCP client for github with command: docker
+Starting MCP client for github with command: npx
 GitHub MCP Server running on stdio
 readOnly=false
 MCP client for github connected
@@ -545,7 +551,7 @@ Starting remote MCP client for github-mcp-server
 For GitHub Actions workflows:
 1. Create MCP config script that writes to `~/.copilot/mcp-config.json` (note: `~` = `/home/runner` in GitHub Actions)
 2. Export both `GITHUB_TOKEN` (for GitHub Copilot CLI) and `GITHUB_PERSONAL_ACCESS_TOKEN` (for GitHub MCP server) as environment variables
-3. Pull the MCP server Docker image before running tests: `docker pull ghcr.io/github/github-mcp-server:v0.19.0`
+3. Use stdio-based MCP configuration (npx or Go binary) - Docker-based MCP servers are no longer supported as of v0.9.1
 4. Run awf with `sudo -E` to preserve environment variables
 5. Always use `--disable-builtin-mcps` and `--allow-tool github` flags when running GitHub Copilot CLI
 
