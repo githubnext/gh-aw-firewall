@@ -369,6 +369,18 @@ export interface SquidConfig {
    * HTTPS traffic by URL path, not just domain.
    */
   urlPatterns?: string[];
+
+  /**
+   * Whether to enable host access (allows non-standard ports)
+   *
+   * When true, Squid will allow connections to any port, not just
+   * standard HTTP (80) and HTTPS (443) ports. This is required when
+   * --enable-host-access is used to allow access to host services
+   * running on non-standard ports.
+   *
+   * @default false
+   */
+  enableHostAccess?: boolean;
 }
 
 /**

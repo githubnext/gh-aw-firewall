@@ -532,6 +532,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     caFiles: sslConfig?.caFiles,
     sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
     urlPatterns,
+    enableHostAccess: config.enableHostAccess,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);

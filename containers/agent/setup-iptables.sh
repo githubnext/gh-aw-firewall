@@ -116,17 +116,15 @@ if [ "$IP6TABLES_AVAILABLE" = true ]; then
   done
 fi
 
-# Allow traffic to Squid proxy itself
+# Allow traffic to Squid proxy itself (prevent redirect loop)
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
-# Redirect HTTP traffic to Squid (IPv4 only - Squid runs on IPv4)
-echo "[iptables] Redirect HTTP (port 80) to Squid..."
-iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
-
-# Redirect HTTPS traffic to Squid (IPv4 only - Squid runs on IPv4)
-echo "[iptables] Redirect HTTPS (port 443) to Squid..."
-iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+# Redirect ALL TCP traffic to Squid (not just ports 80/443)
+# This ensures all network traffic goes through the proxy and domain filtering
+# Security note: Without this, agents could bypass the firewall by using non-standard ports
+echo "[iptables] Redirect ALL TCP traffic to Squid..."
+iptables -t nat -A OUTPUT -p tcp -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
 
 echo "[iptables] NAT rules applied successfully"
 echo "[iptables] Current IPv4 NAT OUTPUT rules:"
