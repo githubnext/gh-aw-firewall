@@ -151,6 +151,26 @@ else
   echo "[iptables] No additional ports specified (only 80, 443 allowed)"
 fi
 
+# OUTPUT filter chain rules (defense-in-depth with NAT rules)
+# These rules apply AFTER NAT translation
+echo "[iptables] Configuring OUTPUT filter chain rules..."
+
+# Allow localhost traffic
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# Allow DNS queries to trusted servers
+for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
+  iptables -A OUTPUT -p udp -d "$dns_server" --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j ACCEPT
+done
+
+# Allow DNS to Docker's embedded DNS server
+iptables -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
+
+# Allow traffic to Squid proxy (after NAT redirection)
+iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
+
 # Drop all other TCP traffic (default deny policy)
 # This ensures that only explicitly allowed ports can be accessed
 echo "[iptables] Drop all non-redirected TCP traffic (default deny)..."
