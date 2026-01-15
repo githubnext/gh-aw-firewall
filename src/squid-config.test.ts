@@ -1091,3 +1091,82 @@ describe('generateSquidConfig', () => {
     });
   });
 });
+
+describe('Port validation in generateSquidConfig', () => {
+  it('should accept valid single ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept valid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-3010,8000-8090',
+      });
+    }).not.toThrow();
+  });
+
+  it('should reject invalid port numbers', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '70000',
+      });
+    }).toThrow('Invalid port: 70000');
+  });
+
+  it('should reject negative ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '-1',
+      });
+    }).toThrow('Invalid port: -1');
+  });
+
+  it('should reject non-numeric ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: 'abc',
+      });
+    }).toThrow('Invalid port: abc');
+  });
+
+  it('should reject invalid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-2000',
+      });
+    }).toThrow('Invalid port range: 3000-2000');
+  });
+
+  it('should reject port ranges with invalid boundaries', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-70000',
+      });
+    }).toThrow('Invalid port range: 3000-70000');
+  });
+});

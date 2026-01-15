@@ -419,6 +419,25 @@ acl Safe_ports port 443         # HTTPS`;
     // Parse comma-separated ports/ranges and add to ACL
     const ports = allowHostPorts.split(',').map(p => p.trim());
     for (const port of ports) {
+      // Validate port or port range to prevent injection and invalid configs
+      const parts = port.split('-');
+      if (parts.length === 2 && parts[0] !== '' && parts[1] !== '') {
+        // Port range (e.g., "3000-3010")
+        const start = parseInt(parts[0], 10);
+        const end = parseInt(parts[1], 10);
+
+        if (isNaN(start) || isNaN(end) || start < 1 || end > 65535 || start > end) {
+          throw new Error(`Invalid port range: ${port}. Must be in format START-END where 1 <= START <= END <= 65535`);
+        }
+      } else {
+        // Single port (e.g., "3000" or invalid like "-1")
+        const portNum = parseInt(port, 10);
+
+        if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+          throw new Error(`Invalid port: ${port}. Must be a number between 1 and 65535`);
+        }
+      }
+
       portAclsSection += `\nacl Safe_ports port ${port}      # User-specified via --allow-host-ports`;
     }
   }
