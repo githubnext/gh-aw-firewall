@@ -243,9 +243,6 @@ export function generateDockerCompose(
   // System variables that must be overridden or excluded (would break container operation)
   const EXCLUDED_ENV_VARS = new Set([
     'PATH',           // Must use container's PATH
-    'DOCKER_HOST',    // Must use container's socket path
-    'DOCKER_CONTEXT', // Must use default context
-    'DOCKER_CONFIG',  // Must use clean config
     'PWD',            // Container's working directory
     'OLDPWD',         // Not relevant in container
     'SHLVL',          // Shell level not relevant
@@ -265,8 +262,6 @@ export function generateDockerCompose(
     SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
     HOME: process.env.HOME || '/root',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-    DOCKER_HOST: 'unix:///var/run/docker.sock',
-    DOCKER_CONTEXT: 'default',
   };
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
@@ -313,13 +308,6 @@ export function generateDockerCompose(
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
     `${process.env.HOME}:${process.env.HOME}:rw`,
-    // Mount Docker socket for MCP servers that need to run containers
-    '/var/run/docker.sock:/var/run/docker.sock:rw',
-    // Mount clean Docker config to override host's context
-    `${config.workDir}/.docker:/workspace/.docker:rw`,
-    // Override host's .docker directory with clean config to prevent Docker CLI
-    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
@@ -441,23 +429,6 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   if (!fs.existsSync(config.workDir)) {
     fs.mkdirSync(config.workDir, { recursive: true });
   }
-
-  // Create a clean Docker config directory to prevent host's Docker context from being used
-  // This is mounted into the container via DOCKER_CONFIG env var
-  const dockerConfigDir = path.join(config.workDir, '.docker');
-  if (!fs.existsSync(dockerConfigDir)) {
-    fs.mkdirSync(dockerConfigDir, { recursive: true });
-  }
-
-  // Write a minimal Docker config that uses default context (no custom socket paths)
-  const dockerConfig = {
-    currentContext: 'default',
-  };
-  fs.writeFileSync(
-    path.join(dockerConfigDir, 'config.json'),
-    JSON.stringify(dockerConfig, null, 2)
-  );
-  logger.debug(`Docker config written to: ${dockerConfigDir}/config.json`);
 
   // Create agent logs directory for persistence
   const agentLogsDir = path.join(config.workDir, 'agent-logs');

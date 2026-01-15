@@ -14,7 +14,6 @@ This directory contains example scripts demonstrating common ways to use the Age
 |------|-------------|
 | [basic-curl.sh](basic-curl.sh) | Simple HTTP request through the firewall |
 | [github-copilot.sh](github-copilot.sh) | Using GitHub Copilot CLI with the firewall |
-| [docker-in-docker.sh](docker-in-docker.sh) | Running Docker containers inside the firewall |
 | [using-domains-file.sh](using-domains-file.sh) | Using a file to specify allowed domains |
 | [blocked-domains.sh](blocked-domains.sh) | Blocking specific domains with allowlist/blocklist |
 | [debugging.sh](debugging.sh) | Debug mode with log inspection |

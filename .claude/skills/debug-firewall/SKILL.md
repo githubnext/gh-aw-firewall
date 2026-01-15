@@ -33,9 +33,6 @@ docker logs -f awf-agent
 
 # Squid access log (traffic decisions)
 docker exec awf-squid cat /var/log/squid/access.log
-
-# Docker wrapper log (intercepted docker commands)
-docker exec awf-agent cat /tmp/docker-wrapper.log
 ```
 
 ### Analyze Traffic
@@ -154,14 +151,6 @@ docker exec awf-squid tail -20 /var/log/squid/access.log
 docker exec awf-agent cat /etc/resolv.conf
 # Verify DNS allowed in iptables
 sudo dmesg | grep "FW_DNS"
-```
-
-**Docker-in-docker issues:**
-```bash
-# Check wrapper interception
-docker exec awf-agent cat /tmp/docker-wrapper.log
-# Verify network injection
-docker exec awf-agent grep "INJECTING" /tmp/docker-wrapper.log
 ```
 
 ## Cleanup

@@ -362,7 +362,7 @@ program
   )
   .option(
     '--env-all',
-    'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
+    'Pass all host environment variables to container (excludes system vars like PATH)',
     false
   )
   .option(

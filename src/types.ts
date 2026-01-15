@@ -53,7 +53,7 @@ export interface WrapperConfig {
    * 
    * This command runs inside an Ubuntu-based Docker container with iptables rules
    * that redirect all HTTP/HTTPS traffic through a Squid proxy. The command has
-   * access to the host filesystem (mounted at /host and ~) and Docker socket.
+   * access to the host filesystem (mounted at /host and ~).
    * 
    * @example 'npx @github/copilot --prompt "list files"'
    * @example 'curl https://api.github.com/zen'
@@ -576,7 +576,6 @@ export interface DockerService {
    * Common mounts:
    * - Host filesystem: '/:/host:ro' (read-only host access)
    * - Home directory: '${HOME}:${HOME}' (user files)
-   * - Docker socket: '/var/run/docker.sock:/var/run/docker.sock' (docker-in-docker)
    * - Configs: '${workDir}/squid.conf:/etc/squid/squid.conf:ro'
    * 
    * @example ['./squid.conf:/etc/squid/squid.conf:ro']

@@ -14,15 +14,13 @@ RUN apt-get update && \
     gosu \
     libcap2-bin && \
     # Install Node.js 22 from NodeSource
+    # Remove any existing nodejs packages first to avoid conflicts
+    apt-get remove -y nodejs npm || true && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    # Install Docker CLI for MCP servers that run as containers
-    install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
-    chmod a+r /etc/apt/keyrings/docker.asc && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt-get update && \
-    apt-get install -y docker-ce-cli && \
+    # Verify Node.js 22 was installed correctly
+    node --version | grep -q "^v22\." || (echo "ERROR: Node.js 22 not installed correctly" && exit 1) && \
+    npx --version || (echo "ERROR: npx not found" && exit 1) && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with UID/GID matching host user
@@ -36,17 +34,11 @@ RUN groupadd -g ${USER_GID} awfuser && \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script, docker wrapper, and PID logger
+# Copy iptables setup script and PID logger
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker-wrapper.sh /usr/local/bin/docker-wrapper.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/docker-wrapper.sh /usr/local/bin/pid-logger.sh
-
-# Install docker wrapper to intercept docker commands
-# Rename real docker binary and replace with wrapper
-RUN mv /usr/bin/docker /usr/bin/docker-real && \
-    ln -s /usr/local/bin/docker-wrapper.sh /usr/bin/docker
+RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
 # Set working directory
 WORKDIR /workspace

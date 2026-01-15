@@ -227,46 +227,6 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
    docker exec awf-agent ping -c 3 172.30.0.10
    ```
 
-## Docker-in-Docker Issues
-
-### Spawned Containers Not Using Proxy
-
-**Problem:** Containers spawned by docker commands don't respect firewall
-
-**Solution:**
-- Verify docker-wrapper.sh is working:
-  ```bash
-  docker exec awf-agent cat /tmp/docker-wrapper.log
-  ```
-- Check that spawned containers have correct network:
-  ```bash
-  docker network inspect awf-net
-  # Should show spawned containers in "Containers" section
-  ```
-
-### Docker Bypass Attempts Blocked
-
-**Problem:** `--network host is not allowed (bypasses firewall)`
-
-**Solution:**
-- This is expected behavior - `--network host` bypasses the firewall
-- Use default network instead (no `--network` flag needed)
-- The firewall automatically injects the correct network
-
-**Problem:** `--add-host is not allowed (enables DNS poisoning)`
-
-**Solution:**
-- This is expected behavior - `--add-host` can bypass domain restrictions
-- Remove `--add-host` flag from docker command
-- Use legitimate DNS resolution instead
-
-**Problem:** `--privileged is not allowed (bypasses all security)`
-
-**Solution:**
-- This is expected behavior - `--privileged` can disable firewall rules
-- Remove `--privileged` flag from docker command
-- Use containers without privileged mode
-
 ## Cleanup Issues
 
 ### Orphaned Containers
@@ -414,7 +374,6 @@ If you're still experiencing issues:
 3. **Review all logs:**
    - Agent logs: `/tmp/awf-agent-logs-<timestamp>/`
    - Squid logs: `/tmp/squid-logs-<timestamp>/`
-   - Docker wrapper logs: `docker exec awf-agent cat /tmp/docker-wrapper.log`
    - Container logs: `docker logs awf-agent`
 
 4. **Check documentation:**
