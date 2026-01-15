@@ -325,6 +325,12 @@ export function generateDockerCompose(
     environment.AWF_SSL_BUMP_ENABLED = 'true';
   }
 
+  // Pass host access flag to container for docker-wrapper.sh to inject into spawned containers
+  // This enables host.docker.internal DNS resolution in containers spawned by the agent
+  if (config.enableHostAccess) {
+    environment.AWF_ENABLE_HOST_ACCESS = 'true';
+  }
+
   // Add custom volume mounts if specified
   if (config.volumeMounts && config.volumeMounts.length > 0) {
     logger.debug(`Adding ${config.volumeMounts.length} custom volume mount(s)`);

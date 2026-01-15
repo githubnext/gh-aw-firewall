@@ -282,6 +282,15 @@ sudo awf \
   -- curl http://host.docker.internal:8080
 ```
 
+### How It Works
+
+When `--enable-host-access` is enabled:
+
+1. **Agent container**: Gets `host.docker.internal` DNS resolution via Docker's `extra_hosts` feature
+2. **Spawned containers**: The docker-wrapper automatically injects `--add-host host.docker.internal:host-gateway` to any containers spawned by the agent
+
+This ensures that both the agent and any containers it spawns can resolve `host.docker.internal` to access services on the host machine.
+
 ### Security Considerations
 
 > ⚠️ **Security Warning**: When `--enable-host-access` is combined with `host.docker.internal` in `--allow-domains`, containers can access **ANY service** running on the host machine, including:
@@ -304,6 +313,18 @@ sudo awf \
   --enable-host-access \
   --allow-domains host.docker.internal,api.github.com \
   -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
+```
+
+### Docker-in-Docker with Host Access
+
+When spawning containers via `docker run` from within the agent, host access is automatically propagated:
+
+```bash
+# Spawned containers can also reach host.docker.internal
+sudo awf \
+  --enable-host-access \
+  --allow-domains host.docker.internal,registry-1.docker.io,auth.docker.io \
+  -- 'docker run --rm curlimages/curl http://host.docker.internal:8080'
 ```
 
 ### CONNECT Method on Port 80
