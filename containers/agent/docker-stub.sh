@@ -6,8 +6,8 @@ Docker commands are no longer available inside the firewall container.
 
 If you need to:
 - Use MCP servers: Migrate to stdio-based MCP servers (see docs)
-- Run Docker: Execute docker commands outside AWF wrapper
-- Build images: Run docker build before invoking AWF
+- Run Docker: Execute Docker commands outside AWF wrapper
+- Build images: Run Docker build before invoking AWF
 
 For migration guide, see:
 https://github.com/githubnext/gh-aw-firewall#breaking-changes
