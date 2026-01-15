@@ -10,7 +10,7 @@ tools:
   github:
     toolsets: [repos]
   web-fetch:
-  bash:
+  bash: ["*"]
   cache-memory: true
 network:
   allowed:
