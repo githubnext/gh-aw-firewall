@@ -633,7 +633,7 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('http_access deny !allowed_domains !allowed_domains_regex');
     });
 
-    it('should handle only plain domains (backward compatibility)', () => {
+    it('should handle only plain domains without pattern ACLs (backward compatibility, IP blocking ACLs are separate)', () => {
       const config: SquidConfig = {
         domains: ['github.com', 'example.com'],
         port: defaultPort,
@@ -745,9 +745,9 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      // Should contain IPv4 address blocking ACL
+      // Should contain IPv4 address blocking ACL with proper octet validation
       expect(result).toContain('acl ip_dst_ipv4 dstdom_regex');
-      expect(result).toMatch(/\^\\?\[0-9\]\+/); // Should match IP pattern
+      expect(result).toMatch(/25\[0-5\]\|2\[0-4\]\[0-9\]/); // Should match IPv4 octet validation pattern
     });
 
     it('should include ACL to block direct IPv6 address connections', () => {
