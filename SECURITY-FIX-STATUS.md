@@ -54,7 +54,14 @@ This fixes Squid startup failures due to missing NET_RAW capability.
 - Passed `enableHostAccess` flag to Squid config generator
 
 ####  5. Safe_ports Configuration (`src/squid-config.ts`)
-When `enableHostAccess` is true, Safe_ports restrictions are disabled to allow connections to any port while still enforcing domain filtering.
+When `enableHostAccess` is true, Safe_ports are **extended** (not disabled) to include common development ports:
+- 80, 443 (HTTP/HTTPS)
+- 3000-3010 (dev servers, MCP Gateway)
+- 5000-5001 (Flask, frameworks)
+- 8000-8090 (HTTP alternative ports)
+- 9000-9100 (additional service ports)
+
+**Dangerous ports remain blocked** (SSH:22, MySQL:3306, PostgreSQL:5432, etc.)
 
 ### Files Modified
 1. `containers/agent/setup-iptables.sh` - iptables rules
