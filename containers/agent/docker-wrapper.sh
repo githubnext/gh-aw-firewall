@@ -6,6 +6,17 @@ NETWORK_NAME="awf-net"
 SQUID_PROXY="http://172.30.0.10:3128"
 LOG_FILE="/tmp/docker-wrapper.log"
 
+# Validates an --add-host value
+# Returns 0 if the value is allowed, 1 if it should be blocked
+# Only host.docker.internal:host-gateway is allowed when AWF_ENABLE_HOST_ACCESS is set
+validate_add_host() {
+  local value="$1"
+  if [[ "$value" == "host.docker.internal:host-gateway" ]] && [[ "$AWF_ENABLE_HOST_ACCESS" == "true" ]]; then
+    return 0  # Allowed
+  fi
+  return 1  # Blocked
+}
+
 # Log all docker commands
 echo "[$(date -Iseconds)] WRAPPER CALLED: docker $@" >> "$LOG_FILE"
 
@@ -17,6 +28,7 @@ if [ "$1" = "run" ]; then
   has_network=false
   network_value=""
   has_add_host=false
+  has_host_docker_internal=false
   has_privileged=false
   has_unsafe_add_host=false
   declare -a args=("$@")
@@ -28,8 +40,9 @@ if [ "$1" = "run" ]; then
     if [[ "$arg" == "--add-host="* ]]; then
       has_add_host=true
       add_host_value="${arg#--add-host=}"
-      # Only allow host.docker.internal:host-gateway when AWF_ENABLE_HOST_ACCESS is set
-      if [[ "$add_host_value" != "host.docker.internal:host-gateway" ]] || [[ "$AWF_ENABLE_HOST_ACCESS" != "true" ]]; then
+      if validate_add_host "$add_host_value"; then
+        has_host_docker_internal=true
+      else
         has_unsafe_add_host=true
       fi
     elif [[ "$arg" == "--add-host" ]]; then
@@ -38,8 +51,9 @@ if [ "$1" = "run" ]; then
       next_idx=$((i + 1))
       if [ $next_idx -lt ${#args[@]} ]; then
         add_host_value="${args[$next_idx]}"
-        # Only allow host.docker.internal:host-gateway when AWF_ENABLE_HOST_ACCESS is set
-        if [[ "$add_host_value" != "host.docker.internal:host-gateway" ]] || [[ "$AWF_ENABLE_HOST_ACCESS" != "true" ]]; then
+        if validate_add_host "$add_host_value"; then
+          has_host_docker_internal=true
+        else
           has_unsafe_add_host=true
         fi
       fi
@@ -100,9 +114,8 @@ if [ "$1" = "run" ]; then
     # Build new args: docker run --network awf-net -e HTTP_PROXY -e HTTPS_PROXY <rest of args>
     shift # remove 'run'
     echo "[$(date -Iseconds)] INJECTING --network $NETWORK_NAME and proxy env vars" >> "$LOG_FILE"
-    
     # Inject host.docker.internal if AWF_ENABLE_HOST_ACCESS is enabled and not already present
-    if [[ "$AWF_ENABLE_HOST_ACCESS" = "true" ]] && [ "$has_add_host" = false ]; then
+    if [[ "$AWF_ENABLE_HOST_ACCESS" = "true" ]] && [ "$has_host_docker_internal" = false ]; then
       echo "[$(date -Iseconds)] INJECTING --add-host host.docker.internal:host-gateway (AWF_ENABLE_HOST_ACCESS=true)" >> "$LOG_FILE"
       exec /usr/bin/docker-real run \
         --network "$NETWORK_NAME" \
