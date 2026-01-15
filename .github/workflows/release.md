@@ -72,6 +72,29 @@ jobs:
             echo "version_number=$VERSION_NUMBER" >> $GITHUB_OUTPUT
           fi
 
+      - name: Validate version matches tag
+        run: |
+          TAG_VERSION="${{ steps.version_early.outputs.version_number }}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "❌ ERROR: Version mismatch detected!"
+            echo "  Tag version:        $TAG_VERSION"
+            echo "  package.json version: $PKG_VERSION"
+            echo ""
+            echo "This usually happens when:"
+            echo "  1. The tag was created before updating package.json"
+            echo "  2. The wrong commit was tagged"
+            echo ""
+            echo "To fix this:"
+            echo "  1. Update package.json version to match the tag"
+            echo "  2. Commit the change"
+            echo "  3. Move the tag: git tag -f ${{ steps.version_early.outputs.version }} && git push -f origin ${{ steps.version_early.outputs.version }}"
+            exit 1
+          fi
+
+          echo "✅ Version validation passed: $TAG_VERSION"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
