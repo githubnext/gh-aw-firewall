@@ -116,6 +116,7 @@ sudo awf --help
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
+- [Threat model](docs/threat-model.md) — comprehensive threat analysis and architectural evolution
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
 - [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
 - [Image verification](docs/image-verification.md) — cosign signature verification
