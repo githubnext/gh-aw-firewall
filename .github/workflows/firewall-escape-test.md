@@ -11,6 +11,46 @@ tools:
     toolsets: [repos]
   web-fetch:
   bash:
+    - curl
+    - nslookup
+    - rm
+    - env
+    - hostname
+    - id
+    - whoami
+    - uname
+    - ip
+    - nc
+    - wget
+    - dig
+    - ping
+    - traceroute
+    - netstat
+    - ss
+    - iptables
+    - docker
+    - ps
+    - kill
+    - touch
+    - mkdir
+    - chmod
+    - chown
+    - cp
+    - mv
+    - find
+    - xargs
+    - tee
+    - tr
+    - sed
+    - awk
+    - cut
+    - base64
+    - python3
+    - python
+    - node
+    - npm
+    - bash
+    - sh
   cache-memory: true
 network:
   allowed:
