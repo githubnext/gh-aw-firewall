@@ -84,6 +84,27 @@ describe('docker-manager', () => {
       expect(result.services.agent.image).toBeUndefined();
     });
 
+    it('should pass BASE_IMAGE build arg when agentBaseImage is specified', () => {
+      const customBaseImageConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentBaseImage: 'ghcr.io/catthehacker/ubuntu:runner-22.04',
+      };
+      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:runner-22.04');
+    });
+
+    it('should not include BASE_IMAGE build arg when using default ubuntu:22.04', () => {
+      const localConfig = { ...mockConfig, buildLocal: true };
+      const result = generateDockerCompose(localConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      // BASE_IMAGE should not be set when using the default (undefined or 'ubuntu:22.04')
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBeUndefined();
+    });
+
     it('should use custom registry and tag', () => {
       const customConfig = {
         ...mockConfig,

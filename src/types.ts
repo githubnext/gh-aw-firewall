@@ -148,6 +148,22 @@ export interface WrapperConfig {
   buildLocal?: boolean;
 
   /**
+   * Base image for the agent container when building locally
+   * 
+   * Allows customization of the agent container base image for closer parity
+   * with GitHub Actions runner environments. Only used when buildLocal is true.
+   * 
+   * Options:
+   * - 'ubuntu:22.04' (default): Minimal image, smallest size (~200MB)
+   * - 'ghcr.io/catthehacker/ubuntu:runner-22.04': Closer to GitHub Actions runner (~2-5GB)
+   * - 'ghcr.io/catthehacker/ubuntu:full-22.04': Near-identical to GitHub Actions runner (~20GB compressed)
+   * 
+   * @default 'ubuntu:22.04'
+   * @example 'ghcr.io/catthehacker/ubuntu:runner-22.04'
+   */
+  agentBaseImage?: string;
+
+  /**
    * Additional environment variables to pass to the agent execution container
    * 
    * These variables are explicitly passed to the container and are accessible
@@ -464,6 +480,8 @@ export interface DockerService {
     context: string;
     /** Path to the Dockerfile relative to context */
     dockerfile: string;
+    /** Build arguments passed to docker build */
+    args?: Record<string, string>;
   };
 
   /**

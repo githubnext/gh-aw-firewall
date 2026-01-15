@@ -345,6 +345,14 @@ program
     false
   )
   .option(
+    '--agent-base-image <image>',
+    'Base image for agent container when using --build-local. Options:\n' +
+    '                                   ubuntu:22.04 (default): Minimal, ~200MB\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions, ~2-5GB\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions, ~20GB',
+    'ubuntu:22.04'
+  )
+  .option(
     '--image-registry <registry>',
     'Container image registry',
     'ghcr.io/githubnext/gh-aw-firewall'
@@ -611,6 +619,7 @@ program
       tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
+      agentBaseImage: options.agentBaseImage,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
@@ -623,6 +632,15 @@ program
       sslBump: options.sslBump,
       allowedUrls,
     };
+
+    // Warn if using custom agent base image
+    if (options.agentBaseImage && options.agentBaseImage !== 'ubuntu:22.04') {
+      if (options.buildLocal) {
+        logger.info(`Using custom agent base image: ${options.agentBaseImage}`);
+      } else {
+        logger.warn('⚠️  --agent-base-image is only used with --build-local. Ignoring.');
+      }
+    }
 
     // Warn if --env-all is used
     if (config.envAll) {

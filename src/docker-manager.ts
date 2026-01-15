@@ -398,15 +398,22 @@ export function generateDockerCompose(
   if (useGHCR) {
     agentService.image = `${registry}/agent:${tag}`;
   } else {
+    const buildArgs: Record<string, string> = {
+      // Pass host UID/GID to match file ownership in container
+      // This prevents permission issues with mounted volumes
+      USER_UID: getSafeHostUid(),
+      USER_GID: getSafeHostGid(),
+    };
+
+    // Allow custom base image for closer parity with GitHub Actions runner
+    if (config.agentBaseImage) {
+      buildArgs.BASE_IMAGE = config.agentBaseImage;
+    }
+
     agentService.build = {
       context: path.join(projectRoot, 'containers/agent'),
       dockerfile: 'Dockerfile',
-      args: {
-        // Pass host UID/GID to match file ownership in container
-        // This prevents permission issues with mounted volumes
-        USER_UID: getSafeHostUid(),
-        USER_GID: getSafeHostGid(),
-      },
+      args: buildArgs,
     };
   }
 
