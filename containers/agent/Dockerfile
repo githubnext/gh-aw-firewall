@@ -21,8 +21,8 @@ RUN apt-get update && \
     netcat-openbsd \
     gosu \
     libcap2-bin && \
-    # Install Node.js 22 from NodeSource (only if not already installed or wrong version)
-    if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q "v22\."; then \
+    # Install Node.js 22 from NodeSource (only if not already installed or not v22.x)
+    if ! command -v node >/dev/null 2>&1 || ! node --version | grep -qE '^v22\.'; then \
         curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
         apt-get install -y nodejs; \
     fi && \
@@ -60,10 +60,15 @@ RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/
 RUN if [ -f /usr/bin/docker ] && [ ! -L /usr/bin/docker ]; then \
         mv /usr/bin/docker /usr/bin/docker-real; \
     elif [ -L /usr/bin/docker ]; then \
-        # Docker is a symlink, resolve and copy the target
+        # Docker is a symlink, resolve and copy the target (with error checking)
         DOCKER_TARGET=$(readlink -f /usr/bin/docker) && \
-        rm /usr/bin/docker && \
-        cp "$DOCKER_TARGET" /usr/bin/docker-real; \
+        if [ -n "$DOCKER_TARGET" ] && [ -f "$DOCKER_TARGET" ]; then \
+            rm /usr/bin/docker && \
+            cp "$DOCKER_TARGET" /usr/bin/docker-real; \
+        else \
+            # Broken symlink or target doesn't exist, just remove it
+            rm /usr/bin/docker; \
+        fi; \
     fi && \
     ln -sf /usr/local/bin/docker-wrapper.sh /usr/bin/docker
 
