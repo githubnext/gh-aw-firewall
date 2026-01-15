@@ -7,6 +7,28 @@ import {
 } from './domain-patterns';
 
 /**
+ * Ports that should never be allowed, even with --allow-host-ports
+ * These ports are blocked for security reasons to prevent access to sensitive services
+ */
+const DANGEROUS_PORTS = [
+  22,    // SSH
+  23,    // Telnet
+  25,    // SMTP (mail)
+  110,   // POP3 (mail)
+  143,   // IMAP (mail)
+  445,   // SMB (file sharing)
+  1433,  // MS SQL Server
+  1521,  // Oracle DB
+  3306,  // MySQL
+  3389,  // RDP (Windows Remote Desktop)
+  5432,  // PostgreSQL
+  6379,  // Redis
+  27017, // MongoDB
+  27018, // MongoDB sharding
+  28017, // MongoDB web interface
+];
+
+/**
  * Groups domains/patterns by their protocol restriction
  */
 interface DomainsByProtocol {
@@ -380,20 +402,10 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Generate SSL Bump section if enabled
   let sslBumpSection = '';
-  // Dual-port configuration for host access:
-  // - Port 3128: Normal proxy mode for HTTP CONNECT requests
-  // - Port 3129: Intercept mode for transparently redirected traffic (via iptables DNAT)
-  //
-  // Security Note: Intercept mode applies the same ACLs and domain filtering as normal mode.
-  // The only difference is how Squid receives the traffic (transparently vs explicitly proxied).
-  // All http_access rules, domain ACLs, and Safe_ports restrictions apply equally in intercept mode.
-  // See: http://www.squid-cache.org/Doc/config/http_port/ (intercept option documentation)
+  // Port configuration: Use normal proxy mode (not intercept mode)
+  // With targeted port redirection in iptables, traffic is explicitly redirected
+  // to Squid on specific ports (80, 443, + user-specified), maintaining defense-in-depth
   let portConfig = `http_port ${port}`;
-  if (enableHostAccess) {
-    // Add intercept port for transparently redirected traffic
-    // This is required because iptables DNAT changes packet headers but not HTTP request format
-    portConfig += `\nhttp_port ${port + 1} intercept`;
-  }
 
   // For SSL Bump, we need to check hasPlainDomains and hasPatterns for the 'both' protocol domains
   // since those are the ones that go into allowed_domains / allowed_domains_regex ACLs
@@ -434,12 +446,30 @@ acl Safe_ports port 443         # HTTPS`;
         if (isNaN(start) || isNaN(end) || start < 1 || end > 65535 || start > end) {
           throw new Error(`Invalid port range: ${port}. Must be in format START-END where 1 <= START <= END <= 65535`);
         }
+
+        // Check if any port in the range is dangerous
+        for (let p = start; p <= end; p++) {
+          if (DANGEROUS_PORTS.includes(p)) {
+            throw new Error(
+              `Port range ${port} includes dangerous port ${p} which is blocked for security reasons. ` +
+              `Dangerous ports (SSH, databases, etc.) cannot be allowed even with --allow-host-ports.`
+            );
+          }
+        }
       } else {
         // Single port (e.g., "3000" or invalid like "-1")
         const portNum = parseInt(port, 10);
 
         if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
           throw new Error(`Invalid port: ${port}. Must be a number between 1 and 65535`);
+        }
+
+        // Check if port is in dangerous ports blocklist
+        if (DANGEROUS_PORTS.includes(portNum)) {
+          throw new Error(
+            `Port ${portNum} is blocked for security reasons. ` +
+            `Dangerous ports (SSH:22, MySQL:3306, PostgreSQL:5432, etc.) cannot be allowed even with --allow-host-ports.`
+          );
         }
       }
 

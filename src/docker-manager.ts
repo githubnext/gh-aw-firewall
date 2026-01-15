@@ -297,6 +297,11 @@ export function generateDockerCompose(
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
   environment.AWF_DNS_SERVERS = dnsServers.join(',');
 
+  // Pass allowed ports to container for setup-iptables.sh (if specified)
+  if (config.allowHostPorts) {
+    environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
+  }
+
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();

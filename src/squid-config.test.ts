@@ -1170,3 +1170,126 @@ describe('Port validation in generateSquidConfig', () => {
     }).toThrow('Invalid port range: 3000-70000');
   });
 });
+
+describe('Dangerous ports blocklist in generateSquidConfig', () => {
+  it('should reject SSH port 22', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '22',
+      });
+    }).toThrow('Port 22 is blocked for security reasons');
+  });
+
+  it('should reject MySQL port 3306', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3306',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should reject PostgreSQL port 5432', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5432',
+      });
+    }).toThrow('Port 5432 is blocked for security reasons');
+  });
+
+  it('should reject Redis port 6379', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '6379',
+      });
+    }).toThrow('Port 6379 is blocked for security reasons');
+  });
+
+  it('should reject MongoDB port 27017', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '27017',
+      });
+    }).toThrow('Port 27017 is blocked for security reasons');
+  });
+
+  it('should reject port range containing SSH (20-25)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '20-25',
+      });
+    }).toThrow('Port range 20-25 includes dangerous port 22');
+  });
+
+  it('should reject port range containing MySQL (3300-3310)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3300-3310',
+      });
+    }).toThrow('Port range 3300-3310 includes dangerous port 3306');
+  });
+
+  it('should reject port range containing PostgreSQL (5400-5500)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5400-5500',
+      });
+    }).toThrow('Port range 5400-5500 includes dangerous port 5432');
+  });
+
+  it('should reject multiple ports including a dangerous one', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,3306,8080',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should accept safe ports not in blocklist', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept safe port range not overlapping with dangerous ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8000-8100',
+      });
+    }).not.toThrow();
+  });
+});
