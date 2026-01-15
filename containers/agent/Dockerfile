@@ -40,6 +40,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
+# Install Docker stub script that shows helpful error message
+# Docker-in-Docker support was removed in v0.9.1
+COPY docker-stub.sh /usr/bin/docker
+RUN chmod +x /usr/bin/docker
+
 # Set working directory
 WORKDIR /workspace
 
