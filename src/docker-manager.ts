@@ -9,6 +9,7 @@ import { generateSquidConfig } from './squid-config';
 import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
 
 const SQUID_PORT = 3128;
+const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
  * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
@@ -204,7 +205,7 @@ export function generateDockerCompose(
       retries: 5,
       start_period: '10s',
     },
-    ports: [`${SQUID_PORT}:${SQUID_PORT}`],
+    ports: [`${SQUID_PORT}:${SQUID_PORT}`, `${SQUID_INTERCEPT_PORT}:${SQUID_INTERCEPT_PORT}`],
     // Security hardening: Drop unnecessary capabilities
     // Squid only needs network capabilities, not system administration capabilities
     cap_drop: [
@@ -261,6 +262,7 @@ export function generateDockerCompose(
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
+    SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
     HOME: process.env.HOME || '/root',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
     DOCKER_HOST: 'unix:///var/run/docker.sock',
@@ -533,6 +535,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
     urlPatterns,
     enableHostAccess: config.enableHostAccess,
+    allowHostPorts: config.allowHostPorts,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);

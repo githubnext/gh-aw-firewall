@@ -177,7 +177,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -407,34 +407,30 @@ export function generateSquidConfig(config: SquidConfig): string {
     portConfig = '';
   }
 
-  // Port ACLs and access rules - conditional based on enableHostAccess
-  const portAclsAndRules = enableHostAccess
-    ? `# Port ACLs
+  // Port ACLs and access rules
+  // Build Safe_ports ACL with user-specified additional ports if provided
+  let portAclsSection = `# Port ACLs
 acl SSL_ports port 443
-# Extended port list for --enable-host-access
-# Includes common development and service ports while blocking dangerous ports
 acl Safe_ports port 80          # HTTP
-acl Safe_ports port 443         # HTTPS
-acl Safe_ports port 3000-3010   # Common dev servers / MCP Gateway
-acl Safe_ports port 5000-5001   # Flask, other frameworks
-acl Safe_ports port 8000-8090   # Common HTTP alternative ports
-acl Safe_ports port 9000-9100   # Additional service ports
-acl CONNECT method CONNECT
+acl Safe_ports port 443         # HTTPS`;
+
+  // Add user-specified ports if --allow-host-ports was provided
+  if (enableHostAccess && allowHostPorts) {
+    // Parse comma-separated ports/ranges and add to ACL
+    const ports = allowHostPorts.split(',').map(p => p.trim());
+    for (const port of ports) {
+      portAclsSection += `\nacl Safe_ports port ${port}      # User-specified via --allow-host-ports`;
+    }
+  }
+
+  portAclsSection += `\nacl CONNECT method CONNECT`;
+
+  const portAclsAndRules = `${portAclsSection}
 
 # Access rules
-# Even with --enable-host-access, deny dangerous ports (SSH, databases, etc.)
+# Deny unsafe ports (only allow Safe_ports defined above)
 http_access deny !Safe_ports
-http_access deny CONNECT !Safe_ports`
-    : `# Port ACLs
-acl SSL_ports port 443
-acl Safe_ports port 80
-acl Safe_ports port 443
-acl CONNECT method CONNECT
-
-# Access rules
-# Deny unsafe ports first
-http_access deny !Safe_ports
-# Allow CONNECT to Safe_ports (80 and 443) instead of just SSL_ports (443)
+# Allow CONNECT to Safe_ports instead of just SSL_ports (443)
 # This is required because some HTTP clients (e.g., Node.js fetch) use CONNECT
 # method even for HTTP connections when going through a proxy.
 # See: gh-aw-firewall issue #189
