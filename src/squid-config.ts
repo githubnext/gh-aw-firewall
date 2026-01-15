@@ -383,6 +383,11 @@ export function generateSquidConfig(config: SquidConfig): string {
   // Dual-port configuration for host access:
   // - Port 3128: Normal proxy mode for HTTP CONNECT requests
   // - Port 3129: Intercept mode for transparently redirected traffic (via iptables DNAT)
+  //
+  // Security Note: Intercept mode applies the same ACLs and domain filtering as normal mode.
+  // The only difference is how Squid receives the traffic (transparently vs explicitly proxied).
+  // All http_access rules, domain ACLs, and Safe_ports restrictions apply equally in intercept mode.
+  // See: http://www.squid-cache.org/Doc/config/http_port/ (intercept option documentation)
   let portConfig = `http_port ${port}`;
   if (enableHostAccess) {
     // Add intercept port for transparently redirected traffic
@@ -438,7 +443,10 @@ acl Safe_ports port 443         # HTTPS`;
         }
       }
 
-      portAclsSection += `\nacl Safe_ports port ${port}      # User-specified via --allow-host-ports`;
+      // Defense-in-depth: Additional sanitization to remove any non-digit/non-dash characters
+      // This is redundant given validation above, but provides extra protection against edge cases
+      const sanitizedPort = port.replace(/[^0-9-]/g, '');
+      portAclsSection += `\nacl Safe_ports port ${sanitizedPort}      # User-specified via --allow-host-ports`;
     }
   }
 
