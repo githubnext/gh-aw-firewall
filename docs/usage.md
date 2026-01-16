@@ -411,6 +411,30 @@ sudo awf \
 - You need specific tools only available in the full runner image
 - Download time and disk space are not concerns
 
+### Security Considerations
+
+**⚠️ IMPORTANT:** Custom base images introduce supply chain risk. When using third-party images:
+
+1. **Verify image sources** - Only use images from trusted publishers. The `catthehacker` images are community-maintained and not officially supported by GitHub.
+
+2. **Review image contents** - Understand what tools and configurations are included. Third-party images may contain pre-installed software that could behave unexpectedly.
+
+3. **Pin specific versions** - Use image digests (e.g., `@sha256:...`) instead of mutable tags to prevent tag manipulation:
+   ```bash
+   --agent-base-image ghcr.io/catthehacker/ubuntu@sha256:abc123...
+   ```
+
+4. **Monitor for vulnerabilities** - Third-party images may not receive timely security updates compared to official images.
+
+**Existing security controls remain in effect:**
+- Host-level iptables (DOCKER-USER chain) enforce egress filtering regardless of container contents
+- Squid proxy enforces domain allowlist at L7
+- NET_ADMIN capability is dropped before user command execution
+- Seccomp profile blocks dangerous syscalls
+- `no-new-privileges` prevents privilege escalation
+
+**For maximum security, use the default `ubuntu:22.04` image.** Custom base images are recommended only when you trust the image publisher and the benefits outweigh the supply chain risks.
+
 ### Pre-installed Tools
 
 The default `ubuntu:22.04` image includes:
