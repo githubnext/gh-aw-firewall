@@ -16,5 +16,8 @@
     "astro-mermaid": "1.1.0",
     "mermaid": "^11.12.2",
     "sharp": "^0.34.5"
+  },
+  "overrides": {
+    "diff": "8.0.3"
   }
 }
