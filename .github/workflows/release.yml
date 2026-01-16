@@ -1,0 +1,285 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0, v0.1.0, etc.
+  workflow_dispatch:  # Allow manual triggers
+
+permissions:
+  contents: write   # Required for creating releases
+  packages: write   # Required for pushing to GHCR
+  id-token: write   # Required for cosign keyless signing
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Extract version from tag
+        id: version_early
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=v$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION_NUMBER="${VERSION#v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version_number=$VERSION_NUMBER" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+
+      - name: Build and push Squid image
+        id: build_squid
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/squid
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/squid:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/squid:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign Squid image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
+      - name: Generate SBOM for Squid image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+          format: spdx-json
+          output-file: squid-sbom.spdx.json
+
+      - name: Attest SBOM for Squid image
+        run: |
+          cosign attest --yes \
+            --predicate squid-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+
+      - name: Build and push Agent image
+        id: build_agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/agent
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/agent:latest
+          # Disable cache for agent image to ensure security-critical packages
+          # (like libcap2-bin for capability dropping) are always freshly installed
+          no-cache: true
+
+      - name: Sign Agent image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+
+      - name: Generate SBOM for Agent image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+          format: spdx-json
+          output-file: agent-sbom.spdx.json
+
+      - name: Attest SBOM for Agent image
+        run: |
+          cosign attest --yes \
+            --predicate agent-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+
+      - name: Install pkg for binary creation
+        run: npm install -g pkg
+
+      - name: Create binaries
+        run: |
+          mkdir -p release
+
+          # Create standalone executable for Linux
+          pkg . \
+            --targets node18-linux-x64 \
+            --output release/awf-linux-x64
+
+          # Verify the binary was created
+          echo "=== Contents of release directory ==="
+          ls -lh release/
+          echo "=== Verifying binary ==="
+          test -f release/awf-linux-x64 && echo "✓ Binary exists at release/awf-linux-x64" || echo "✗ Binary NOT found!"
+          file release/awf-linux-x64
+
+      - name: Smoke test binary
+        run: |
+          npx tsx scripts/ci/smoke-test-binary.ts \
+            release/awf-linux-x64 \
+            ${{ steps.version_early.outputs.version_number }}
+
+      - name: Create tarball for npm package
+        run: |
+          npm pack
+          mv *.tgz release/awf.tgz
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Get previous release tag
+        id: previous_tag
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+
+          # Use git tags directly (more reliable than gh release list)
+          # Get the most recent tag that is not the current tag
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || echo "")
+
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREVIOUS_TAG (current: $CURRENT_TAG)"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
+          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
+
+          echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+
+          # Generate changelog using GitHub's API
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              -f previous_tag_name="$PREVIOUS_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          else
+            # First release - try API without previous tag
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$CURRENT_TAG" \
+              --jq '.body' 2>/dev/null || echo "")
+          fi
+
+          # If API call failed, fall back to git log
+          if [ -z "$CHANGELOG" ]; then
+            echo "GitHub API failed, falling back to git log"
+            if [ -n "$PREVIOUS_TAG" ]; then
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" "$PREVIOUS_TAG..HEAD" 2>/dev/null || echo "* Initial release")
+            else
+              # First release - get all commits (no arbitrary limit)
+              CHANGELOG=$(git log --oneline --pretty=format:"* %s (%h)" 2>/dev/null || echo "* Initial release")
+            fi
+          fi
+
+          # Write changelog to file for multiline handling
+          echo "$CHANGELOG" > changelog_body.md
+
+          # Validate changelog was generated
+          if [ ! -s changelog_body.md ]; then
+            echo "Error: Changelog generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "Changelog generated successfully ($(wc -l < changelog_body.md) lines)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate CLI help output
+        id: cli_help
+        run: |
+          set -euo pipefail
+
+          # Generate CLI help from the built binary
+          node dist/cli.js --help > cli_help.txt
+
+          # Validate CLI help was generated
+          if [ ! -s cli_help.txt ]; then
+            echo "Error: CLI help generation failed or produced empty output"
+            exit 1
+          fi
+
+          echo "CLI help generated ($(wc -l < cli_help.txt) lines):"
+          cat cli_help.txt
+
+      - name: Create Release Notes
+        id: release_notes
+        env:
+          VERSION: ${{ steps.version_early.outputs.version }}
+          VERSION_NUMBER: ${{ steps.version_early.outputs.version_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Use Node.js script for safe template substitution
+          # (avoids shell injection issues with special characters)
+          node scripts/generate-release-notes.js \
+            changelog_body.md \
+            cli_help.txt \
+            release_notes.md
+
+          # Validate output was generated
+          if [ ! -s release_notes.md ]; then
+            echo "Error: Release notes generation failed"
+            exit 1
+          fi
+
+          # Cleanup temp files
+          rm -f changelog_body.md cli_help.txt
+
+          echo "Release notes preview (first 20 lines):"
+          head -20 release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version_early.outputs.version }}
+          name: Release ${{ steps.version_early.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version_early.outputs.version, 'alpha') || contains(steps.version_early.outputs.version, 'beta') || contains(steps.version_early.outputs.version, 'rc') }}
+          files: |
+            release/awf-linux-x64
+            release/awf.tgz
+            release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts (for debugging)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-artifacts
+          path: release/
+          retention-days: 7
