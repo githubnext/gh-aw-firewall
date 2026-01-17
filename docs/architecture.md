@@ -216,3 +216,57 @@ Use `--keep-containers` to preserve containers and files after execution for deb
 - `execa`: Subprocess execution (docker-compose commands)
 - `js-yaml`: YAML generation for Docker Compose config
 - TypeScript 5.x, compiled to ES2020 CommonJS
+
+## Container Security Hardening
+
+The agent container implements multiple layers of security hardening to minimize the attack surface and prevent container escape attempts.
+
+### Seccomp Profile (Deny-by-Default)
+
+The agent container uses a seccomp (secure computing) profile that implements a **deny-by-default approach** for syscall filtering. This is defined in `containers/agent/seccomp-profile.json`.
+
+**Security Model:**
+- **Default Action:** `SCMP_ACT_ERRNO` - All syscalls are denied by default
+- **Explicit Allowlist:** Only syscalls required for normal operation (Node.js, curl, git, npm) are allowed
+- **Explicit Denylist:** Dangerous syscalls are explicitly blocked with documented rationale
+
+**Allowed Syscall Categories:**
+- **File I/O:** `read`, `write`, `open`, `openat`, `close`, `stat`, `fstat`, etc.
+- **Networking:** `socket`, `connect`, `accept`, `bind`, `listen`, `send`, `recv`, etc.
+- **Process Management:** `fork`, `clone`, `execve`, `wait4`, `exit`, `kill`, etc.
+- **Memory Management:** `mmap`, `mprotect`, `munmap`, `brk`, etc.
+- **Signal Handling:** `rt_sigaction`, `rt_sigprocmask`, `sigaltstack`, etc.
+- **Async I/O:** `epoll_*`, `poll`, `select`, etc.
+- **Time:** `clock_gettime`, `gettimeofday`, `nanosleep`, etc.
+
+**Explicitly Blocked Syscalls:**
+
+| Category | Syscalls | Risk |
+|----------|----------|------|
+| Process inspection | `ptrace`, `process_vm_readv`, `process_vm_writev` | Container escape vector |
+| Kernel execution | `kexec_load`, `kexec_file_load`, `reboot` | Host compromise |
+| Kernel modules | `init_module`, `finit_module`, `delete_module` | Rootkit installation |
+| Mount operations | `mount`, `umount`, `umount2`, `pivot_root` | Container escape |
+| Namespace manipulation | `unshare`, `setns` | Container escape |
+| BPF/performance | `bpf`, `perf_event_open` | Kernel exploitation |
+| Kernel keyring | `add_key`, `request_key`, `keyctl` | Credential theft |
+| Raw I/O | `ioperm`, `iopl` | Hardware exploitation |
+| Chroot | `chroot` | Container escape |
+
+### Dropped Capabilities
+
+The agent container drops the following Linux capabilities to reduce attack surface:
+
+- `NET_RAW` - Prevents raw socket creation (iptables bypass attempts)
+- `SYS_PTRACE` - Prevents process inspection/debugging (container escape vector)
+- `SYS_MODULE` - Prevents kernel module loading
+- `SYS_RAWIO` - Prevents raw I/O access
+- `MKNOD` - Prevents device node creation
+
+**Note:** `NET_ADMIN` capability is required for iptables setup but is dropped via `capsh --drop=cap_net_admin` before executing user commands.
+
+### Other Security Measures
+
+- **no-new-privileges:** Prevents privilege escalation via setuid binaries
+- **Resource limits:** Memory limit (4GB), process limit (1000 PIDs)
+- **Non-root user:** User commands execute as non-root `awfuser`
