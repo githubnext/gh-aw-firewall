@@ -23,7 +23,6 @@ Firewall testing is now done via agentic workflow smoke tests:
 | Smoke Test | Engine | Description |
 |------------|--------|-------------|
 | `smoke-claude.md` | Claude | Tests GitHub MCP, Playwright, file I/O, bash tools |
-| `smoke-codex.md` | Codex | Tests GitHub MCP, Playwright, file I/O, bash tools |
 | `smoke-copilot.md` | Copilot | Tests GitHub MCP, Playwright, file I/O, bash tools |
 
 ### Key Differences
