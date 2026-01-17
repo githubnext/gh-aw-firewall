@@ -22,6 +22,7 @@ tools:
 network:
   allowed:
     - github
+    - "githubnext.github.io"
 safe-outputs:
   create-discussion:
     title-prefix: "[Pelis Agent Factory Advisor] "
