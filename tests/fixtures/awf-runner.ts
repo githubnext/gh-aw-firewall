@@ -15,6 +15,7 @@ export interface AwfOptions {
   volumeMounts?: string[]; // Volume mounts in format: host_path:container_path[:mode]
   containerWorkDir?: string; // Working directory inside the container
   tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
+  dnsServers?: string[]; // DNS servers to use (e.g., ['8.8.8.8', '2001:4860:4860::8888'])
 }
 
 export interface AwfResult {
@@ -84,6 +85,11 @@ export class AwfRunner {
     // Add TTY flag
     if (options.tty) {
       args.push('--tty');
+    }
+
+    // Add DNS servers
+    if (options.dnsServers && options.dnsServers.length > 0) {
+      args.push('--dns-servers', options.dnsServers.join(','));
     }
 
     // Add -- separator before command
@@ -198,6 +204,11 @@ export class AwfRunner {
     // Add TTY flag
     if (options.tty) {
       args.push('--tty');
+    }
+
+    // Add DNS servers
+    if (options.dnsServers && options.dnsServers.length > 0) {
+      args.push('--dns-servers', options.dnsServers.join(','));
     }
 
     // Add -- separator before command
