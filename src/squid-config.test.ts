@@ -633,17 +633,16 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('http_access deny !allowed_domains !allowed_domains_regex');
     });
 
-    it('should handle only plain domains without pattern ACLs (backward compatibility, IP blocking ACLs are separate)', () => {
+    it('should handle only plain domains (backward compatibility)', () => {
       const config: SquidConfig = {
         domains: ['github.com', 'example.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains dstdomain');
-      // Should not have domain pattern regex (allowed_domains_regex) for plain domains
-      // Note: IP blocking ACLs (ip_dst_ipv4, ip_dst_ipv6) use dstdom_regex but are separate
-      expect(result).not.toContain('allowed_domains_regex');
+      expect(result).not.toContain('dstdom_regex');
       expect(result).toContain('http_access deny !allowed_domains');
+      expect(result).not.toContain('allowed_domains_regex');
     });
 
     it('should handle only pattern domains', () => {
@@ -735,54 +734,6 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('# ACL definitions for allowed domains');
       expect(result).toContain('# ACL definitions for allowed domain patterns');
-    });
-  });
-
-  describe('Direct IP Address Blocking (Security)', () => {
-    it('should include ACL to block direct IPv4 address connections', () => {
-      const config: SquidConfig = {
-        domains: ['example.com'],
-        port: defaultPort,
-      };
-      const result = generateSquidConfig(config);
-      // Should contain IPv4 address blocking ACL with proper octet validation
-      expect(result).toContain('acl ip_dst_ipv4 dstdom_regex');
-      expect(result).toMatch(/25\[0-5\]\|2\[0-4\]\[0-9\]/); // Should match IPv4 octet validation pattern
-    });
-
-    it('should include ACL to block direct IPv6 address connections', () => {
-      const config: SquidConfig = {
-        domains: ['example.com'],
-        port: defaultPort,
-      };
-      const result = generateSquidConfig(config);
-      // Should contain IPv6 address blocking ACL
-      expect(result).toContain('acl ip_dst_ipv6 dstdom_regex');
-    });
-
-    it('should deny access to IP addresses before domain filtering', () => {
-      const config: SquidConfig = {
-        domains: ['example.com'],
-        port: defaultPort,
-      };
-      const result = generateSquidConfig(config);
-      // Deny rules should be present and before domain filtering
-      expect(result).toContain('http_access deny ip_dst_ipv4');
-      expect(result).toContain('http_access deny ip_dst_ipv6');
-
-      // Verify order: IP blocking comes before domain filtering
-      const ipv4DenyIndex = result.indexOf('http_access deny ip_dst_ipv4');
-      const domainFilterIndex = result.indexOf('http_access deny !allowed_domains');
-      expect(ipv4DenyIndex).toBeLessThan(domainFilterIndex);
-    });
-
-    it('should include security comment about bypass prevention', () => {
-      const config: SquidConfig = {
-        domains: ['example.com'],
-        port: defaultPort,
-      };
-      const result = generateSquidConfig(config);
-      expect(result).toContain('bypass prevention');
     });
   });
 
@@ -1138,5 +1089,207 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('http_port 3128');
       expect(result).not.toContain('https_port');
     });
+  });
+});
+
+describe('Port validation in generateSquidConfig', () => {
+  it('should accept valid single ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept valid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-3010,8000-8090',
+      });
+    }).not.toThrow();
+  });
+
+  it('should reject invalid port numbers', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '70000',
+      });
+    }).toThrow('Invalid port: 70000');
+  });
+
+  it('should reject negative ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '-1',
+      });
+    }).toThrow('Invalid port: -1');
+  });
+
+  it('should reject non-numeric ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: 'abc',
+      });
+    }).toThrow('Invalid port: abc');
+  });
+
+  it('should reject invalid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-2000',
+      });
+    }).toThrow('Invalid port range: 3000-2000');
+  });
+
+  it('should reject port ranges with invalid boundaries', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-70000',
+      });
+    }).toThrow('Invalid port range: 3000-70000');
+  });
+});
+
+describe('Dangerous ports blocklist in generateSquidConfig', () => {
+  it('should reject SSH port 22', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '22',
+      });
+    }).toThrow('Port 22 is blocked for security reasons');
+  });
+
+  it('should reject MySQL port 3306', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3306',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should reject PostgreSQL port 5432', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5432',
+      });
+    }).toThrow('Port 5432 is blocked for security reasons');
+  });
+
+  it('should reject Redis port 6379', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '6379',
+      });
+    }).toThrow('Port 6379 is blocked for security reasons');
+  });
+
+  it('should reject MongoDB port 27017', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '27017',
+      });
+    }).toThrow('Port 27017 is blocked for security reasons');
+  });
+
+  it('should reject port range containing SSH (20-25)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '20-25',
+      });
+    }).toThrow('Port range 20-25 includes dangerous port 22');
+  });
+
+  it('should reject port range containing MySQL (3300-3310)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3300-3310',
+      });
+    }).toThrow('Port range 3300-3310 includes dangerous port 3306');
+  });
+
+  it('should reject port range containing PostgreSQL (5400-5500)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5400-5500',
+      });
+    }).toThrow('Port range 5400-5500 includes dangerous port 5432');
+  });
+
+  it('should reject multiple ports including a dangerous one', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,3306,8080',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should accept safe ports not in blocklist', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept safe port range not overlapping with dangerous ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8000-8100',
+      });
+    }).not.toThrow();
   });
 });

@@ -7,6 +7,28 @@ import {
 } from './domain-patterns';
 
 /**
+ * Ports that should never be allowed, even with --allow-host-ports
+ * These ports are blocked for security reasons to prevent access to sensitive services
+ */
+const DANGEROUS_PORTS = [
+  22,    // SSH
+  23,    // Telnet
+  25,    // SMTP (mail)
+  110,   // POP3 (mail)
+  143,   // IMAP (mail)
+  445,   // SMB (file sharing)
+  1433,  // MS SQL Server
+  1521,  // Oracle DB
+  3306,  // MySQL
+  3389,  // RDP (Windows Remote Desktop)
+  5432,  // PostgreSQL
+  6379,  // Redis
+  27017, // MongoDB
+  27018, // MongoDB sharding
+  28017, // MongoDB web interface
+];
+
+/**
  * Groups domains/patterns by their protocol restriction
  */
 interface DomainsByProtocol {
@@ -177,7 +199,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -380,6 +402,9 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Generate SSL Bump section if enabled
   let sslBumpSection = '';
+  // Port configuration: Use normal proxy mode (not intercept mode)
+  // With targeted port redirection in iptables, traffic is explicitly redirected
+  // to Squid on specific ports (80, 443, + user-specified), maintaining defense-in-depth
   let portConfig = `http_port ${port}`;
 
   // For SSL Bump, we need to check hasPlainDomains and hasPatterns for the 'both' protocol domains
@@ -399,9 +424,81 @@ export function generateSquidConfig(config: SquidConfig): string {
     portConfig = '';
   }
 
+  // Port ACLs and access rules
+  // Build Safe_ports ACL with user-specified additional ports if provided
+  let portAclsSection = `# Port ACLs
+acl SSL_ports port 443
+acl Safe_ports port 80          # HTTP
+acl Safe_ports port 443         # HTTPS`;
+
+  // Add user-specified ports if --allow-host-ports was provided
+  if (enableHostAccess && allowHostPorts) {
+    // Parse comma-separated ports/ranges and add to ACL
+    const ports = allowHostPorts.split(',').map(p => p.trim());
+    for (const port of ports) {
+      // Validate port or port range to prevent injection and invalid configs
+      const parts = port.split('-');
+      if (parts.length === 2 && parts[0] !== '' && parts[1] !== '') {
+        // Port range (e.g., "3000-3010")
+        const start = parseInt(parts[0], 10);
+        const end = parseInt(parts[1], 10);
+
+        if (isNaN(start) || isNaN(end) || start < 1 || end > 65535 || start > end) {
+          throw new Error(`Invalid port range: ${port}. Must be in format START-END where 1 <= START <= END <= 65535`);
+        }
+
+        // Check if any port in the range is dangerous
+        for (let p = start; p <= end; p++) {
+          if (DANGEROUS_PORTS.includes(p)) {
+            throw new Error(
+              `Port range ${port} includes dangerous port ${p} which is blocked for security reasons. ` +
+              `Dangerous ports (SSH, databases, etc.) cannot be allowed even with --allow-host-ports.`
+            );
+          }
+        }
+      } else {
+        // Single port (e.g., "3000" or invalid like "-1")
+        const portNum = parseInt(port, 10);
+
+        if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+          throw new Error(`Invalid port: ${port}. Must be a number between 1 and 65535`);
+        }
+
+        // Check if port is in dangerous ports blocklist
+        if (DANGEROUS_PORTS.includes(portNum)) {
+          throw new Error(
+            `Port ${portNum} is blocked for security reasons. ` +
+            `Dangerous ports (SSH:22, MySQL:3306, PostgreSQL:5432, etc.) cannot be allowed even with --allow-host-ports.`
+          );
+        }
+      }
+
+      // Defense-in-depth: Additional sanitization to remove any non-digit/non-dash characters
+      // This is redundant given validation above, but provides extra protection against edge cases
+      const sanitizedPort = port.replace(/[^0-9-]/g, '');
+      portAclsSection += `\nacl Safe_ports port ${sanitizedPort}      # User-specified via --allow-host-ports`;
+    }
+  }
+
+  portAclsSection += `\nacl CONNECT method CONNECT`;
+
+  const portAclsAndRules = `${portAclsSection}
+
+# Access rules
+# Deny unsafe ports (only allow Safe_ports defined above)
+http_access deny !Safe_ports
+# Allow CONNECT to Safe_ports instead of just SSL_ports (443)
+# This is required because some HTTP clients (e.g., Node.js fetch) use CONNECT
+# method even for HTTP connections when going through a proxy.
+# See: gh-aw-firewall issue #189
+http_access deny CONNECT !Safe_ports`;
+
   return `# Squid configuration for egress traffic control
 # Generated by awf
 ${sslBump ? '\n# SSL Bump mode enabled - HTTPS traffic will be intercepted for URL inspection' : ''}
+
+# Disable pinger (ICMP) - requires NET_RAW capability which we don't have for security
+pinger_enable off
 
 # Custom log format with detailed connection information
 # Format: timestamp client_ip:port dest_domain dest_ip:port protocol method status decision url user_agent
@@ -426,32 +523,7 @@ acl localnet src 192.168.0.0/16
 acl localnet src fc00::/7
 acl localnet src fe80::/10
 
-# Port ACLs
-acl SSL_ports port 443
-acl Safe_ports port 80
-acl Safe_ports port 443
-acl CONNECT method CONNECT
-
-# Security: Block direct IP address connections (bypass prevention)
-# Clients must use domain names, not raw IP addresses
-# This prevents bypassing domain-based filtering via direct IP HTTPS connections
-acl ip_dst_ipv4 dstdom_regex ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$
-# IPv6: Must contain at least one colon with hex digits (distinguishes from domain names)
-# Matches: ::1, fe80::1, 2001:db8::1, [::1] (bracket notation for URLs)
-acl ip_dst_ipv6 dstdom_regex ^\\[?([0-9a-fA-F]{1,4}:)+[0-9a-fA-F:]*\\]?$
-
-# Access rules
-# Deny direct IP connections first (before domain filtering)
-http_access deny ip_dst_ipv4
-http_access deny ip_dst_ipv6
-
-# Deny unsafe ports
-http_access deny !Safe_ports
-# Allow CONNECT to Safe_ports (80 and 443) instead of just SSL_ports (443)
-# This is required because some HTTP clients (e.g., Node.js fetch) use CONNECT
-# method even for HTTP connections when going through a proxy.
-# See: gh-aw-firewall issue #189
-http_access deny CONNECT !Safe_ports
+${portAclsAndRules}
 
 ${accessRulesSection}# Deny requests to unknown domains (not in allow-list)
 # This applies to all sources including localnet

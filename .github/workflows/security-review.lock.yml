@@ -19,47 +19,40 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Smoke Copilot
+# Daily comprehensive security review and threat modeling with verifiable evidence
+#
+# Resolved workflow manifest:
+#   Imports:
+#     - shared/mcp-pagination.md
 
-name: "Smoke Copilot"
+name: "Daily Security Review and Threat Modeling"
 "on":
-  pull_request:
-    types:
-    - opened
-    - synchronize
-    - reopened
   schedule:
-  - cron: "40 */12 * * *"
-  workflow_dispatch: null
+  - cron: "35 18 * * *"
+    # Friendly format: daily (scattered)
+  workflow_dispatch:
 
 permissions:
   actions: read
   contents: read
+  discussions: read
   issues: read
   pull-requests: read
+  security-events: read
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
+  group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Smoke Copilot"
+run-name: "Daily Security Review and Threat Modeling"
 
 jobs:
   activation:
-    needs: pre_activation
-    if: >
-      (needs.pre_activation.outputs.activated == 'true') && ((github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id))
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
-      issues: write
-      pull-requests: write
     outputs:
-      comment_id: ${{ steps.react.outputs.comment-id }}
-      comment_repo: ${{ steps.react.outputs.comment-repo }}
-      comment_url: ${{ steps.react.outputs.comment-url }}
-      reaction_id: ${{ steps.react.outputs.reaction-id }}
+      comment_id: ""
+      comment_repo: ""
     steps:
       - name: Setup Scripts
         uses: githubnext/gh-aw/actions/setup@v0.36.0
@@ -68,26 +61,12 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "smoke-copilot.lock.yml"
+          GH_AW_WORKFLOW_FILE: "security-review.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/check_workflow_timestamp_api.cjs');
-            await main();
-      - name: Add eyes reaction to the triggering item
-        id: react
-        if: github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment' || github.event_name == 'discussion' || github.event_name == 'discussion_comment' || (github.event_name == 'pull_request') && (github.event.pull_request.head.repo.id == github.repository_id)
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_REACTION: "eyes"
-          GH_AW_WORKFLOW_NAME: "Smoke Copilot"
-          GH_AW_SAFE_OUTPUT_MESSAGES: "{\"footer\":\"\\u003e 📰 *BREAKING: Report filed by [{workflow_name}]({run_url})*\",\"runStarted\":\"📰 BREAKING: [{workflow_name}]({run_url}) is now investigating this {event_type}. Sources say the story is developing...\",\"runSuccess\":\"📰 VERDICT: [{workflow_name}]({run_url}) has concluded. All systems operational. This is a developing story. 🎤\",\"runFailure\":\"📰 DEVELOPING STORY: [{workflow_name}]({run_url}) reports {status}. Our correspondents are investigating the incident...\"}"
-        with:
-          script: |
-            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
-            setupGlobals(core, github, context, exec, io);
-            const { main } = require('/opt/gh-aw/actions/add_reaction_and_edit_comment.cjs');
             await main();
 
   agent:
@@ -96,8 +75,12 @@ jobs:
     permissions:
       actions: read
       contents: read
+      discussions: read
       issues: read
       pull-requests: read
+      security-events: read
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       GH_AW_MCP_LOG_DIR: /tmp/gh-aw/mcp-logs/safeoutputs
       GH_AW_SAFE_OUTPUTS: /tmp/gh-aw/safeoutputs/outputs.jsonl
@@ -188,7 +171,7 @@ jobs:
             const determineAutomaticLockdown = require('/opt/gh-aw/actions/determine_automatic_lockdown.cjs');
             await determineAutomaticLockdown(github, context, core);
       - name: Downloading container images
-        run: bash /opt/gh-aw/actions/download_docker_images.sh ghcr.io/github/github-mcp-server:v0.27.0 mcr.microsoft.com/playwright/mcp
+        run: bash /opt/gh-aw/actions/download_docker_images.sh ghcr.io/github/github-mcp-server:v0.27.0
       - name: Install gh-aw extension
         env:
           GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -208,55 +191,35 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'EOF'
-          {"add_comment":{"max":1},"add_labels":{"allowed":["smoke-copilot"],"max":3},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"create_discussion":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'EOF'
           [
             {
-              "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. CONSTRAINTS: Maximum 1 comment(s) can be added.",
+              "description": "Create a GitHub discussion for announcements, Q\u0026A, reports, status updates, or community conversations. Use this for content that benefits from threaded replies, doesn't require task tracking, or serves as documentation. For actionable work items that need assignment and status tracking, use create_issue instead. CONSTRAINTS: Maximum 1 discussion(s) can be created. Title will be prefixed with \"[Security Review] \". Discussions will be created in category \"General\".",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
                   "body": {
-                    "description": "Comment content in Markdown. Provide helpful, relevant information that adds value to the conversation.",
+                    "description": "Discussion content in Markdown. Do NOT repeat the title as a heading since it already appears as the discussion's h1. Include all relevant context, findings, or questions.",
                     "type": "string"
                   },
-                  "item_number": {
-                    "description": "The issue, pull request, or discussion number to comment on. This is the numeric ID from the GitHub URL (e.g., 123 in github.com/owner/repo/issues/123). Must be a valid existing item in the repository. Required.",
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "body",
-                  "item_number"
-                ],
-                "type": "object"
-              },
-              "name": "add_comment"
-            },
-            {
-              "description": "Add labels to an existing GitHub issue or pull request for categorization and filtering. Labels must already exist in the repository. For creating new issues with labels, use create_issue with the labels property instead. CONSTRAINTS: Only these labels are allowed: [smoke-copilot].",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {
-                  "item_number": {
-                    "description": "Issue or PR number to add labels to. This is the numeric ID from the GitHub URL (e.g., 456 in github.com/owner/repo/issues/456). If omitted, adds labels to the item that triggered this workflow.",
-                    "type": "number"
+                  "category": {
+                    "description": "Discussion category by name (e.g., 'General'), slug (e.g., 'general'), or ID. If omitted, uses the first available category. Category must exist in the repository.",
+                    "type": "string"
                   },
-                  "labels": {
-                    "description": "Label names to add (e.g., ['bug', 'priority-high']). Labels must exist in the repository.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
+                  "title": {
+                    "description": "Concise discussion title summarizing the topic. The title appears as the main heading, so keep it brief and descriptive.",
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "labels"
+                  "title",
+                  "body"
                 ],
                 "type": "object"
               },
-              "name": "add_labels"
+              "name": "create_discussion"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -305,7 +268,7 @@ jobs:
           EOF
           cat > /opt/gh-aw/safeoutputs/validation.json << 'EOF'
           {
-            "add_comment": {
+            "create_discussion": {
               "defaultMax": 1,
               "fields": {
                 "body": {
@@ -314,23 +277,20 @@ jobs:
                   "sanitize": true,
                   "maxLength": 65000
                 },
-                "item_number": {
-                  "issueOrPRNumber": true
-                }
-              }
-            },
-            "add_labels": {
-              "defaultMax": 5,
-              "fields": {
-                "item_number": {
-                  "issueOrPRNumber": true
+                "category": {
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
                 },
-                "labels": {
+                "repo": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "title": {
                   "required": true,
-                  "type": "array",
-                  "itemType": "string",
-                  "itemSanitize": true,
-                  "itemMaxLength": 128
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
                 }
               }
             },
@@ -404,19 +364,13 @@ jobs:
                   "-e",
                   "GITHUB_LOCKDOWN_MODE=$GITHUB_MCP_LOCKDOWN",
                   "-e",
-                  "GITHUB_TOOLSETS=context,repos,issues,pull_requests",
+                  "GITHUB_TOOLSETS=context,repos,issues,pull_requests,actions,code_security",
                   "ghcr.io/github/github-mcp-server:v0.27.0"
                 ],
                 "tools": ["*"],
                 "env": {
                   "GITHUB_PERSONAL_ACCESS_TOKEN": "\${GITHUB_MCP_SERVER_TOKEN}"
                 }
-              },
-              "playwright": {
-                "type": "local",
-                "command": "docker",
-                "args": ["run", "-i", "--rm", "--init", "--network", "host", "mcr.microsoft.com/playwright/mcp", "--output-dir", "/tmp/gh-aw/mcp-logs/playwright", "--allowed-hosts", "localhost;localhost:*;127.0.0.1;127.0.0.1:*;github.com", "--allowed-origins", "localhost;localhost:*;127.0.0.1;127.0.0.1:*;github.com"],
-                "tools": ["*"]
               },
               "safeoutputs": {
                 "type": "local",
@@ -462,7 +416,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Smoke Copilot",
+              workflow_name: "Daily Security Review and Threat Modeling",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -476,7 +430,7 @@ jobs:
               event_name: context.eventName,
               staged: false,
               network_mode: "defaults",
-              allowed_domains: ["defaults","node","github","playwright"],
+              allowed_domains: ["github"],
               firewall_enabled: true,
               awf_version: "v0.8.2",
               steps: {
@@ -503,51 +457,361 @@ jobs:
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
-          GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Smoke Test: Copilot Engine Validation
+          ## MCP Response Size Limits
           
-          **IMPORTANT: Keep all outputs extremely short and concise. Use single-line responses where possible. No verbose explanations.**
+          MCP tool responses have a **25,000 token limit**. When GitHub API responses exceed this limit, workflows must retry with pagination parameters, wasting turns and tokens.
           
-          ## Test Requirements
+          ### Common Scenarios
           
-          1. **GitHub MCP Testing**: Review the last 2 merged pull requests in __GH_AW_GITHUB_REPOSITORY__
-          2. **Playwright Testing**: Use playwright to navigate to https://github.com and verify the page title contains "GitHub"
-          3. **File Writing Testing**: Create a test file `/tmp/gh-aw/agent/smoke-test-copilot-__GH_AW_GITHUB_RUN_ID__.txt` with content "Smoke test passed for Copilot at $(date)" (create the directory if it doesn't exist)
-          4. **Bash Tool Testing**: Execute bash commands to verify file creation was successful (use `cat` to read the file back)
+          **Problem**: Fetching large result sets without pagination
+          - `list_pull_requests` with many PRs (75,897 tokens in one case)
+          - `pull_request_read` with large diff/comments (31,675 tokens observed)
+          - `search_issues`, `search_code` with many results
           
-          ## Output
+          **Solution**: Use proactive pagination to stay under token limits
           
-          Add a **very brief** comment (max 5-10 lines) to the current pull request with:
-          - PR titles only (no descriptions)
-          - ✅ or ❌ for each test result
-          - Overall status: PASS or FAIL
-          - Mention the pull request author and any assignees
+          ### Pagination Best Practices
           
-          If all tests pass, add the label `smoke-copilot` to the pull request.
+          #### 1. Use `perPage` Parameter
+          
+          Limit results per request to prevent oversized responses:
+          
+          ```bash
+          # Good: Fetch PRs in small batches
+          list_pull_requests --perPage 10
+          
+          # Good: Get issue with limited comments
+          issue_read --method get_comments --perPage 20
+          
+          # Bad: Default pagination may return too much data
+          list_pull_requests  # May exceed 25k tokens
+          ```
+          
+          #### 2. Common `perPage` Values
+          
+          - **10-20**: For detailed items (PRs with diffs, issues with comments)
+          - **50-100**: For simpler list operations (commits, branches, labels)
+          - **1-5**: For exploratory queries or schema discovery
+          
+          #### 3. Handle Pagination Loops
+          
+          When you need all results:
+          
+          ```bash
+          # Step 1: Fetch first page
+          result=$(list_pull_requests --perPage 20 --page 1)
+          
+          # Step 2: Check if more pages exist
+          # Most list operations return metadata about total count or next page
+          
+          # Step 3: Fetch subsequent pages if needed
+          result=$(list_pull_requests --perPage 20 --page 2)
+          ```
+          
+          ### Tool-Specific Guidance
+          
+          #### Pull Requests
+          
+          ```bash
+          # Fetch recent PRs in small batches
+          list_pull_requests --state all --perPage 10 --sort updated --direction desc
+          
+          # Get PR details without full diff/comments
+          pull_request_read --method get --pullNumber 123
+          
+          # Get PR files separately if needed
+          pull_request_read --method get_files --pullNumber 123 --perPage 30
+          ```
+          
+          #### Issues
+          
+          ```bash
+          # List issues with pagination
+          list_issues --perPage 20 --page 1
+          
+          # Get issue comments in batches
+          issue_read --method get_comments --issue_number 123 --perPage 20
+          ```
+          
+          #### Code Search
+          
+          ```bash
+          # Search with limited results
+          search_code --query "function language:go" --perPage 10
+          ```
+          
+          ### Error Messages to Watch For
+          
+          If you see these errors, add pagination:
+          
+          - `MCP tool "list_pull_requests" response (75897 tokens) exceeds maximum allowed tokens (25000)`
+          - `MCP tool "pull_request_read" response (31675 tokens) exceeds maximum allowed tokens (25000)`
+          - `Response too large for tool [tool_name]`
+          
+          ### Performance Tips
+          
+          1. **Start small**: Use `perPage: 10` initially, increase if needed
+          2. **Fetch incrementally**: Get overview first, then details for specific items
+          3. **Avoid wildcards**: Don't fetch all data when you need specific items
+          4. **Use filters**: Combine `perPage` with state/label/date filters to reduce results
+          
+          ### Example Workflow Pattern
+          
+          ```markdown
+          # Analyze Recent Pull Requests
+          
+          1. Fetch 10 most recent PRs (stay under token limit)
+          2. For each PR, get summary without full diff
+          3. If detailed analysis needed, fetch files for specific PR separately
+          4. Process results incrementally rather than loading everything at once
+          ```
+          
+          This proactive approach eliminates retry loops and reduces token consumption.
+          
+          # Daily Security Review and Threat Modeling
+          
+          You are a security researcher conducting a **comprehensive, evidence-based security review** of the gh-aw-firewall repository. Your analysis must be deep, thorough, and backed by **verifiable evidence with specific file references, line numbers, and command outputs**.
+          
+          ## Important: Show Your Work
+          
+          **CRITICAL**: For every finding, you MUST:
+          1. Show the exact command you ran to discover it
+          2. Include the relevant output/evidence
+          3. Cite specific file paths and line numbers
+          4. Explain why this is a security concern with technical depth
+          
+          Use bash commands extensively to gather evidence. Document every command and its output.
+          
+          ## Phase 1: Gather Context from Previous Security Testing
+          
+          ### Read the Firewall Escape Test Agent's Report
+          
+          First, use the `agentic-workflows` tool to check recent runs of the "Firewall Escape Test Agent" workflow:
+          
+          1. Use `agentic-workflows.status` to see all workflow files and their recent run status
+          2. Use `agentic-workflows.logs` to download and analyze logs from the most recent firewall-escape-test run
+          3. Use `agentic-workflows.audit` if there were any failures to investigate
+          
+          Analyze the most recent run to understand:
+          - What escape attempts were tried
+          - Which ones succeeded or failed
+          - Any vulnerabilities discovered
+          - Recommendations made
+          
+          This provides complementary material for your security review.
+          
+          ## Phase 2: Codebase Security Analysis
+          
+          ### 2.1 Network Security Architecture
+          
+          Analyze the network security implementation:
+          
+          ```bash
+          # Examine iptables configuration
+          cat src/host-iptables.ts
+          cat containers/agent/setup-iptables.sh
+          
+          # Check Squid proxy configuration
+          cat src/squid-config.ts
+          
+          # Analyze Docker networking
+          grep -r "network" src/ --include="*.ts"
+          ```
+          
+          **Evaluate:**
+          - Are firewall rules properly ordered (deny before allow)?
+          - Are there any bypass opportunities in the NAT rules?
+          - Is DNS exfiltration properly prevented?
+          - Are all protocols (IPv4, IPv6, UDP) handled?
+          
+          ### 2.2 Container Security Hardening
+          
+          Review container security:
+          
+          ```bash
+          # Check capability dropping
+          grep -rn "cap_drop\|capabilities\|NET_ADMIN\|NET_RAW" src/ containers/
+          
+          # Examine seccomp profile
+          cat containers/agent/seccomp-profile.json
+          
+          # Check privilege dropping
+          grep -rn "privilege\|root\|user\|uid" containers/
+          ```
+          
+          **Evaluate:**
+          - Are dangerous capabilities properly dropped?
+          - Is the seccomp profile restrictive enough?
+          - Is privilege dropping correctly implemented?
+          - Are resource limits applied?
+          
+          ### 2.3 Domain Pattern Validation
+          
+          Analyze domain handling:
+          
+          ```bash
+          # Check domain validation
+          cat src/domain-patterns.ts
+          
+          # Look for domain-related security logic
+          grep -rn "domain\|wildcard\|pattern" src/ --include="*.ts"
+          ```
+          
+          **Evaluate:**
+          - Can overly broad patterns (e.g., `*`, `*.*`) be created?
+          - Is subdomain matching secure?
+          - Are protocol prefixes handled safely?
+          
+          ### 2.4 Input Validation and Injection Risks
+          
+          Check for injection vulnerabilities:
+          
+          ```bash
+          # Look for command construction
+          grep -rn "exec\|spawn\|shell\|command" src/ --include="*.ts"
+          
+          # Check for string interpolation in commands
+          grep -rn '\$\{' containers/ --include="*.sh"
+          
+          # Look for user input handling
+          grep -rn "args\|argv\|input" src/cli.ts
+          ```
+          
+          **Evaluate:**
+          - Is user input properly sanitized?
+          - Are there command injection risks?
+          - Is shell escaping properly handled?
+          
+          ### 2.5 Docker Wrapper Security
+          
+          Analyze the Docker wrapper:
+          
+          ```bash
+          # Examine the Docker wrapper
+          cat containers/agent/docker-wrapper.sh
+          
+          # Check entrypoint security
+          cat containers/agent/entrypoint.sh
+          ```
+          
+          **Evaluate:**
+          - Can the Docker wrapper be bypassed?
+          - Are all Docker commands properly intercepted?
+          - Is proxy injection secure?
+          
+          ### 2.6 Dependency Security
+          
+          Check for dependency vulnerabilities:
+          
+          ```bash
+          # List dependencies
+          cat package.json
+          
+          # Check for known vulnerabilities
+          npm audit --json 2>/dev/null || echo "npm audit not available"
+          
+          # Check dependency versions
+          cat package-lock.json | head -100
+          ```
+          
+          ## Phase 3: Threat Modeling
+          
+          Based on your analysis, identify and document threats using the STRIDE model:
+          
+          ### Threat Categories
+          
+          1. **Spoofing** - Can an attacker impersonate legitimate traffic?
+          2. **Tampering** - Can firewall rules be modified at runtime?
+          3. **Repudiation** - Is logging sufficient for forensics?
+          4. **Information Disclosure** - Can data leak through allowed channels?
+          5. **Denial of Service** - Can the firewall be overwhelmed?
+          6. **Elevation of Privilege** - Can container escape lead to host access?
+          
+          For each threat:
+          - Describe the attack vector
+          - Show evidence from the codebase
+          - Assess likelihood and impact
+          - Suggest mitigations
+          
+          ## Phase 4: Attack Surface Mapping
+          
+          Create a comprehensive attack surface map:
+          
+          ```bash
+          # Find all network-related code
+          grep -rln "http\|https\|socket\|network\|proxy" src/ containers/
+          
+          # Find all file I/O
+          grep -rln "fs\.\|writeFile\|readFile\|exec" src/
+          
+          # Find all external process execution
+          grep -rln "execa\|spawn\|exec\|child_process" src/
+          ```
+          
+          Document each attack surface with:
+          - Entry point location (file:line)
+          - What it does
+          - Current protections
+          - Potential weaknesses
+          
+          ## Phase 5: Comparison with Security Best Practices
+          
+          Compare the implementation against:
+          
+          1. **Docker Security Best Practices** - CIS Docker Benchmark
+          2. **Network Filtering Standards** - NIST guidelines
+          3. **Principle of Least Privilege** - Is it properly applied?
+          
+          ## Output Format
+          
+          Create a discussion with the following structure:
+          
+          ### 📊 Executive Summary
+          Brief overview of security posture with key metrics.
+          
+          ### 🔍 Findings from Firewall Escape Test
+          Summary of complementary findings from the escape test agent.
+          
+          ### 🛡️ Architecture Security Analysis
+          - Network Security Assessment
+          - Container Security Assessment
+          - Domain Validation Assessment
+          - Input Validation Assessment
+          
+          ### ⚠️ Threat Model
+          Table of identified threats with severity ratings.
+          
+          ### 🎯 Attack Surface Map
+          Enumeration of attack surfaces with risk levels.
+          
+          ### 📋 Evidence Collection
+          All commands run with their outputs (collapsed sections for brevity).
+          
+          ### ✅ Recommendations
+          Prioritized list of security improvements:
+          - **Critical** - Must fix immediately
+          - **High** - Should fix soon
+          - **Medium** - Plan to address
+          - **Low** - Nice to have
+          
+          ### 📈 Security Metrics
+          - Lines of security-critical code analyzed
+          - Number of attack surfaces identified
+          - Coverage of threat model
+          
+          ## Guidelines
+          
+          - **Be thorough** - This is a deep security review, not a quick scan
+          - **Show evidence** - Every claim must have verifiable proof
+          - **Be specific** - Include file paths, line numbers, and code snippets
+          - **Be actionable** - Recommendations should be implementable
+          - **No false positives** - Only report genuine security concerns
+          - **Cross-reference** - Link findings to the escape test agent's results where relevant
           
           PROMPT_EOF
-      - name: Substitute placeholders
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
-          GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
-        with:
-          script: |
-            const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
-            // Call the substitution function
-            return await substitutePlaceholders({
-              file: process.env.GH_AW_PROMPT,
-              substitutions: {
-                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY,
-                GH_AW_GITHUB_RUN_ID: process.env.GH_AW_GITHUB_RUN_ID
-              }
-            });
       - name: Append XPIA security instructions to prompt
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -558,11 +822,6 @@ jobs:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
         run: |
           cat "/opt/gh-aw/prompts/temp_folder_prompt.md" >> "$GH_AW_PROMPT"
-      - name: Append playwright output directory instructions to prompt
-        env:
-          GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-        run: |
-          cat "/opt/gh-aw/prompts/playwright_prompt.md" >> "$GH_AW_PROMPT"
       - name: Append cache memory instructions to prompt
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -601,7 +860,7 @@ jobs:
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
           
-          **Available tools**: add_comment, add_labels, missing_tool, noop
+          **Available tools**: create_discussion, missing_tool, noop
           
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
@@ -683,8 +942,6 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
-          GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -698,11 +955,27 @@ jobs:
       - name: Execute GitHub Copilot CLI
         id: agentic_execution
         # Copilot CLI tool arguments (sorted):
-        timeout-minutes: 5
+        # --allow-tool github
+        # --allow-tool safeoutputs
+        # --allow-tool shell(cat)
+        # --allow-tool shell(date)
+        # --allow-tool shell(echo)
+        # --allow-tool shell(grep)
+        # --allow-tool shell(head)
+        # --allow-tool shell(ls)
+        # --allow-tool shell(pwd)
+        # --allow-tool shell(sort)
+        # --allow-tool shell(tail)
+        # --allow-tool shell(uniq)
+        # --allow-tool shell(wc)
+        # --allow-tool shell(yq)
+        # --allow-tool web_fetch
+        # --allow-tool write
+        timeout-minutes: 45
         run: |
           set -o pipefail
-          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains '*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.npms.io,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,bun.sh,cdn.playwright.dev,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,deb.nodesource.com,deno.land,get.pnpm.io,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,nodejs.org,npm.pkg.github.com,npmjs.com,npmjs.org,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,playwright.download.prss.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,registry.bower.io,registry.npmjs.com,registry.npmjs.org,registry.yarnpkg.com,repo.yarnpkg.com,s.symcb.com,s.symcd.com,security.ubuntu.com,skimdb.npmjs.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.npmjs.com,www.npmjs.org,yarnpkg.com' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
-            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --add-dir /tmp/gh-aw/cache-memory/ --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
+          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains '*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,codeload.github.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,host.docker.internal,lfs.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
+            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-tool github --allow-tool safeoutputs --allow-tool 'shell(cat)' --allow-tool 'shell(date)' --allow-tool 'shell(echo)' --allow-tool 'shell(grep)' --allow-tool 'shell(head)' --allow-tool 'shell(ls)' --allow-tool 'shell(pwd)' --allow-tool 'shell(sort)' --allow-tool 'shell(tail)' --allow-tool 'shell(uniq)' --allow-tool 'shell(wc)' --allow-tool 'shell(yq)' --allow-tool web_fetch --allow-tool write --add-dir /tmp/gh-aw/cache-memory/ --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
@@ -761,7 +1034,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_ALLOWED_DOMAINS: "*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.npms.io,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,bun.sh,cdn.playwright.dev,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,deb.nodesource.com,deno.land,get.pnpm.io,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,nodejs.org,npm.pkg.github.com,npmjs.com,npmjs.org,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,playwright.download.prss.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,registry.bower.io,registry.npmjs.com,registry.npmjs.org,registry.yarnpkg.com,repo.yarnpkg.com,s.symcb.com,s.symcd.com,security.ubuntu.com,skimdb.npmjs.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.npmjs.com,www.npmjs.org,yarnpkg.com"
+          GH_AW_ALLOWED_DOMAINS: "*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,codeload.github.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,host.docker.internal,lfs.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
         with:
@@ -873,7 +1146,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Smoke Copilot"
+          GH_AW_WORKFLOW_NAME: "Daily Security Review and Threat Modeling"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -886,7 +1159,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Smoke Copilot"
+          GH_AW_WORKFLOW_NAME: "Daily Security Review and Threat Modeling"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -902,10 +1175,9 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Smoke Copilot"
+          GH_AW_WORKFLOW_NAME: "Daily Security Review and Threat Modeling"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
-          GH_AW_SAFE_OUTPUT_MESSAGES: "{\"footer\":\"\\u003e 📰 *BREAKING: Report filed by [{workflow_name}]({run_url})*\",\"runStarted\":\"📰 BREAKING: [{workflow_name}]({run_url}) is now investigating this {event_type}. Sources say the story is developing...\",\"runSuccess\":\"📰 VERDICT: [{workflow_name}]({run_url}) has concluded. All systems operational. This is a developing story. 🎤\",\"runFailure\":\"📰 DEVELOPING STORY: [{workflow_name}]({run_url}) reports {status}. Our correspondents are investigating the incident...\"}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -919,6 +1191,8 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -947,8 +1221,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Smoke Copilot"
-          WORKFLOW_DESCRIPTION: "Smoke Copilot"
+          WORKFLOW_NAME: "Daily Security Review and Threat Modeling"
+          WORKFLOW_DESCRIPTION: "Daily comprehensive security review and threat modeling with verifiable evidence"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -1065,29 +1339,6 @@ jobs:
           path: /tmp/gh-aw/threat-detection/detection.log
           if-no-files-found: ignore
 
-  pre_activation:
-    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
-    runs-on: ubuntu-slim
-    outputs:
-      activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
-    steps:
-      - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@v0.36.0
-        with:
-          destination: /opt/gh-aw/actions
-      - name: Check team membership for workflow
-        id: check_membership
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_REQUIRED_ROLES: admin,maintainer,write
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
-            setupGlobals(core, github, context, exec, io);
-            const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
-            await main();
-
   safe_outputs:
     needs:
       - agent
@@ -1097,14 +1348,11 @@ jobs:
     permissions:
       contents: read
       discussions: write
-      issues: write
-      pull-requests: write
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_SAFE_OUTPUT_MESSAGES: "{\"footer\":\"\\u003e 📰 *BREAKING: Report filed by [{workflow_name}]({run_url})*\",\"runStarted\":\"📰 BREAKING: [{workflow_name}]({run_url}) is now investigating this {event_type}. Sources say the story is developing...\",\"runSuccess\":\"📰 VERDICT: [{workflow_name}]({run_url}) has concluded. All systems operational. This is a developing story. 🎤\",\"runFailure\":\"📰 DEVELOPING STORY: [{workflow_name}]({run_url}) reports {status}. Our correspondents are investigating the incident...\"}"
-      GH_AW_WORKFLOW_ID: "smoke-copilot"
-      GH_AW_WORKFLOW_NAME: "Smoke Copilot"
+      GH_AW_WORKFLOW_ID: "security-review"
+      GH_AW_WORKFLOW_NAME: "Daily Security Review and Threat Modeling"
     outputs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
@@ -1129,7 +1377,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"hide_older_comments\":true,\"max\":1},\"add_labels\":{\"allowed\":[\"smoke-copilot\"]}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_discussion\":{\"category\":\"General\",\"expires\":168,\"max\":1,\"title_prefix\":\"[Security Review] \"}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |

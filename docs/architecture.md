@@ -75,25 +75,18 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
 ### Agent Execution Container (`containers/agent/`)
-- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
+- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
 - Mounts entire host filesystem at `/host` and user home directory for full access
-- Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
 - `NET_ADMIN` capability required for iptables setup during initialization
 - **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
   2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
-- **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
-  - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
-  - Automatically injects `--network awf-net` to all spawned containers
-  - Injects proxy environment variables: `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`
-  - Logs all intercepted commands to `/tmp/docker-wrapper.log` for debugging
 - Key iptables rules (in `setup-iptables.sh`):
   - Allow localhost traffic (for stdio MCP servers)
   - Allow DNS queries
   - Allow traffic to Squid proxy itself
   - Redirect all HTTP (port 80) and HTTPS (port 443) to Squid via DNAT (NAT table)
-  - **Note:** These NAT rules only apply to the agent container itself, not spawned containers
 
 ## Traffic Flow
 

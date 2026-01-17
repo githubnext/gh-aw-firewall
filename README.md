@@ -9,7 +9,6 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
-- **Docker-in-Docker Support**: Spawned containers inherit firewall restrictions
 
 ## Get started fast
 
@@ -113,7 +112,7 @@ sudo awf --help
 ## Explore the docs
 
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
-- [Usage guide](docs/usage.md) — CLI flags, domain allowlists, Docker-in-Docker examples
+- [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
