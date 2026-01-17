@@ -168,12 +168,19 @@ export async function isOpenSslAvailable(): Promise<boolean> {
 }
 
 /**
+ * Regex pattern for matching valid URL path characters.
+ * Uses character class instead of .* to prevent catastrophic backtracking (ReDoS).
+ * Matches common URL characters: alphanumeric, path separators, and safe special chars.
+ */
+const URL_CHAR_PATTERN = '[^\\s]*';
+
+/**
  * Parses URL patterns for SSL Bump ACL rules
  *
  * Converts user-friendly URL patterns into Squid url_regex ACL patterns.
  *
  * Examples:
- * - `https://github.com/githubnext/*` → `^https://github\.com/githubnext/.*`
+ * - `https://github.com/githubnext/*` → `^https://github\.com/githubnext/[^\s]*`
  * - `https://api.example.com/v1/users` → `^https://api\.example\.com/v1/users$`
  *
  * @param patterns - Array of URL patterns (can include wildcards)
@@ -184,22 +191,23 @@ export function parseUrlPatterns(patterns: string[]): string[] {
     // Remove trailing slash for consistency
     let p = pattern.replace(/\/$/, '');
 
-    // Preserve .* patterns by using a placeholder before escaping
+    // Preserve existing regex patterns (like [^\s]*) by using a placeholder before escaping
     const WILDCARD_PLACEHOLDER = '\x00WILDCARD\x00';
     p = p.replace(/\.\*/g, WILDCARD_PLACEHOLDER);
+    p = p.replace(/\[\^\\s\]\*/g, WILDCARD_PLACEHOLDER);
 
     // Escape regex special characters except *
     p = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
-    // Convert * wildcards to .* regex
-    p = p.replace(/\*/g, '.*');
+    // Convert * wildcards to safe pattern (prevents ReDoS)
+    p = p.replace(/\*/g, URL_CHAR_PATTERN);
 
-    // Restore .* patterns from placeholder
-    p = p.replace(new RegExp(WILDCARD_PLACEHOLDER, 'g'), '.*');
+    // Restore preserved patterns from placeholder
+    p = p.replace(new RegExp(WILDCARD_PLACEHOLDER, 'g'), URL_CHAR_PATTERN);
 
     // Anchor the pattern
-    // If pattern ends with .* (from wildcard), don't add end anchor
-    if (p.endsWith('.*')) {
+    // If pattern ends with the URL char pattern (from wildcard), don't add end anchor
+    if (p.endsWith(URL_CHAR_PATTERN)) {
       return `^${p}`;
     }
     // For exact matches, add end anchor

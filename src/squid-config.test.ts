@@ -1,6 +1,9 @@
 import { generateSquidConfig } from './squid-config';
 import { SquidConfig } from './types';
 
+// Pattern constant for the safer domain character class (matches the implementation)
+const DOMAIN_CHAR_PATTERN = '[a-zA-Z0-9.-]*';
+
 describe('generateSquidConfig', () => {
   const defaultPort = 3128;
 
@@ -610,7 +613,7 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains_regex dstdom_regex -i');
-      expect(result).toContain('^.*\\.github\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
     });
 
     it('should use separate ACLs for plain and pattern domains', () => {
@@ -621,7 +624,7 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains dstdomain .example.com');
       expect(result).toContain('acl allowed_domains_regex dstdom_regex -i');
-      expect(result).toContain('^.*\\.github\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
     });
 
     it('should combine ACLs in http_access rule when both present', () => {
@@ -664,7 +667,7 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       // api.github.com should be removed since *.github.com covers it
       expect(result).not.toContain('acl allowed_domains dstdomain .api.github.com');
-      expect(result).toContain('^.*\\.github\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
     });
 
     it('should handle middle wildcard patterns', () => {
@@ -673,7 +676,7 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('^api-.*\\.example\\.com$');
+      expect(result).toContain(`^api-${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
     });
 
     it('should handle multiple wildcard patterns', () => {
@@ -682,9 +685,9 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('^.*\\.github\\.com$');
-      expect(result).toContain('^.*\\.gitlab\\.com$');
-      expect(result).toContain('^api-.*\\.example\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.gitlab\\.com$`);
+      expect(result).toContain(`^api-${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
       // Should only have regex ACLs
       expect(result).not.toContain('acl allowed_domains dstdomain');
     });
@@ -745,7 +748,7 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i');
-      expect(result).toContain('^.*\\.example\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
       expect(result).toContain('http_access allow !CONNECT allowed_http_only_regex');
     });
 
@@ -756,7 +759,7 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i');
-      expect(result).toContain('^.*\\.secure\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.secure\\.com$`);
       expect(result).toContain('http_access allow CONNECT allowed_https_only_regex');
     });
 
@@ -767,11 +770,11 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       // HTTP-only pattern
-      expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i ^.*\\.api\\.com$');
+      expect(result).toContain(`acl allowed_http_only_regex dstdom_regex -i ^${DOMAIN_CHAR_PATTERN}\\.api\\.com$`);
       // HTTPS-only pattern
-      expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i ^.*\\.secure\\.com$');
+      expect(result).toContain(`acl allowed_https_only_regex dstdom_regex -i ^${DOMAIN_CHAR_PATTERN}\\.secure\\.com$`);
       // Both protocols pattern
-      expect(result).toContain('acl allowed_domains_regex dstdom_regex -i ^.*\\.both\\.com$');
+      expect(result).toContain(`acl allowed_domains_regex dstdom_regex -i ^${DOMAIN_CHAR_PATTERN}\\.both\\.com$`);
     });
   });
 
@@ -858,7 +861,7 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl blocked_domains_regex dstdom_regex -i');
-      expect(result).toContain('^.*\\.internal\\.example\\.com$');
+      expect(result).toContain(`^${DOMAIN_CHAR_PATTERN}\\.internal\\.example\\.com$`);
       expect(result).toContain('http_access deny blocked_domains_regex');
     });
 
@@ -1052,6 +1055,7 @@ describe('generateSquidConfig', () => {
     });
 
     it('should include URL pattern ACLs when provided', () => {
+      // URL patterns passed here are the output of parseUrlPatterns which now uses [^\s]*
       const config: SquidConfig = {
         domains: ['github.com'],
         port: defaultPort,
@@ -1061,11 +1065,11 @@ describe('generateSquidConfig', () => {
           keyPath: '/tmp/test/ssl/ca-key.pem',
         },
         sslDbPath: '/tmp/test/ssl_db',
-        urlPatterns: ['^https://github\\.com/githubnext/.*'],
+        urlPatterns: ['^https://github\\.com/githubnext/[^\\s]*'],
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_url_0 url_regex');
-      expect(result).toContain('^https://github\\.com/githubnext/.*');
+      expect(result).toContain('^https://github\\.com/githubnext/[^\\s]*');
     });
 
     it('should not include SSL Bump section when disabled', () => {
