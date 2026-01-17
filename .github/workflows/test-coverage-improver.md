@@ -2,7 +2,8 @@
 name: Test Coverage Improver
 description: Improve test coverage by adding tests to under-tested areas, prioritizing security-critical code
 on:
-  schedule: weekly
+  schedule:
+    - cron: "0 9 * * 1"  # Monday 9AM UTC
   workflow_dispatch:
 permissions:
   contents: read
