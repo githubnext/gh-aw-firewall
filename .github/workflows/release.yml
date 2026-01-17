@@ -61,7 +61,7 @@ jobs:
 
       - name: Build and push Squid image
         id: build_squid
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./containers/squid
           push: true
@@ -92,7 +92,7 @@ jobs:
 
       - name: Build and push Agent image
         id: build_agent
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./containers/agent
           push: true
