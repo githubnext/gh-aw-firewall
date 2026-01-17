@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentBaseImage } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -772,6 +772,76 @@ describe('cli', () => {
       // Dynamic import to get the constant
       const { DEFAULT_DNS_SERVERS } = await import('./cli');
       expect(DEFAULT_DNS_SERVERS).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+  });
+
+  describe('validateAgentBaseImage', () => {
+    describe('valid images', () => {
+      it('should accept official Ubuntu images', () => {
+        expect(validateAgentBaseImage('ubuntu:22.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ubuntu:24.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ubuntu:20.04')).toEqual({ valid: true });
+      });
+
+      it('should accept catthehacker runner images', () => {
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-22.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-24.04')).toEqual({ valid: true });
+      });
+
+      it('should accept catthehacker full images', () => {
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-22.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-24.04')).toEqual({ valid: true });
+      });
+
+      it('should accept images with SHA256 digest pinning', () => {
+        expect(validateAgentBaseImage('ubuntu:22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
+      });
+    });
+
+    describe('invalid images', () => {
+      it('should reject arbitrary images', () => {
+        const result = validateAgentBaseImage('malicious-registry.com/evil:latest');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject images with typos', () => {
+        const result = validateAgentBaseImage('ubunto:22.04');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject non-ubuntu official images', () => {
+        const result = validateAgentBaseImage('alpine:latest');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject unknown registries', () => {
+        const result = validateAgentBaseImage('docker.io/library/ubuntu:22.04');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject images from other catthehacker registries', () => {
+        const result = validateAgentBaseImage('ghcr.io/catthehacker/debian:latest');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject ubuntu with non-standard tags', () => {
+        const result = validateAgentBaseImage('ubuntu:latest');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject empty image string', () => {
+        const result = validateAgentBaseImage('');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
     });
   });
 });
