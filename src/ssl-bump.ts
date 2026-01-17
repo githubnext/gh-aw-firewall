@@ -68,6 +68,9 @@ export async function generateSessionCa(config: SslBumpConfig): Promise<CaFiles>
   try {
     // Generate RSA private key and self-signed certificate in one command
     // Using -batch to avoid interactive prompts
+    // Security: commonName defaults to 'AWF Session CA' and is only configurable
+    // via SslBumpConfig interface (not direct user input). The value is used in
+    // the certificate subject which is not shell-interpreted by OpenSSL.
     await execa('openssl', [
       'req',
       '-new',
@@ -75,6 +78,7 @@ export async function generateSessionCa(config: SslBumpConfig): Promise<CaFiles>
       '-days', validityDays.toString(),
       '-nodes', // No password on private key
       '-x509',
+      // eslint-disable-next-line rulesdir/no-unsafe-execa
       '-subj', `/CN=${commonName}`,
       '-keyout', keyPath,
       '-out', certPath,
