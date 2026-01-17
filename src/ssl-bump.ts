@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import execa from 'execa';
 import { logger } from './logger';
 
@@ -174,6 +175,7 @@ export async function isOpenSslAvailable(): Promise<boolean> {
  *
  * Security notes:
  * - Overwrites with cryptographically random data (3 passes)
+ * - Uses chunked writing for memory efficiency
  * - Syncs to disk to ensure overwrites are flushed
  * - File is deleted after wiping
  * - On failure, attempts to delete anyway (best-effort cleanup)
@@ -202,15 +204,22 @@ export async function secureWipeFile(filePath: string): Promise<void> {
     const fd = fs.openSync(filePath, 'w');
 
     try {
-      // Generate random data for overwriting
-      const { randomBytes } = await import('crypto');
+      // Use chunked writing for memory efficiency
+      // Chunk size of 64KB is a good balance between memory usage and performance
+      const chunkSize = 64 * 1024; // 64KB chunks
 
       // Perform 3 overwrite passes with random data
       // This provides defense-in-depth against simple recovery attempts
       for (let pass = 0; pass < 3; pass++) {
-        const randomData = randomBytes(fileSize);
-        fs.writeSync(fd, randomData, 0, fileSize, 0);
-        fs.fsyncSync(fd); // Force flush to disk
+        let bytesWritten = 0;
+        while (bytesWritten < fileSize) {
+          const remainingBytes = fileSize - bytesWritten;
+          const currentChunkSize = Math.min(chunkSize, remainingBytes);
+          const randomData = crypto.randomBytes(currentChunkSize);
+          fs.writeSync(fd, randomData, 0, currentChunkSize, bytesWritten);
+          bytesWritten += currentChunkSize;
+        }
+        fs.fsyncSync(fd); // Force flush to disk after each pass
       }
 
       logger.debug(`Securely wiped file (${fileSize} bytes, 3 passes): ${filePath}`);
