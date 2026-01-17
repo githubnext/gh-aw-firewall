@@ -774,4 +774,62 @@ describe('cli', () => {
       expect(DEFAULT_DNS_SERVERS).toEqual(['8.8.8.8', '8.8.4.4']);
     });
   });
+
+  describe('memory limit parsing', () => {
+    it('should parse valid memory limits with GB suffix', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(parseMemoryLimit('1g')).toBe('1g');
+      expect(parseMemoryLimit('2g')).toBe('2g');
+      expect(parseMemoryLimit('4g')).toBe('4g');
+      expect(parseMemoryLimit('8g')).toBe('8g');
+    });
+
+    it('should parse valid memory limits with MB suffix', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(parseMemoryLimit('512m')).toBe('512m');
+      expect(parseMemoryLimit('1024m')).toBe('1024m');
+      expect(parseMemoryLimit('64m')).toBe('64m');
+    });
+
+    it('should parse valid memory limits with KB suffix', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(parseMemoryLimit('65536k')).toBe('65536k');
+      expect(parseMemoryLimit('1048576k')).toBe('1048576k');
+    });
+
+    it('should handle uppercase suffixes', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(parseMemoryLimit('2G')).toBe('2g');
+      expect(parseMemoryLimit('512M')).toBe('512m');
+      // 65536k = 64MB (minimum)
+      expect(parseMemoryLimit('65536K')).toBe('65536k');
+    });
+
+    it('should throw error for invalid format', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(() => parseMemoryLimit('abc')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('2x')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('-1g')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('')).toThrow('Invalid memory limit format');
+    });
+
+    it('should throw error for memory below minimum', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(() => parseMemoryLimit('32m')).toThrow('Memory limit must be at least 64m');
+      expect(() => parseMemoryLimit('10m')).toThrow('Memory limit must be at least 64m');
+      expect(() => parseMemoryLimit('1k')).toThrow('Memory limit must be at least 64m');
+    });
+
+    it('should accept values at minimum threshold', async () => {
+      const { parseMemoryLimit } = await import('./cli');
+      expect(parseMemoryLimit('64m')).toBe('64m');
+    });
+  });
+
+  describe('DEFAULT_MEMORY_LIMIT', () => {
+    it('should have correct default memory limit', async () => {
+      const { DEFAULT_MEMORY_LIMIT } = await import('./cli');
+      expect(DEFAULT_MEMORY_LIMIT).toBe('2g');
+    });
+  });
 });

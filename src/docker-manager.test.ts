@@ -329,10 +329,28 @@ describe('docker-manager', () => {
       expect(agent.security_opt).toContain('no-new-privileges:true');
 
       // Verify resource limits
-      expect(agent.mem_limit).toBe('4g');
-      expect(agent.memswap_limit).toBe('4g');
+      expect(agent.mem_limit).toBe('2g');
+      expect(agent.memswap_limit).toBe('2g');
       expect(agent.pids_limit).toBe(1000);
       expect(agent.cpu_shares).toBe(1024);
+    });
+
+    it('should use custom memory limit when specified', () => {
+      const configWithMemLimit = { ...mockConfig, memoryLimit: '4g' };
+      const result = generateDockerCompose(configWithMemLimit, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.mem_limit).toBe('4g');
+      expect(agent.memswap_limit).toBe('4g');
+    });
+
+    it('should use custom memory limit with MB units', () => {
+      const configWithMemLimit = { ...mockConfig, memoryLimit: '512m' };
+      const result = generateDockerCompose(configWithMemLimit, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.mem_limit).toBe('512m');
+      expect(agent.memswap_limit).toBe('512m');
     });
 
     it('should disable TTY by default to prevent ANSI escape sequences', () => {

@@ -396,9 +396,10 @@ export function generateDockerCompose(
       'no-new-privileges:true',
       `seccomp=${config.workDir}/seccomp-profile.json`,
     ],
-    // Resource limits to prevent DoS attacks (conservative defaults)
-    mem_limit: '4g',           // 4GB memory limit
-    memswap_limit: '4g',       // No swap (same as mem_limit)
+    // Resource limits to prevent DoS attacks
+    // Memory limit is configurable via --memory-limit flag (default: 2g)
+    mem_limit: config.memoryLimit || '2g',
+    memswap_limit: config.memoryLimit || '2g', // No swap (same as mem_limit)
     pids_limit: 1000,          // Max 1000 processes
     cpu_shares: 1024,          // Default CPU share
     stdin_open: true,
