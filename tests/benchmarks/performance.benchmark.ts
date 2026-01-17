@@ -16,6 +16,7 @@ import { cleanup } from '../fixtures/cleanup';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import execa = require('execa');
 
 describe('Performance Benchmarks', () => {
   let runner: AwfRunner;
@@ -164,9 +165,9 @@ describe('Performance Benchmarks', () => {
         'MB',
         async () => {
           // Start containers and keep them running
-          const result = await runner.runWithSudo(
-            // Wait a bit then output container memory stats
-            'sleep 2 && cat /proc/meminfo | grep MemAvailable',
+          await runner.runWithSudo(
+            // Wait a bit for containers to stabilize
+            'sleep 2',
             {
               allowDomains: ['github.com'],
               keepContainers: true,
@@ -176,9 +177,8 @@ describe('Performance Benchmarks', () => {
           );
 
           // Get memory stats from Docker
-          let memoryMb = 0;
+          let memoryMb = -1; // Use -1 as sentinel for measurement failure
           try {
-            const execa = require('execa');
             const { stdout } = await execa('docker', [
               'stats',
               '--no-stream',
@@ -189,9 +189,11 @@ describe('Performance Benchmarks', () => {
             ]);
 
             // Parse memory usage (format: "15.2MiB / 1.9GiB")
+            memoryMb = 0;
             const lines = stdout.trim().split('\n');
             for (const line of lines) {
-              const match = line.match(/^([\d.]+)(MiB|GiB|MB|GB)/);
+              // Match memory usage anywhere in the line
+              const match = line.match(/([\d.]+)(MiB|GiB|MB|GB)/);
               if (match) {
                 const value = parseFloat(match[1]);
                 const unit = match[2];
@@ -202,12 +204,22 @@ describe('Performance Benchmarks', () => {
                 }
               }
             }
+
+            // If we parsed lines but got 0, that's suspicious
+            if (memoryMb === 0 && lines.length > 0) {
+              console.warn('Warning: Docker stats returned data but memory parsing yielded 0');
+            }
           } catch (error) {
-            console.log('Failed to get memory stats:', error);
+            console.error('Failed to get Docker memory stats for containers:', error);
           }
 
           // Clean up
           await cleanup(false);
+
+          // Return sentinel value if measurement completely failed
+          if (memoryMb < 0) {
+            throw new Error('Memory measurement failed - Docker stats unavailable');
+          }
 
           return memoryMb;
         }
