@@ -12,6 +12,7 @@
     "test": "jest",
     "test:unit": "jest --config jest.config.js",
     "test:integration": "jest --config tests/setup/jest.integration.config.js",
+    "test:benchmark": "jest --config tests/setup/jest.benchmark.config.js",
     "test:all": "npm run test:unit && npm run test:integration",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

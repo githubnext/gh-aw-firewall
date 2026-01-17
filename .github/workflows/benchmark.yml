@@ -1,0 +1,73 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of benchmark iterations'
+        required: false
+        default: '3'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-benchmark cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run performance benchmarks
+        id: run-benchmarks
+        run: |
+          sudo -E npm run test:benchmark 2>&1 | tee benchmark-output.log
+        continue-on-error: true
+
+      - name: Generate benchmark summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-benchmark-summary.ts benchmark-output.log
+
+      - name: Check benchmark results
+        if: steps.run-benchmarks.outcome == 'failure'
+        run: exit 1
+
+      - name: Post-benchmark cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: benchmark-report
+          path: |
+            /tmp/awf-benchmark-report.json
+            benchmark-output.log
+          retention-days: 30
