@@ -876,5 +876,38 @@ describe('cli', () => {
         expect(result.error).toContain('@sha256:');
       });
     });
+
+    describe('regex pattern coverage', () => {
+      // Ensure each regex pattern in SAFE_BASE_IMAGE_PATTERNS is individually tested
+      it('should match pattern 1: plain ubuntu version', () => {
+        expect(validateAgentBaseImage('ubuntu:18.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ubuntu:26.10')).toEqual({ valid: true });
+      });
+
+      it('should match pattern 2: catthehacker runner/full without digest', () => {
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-18.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-26.10')).toEqual({ valid: true });
+      });
+
+      it('should match pattern 3: catthehacker with SHA256 digest', () => {
+        const digest = 'sha256:' + '1234567890abcdef'.repeat(4);
+        expect(validateAgentBaseImage(`ghcr.io/catthehacker/ubuntu:runner-22.04@${digest}`)).toEqual({ valid: true });
+        expect(validateAgentBaseImage(`ghcr.io/catthehacker/ubuntu:full-24.04@${digest}`)).toEqual({ valid: true });
+      });
+
+      it('should match pattern 4: plain ubuntu with SHA256 digest', () => {
+        const digest = 'sha256:' + 'abcdef1234567890'.repeat(4);
+        expect(validateAgentBaseImage(`ubuntu:22.04@${digest}`)).toEqual({ valid: true });
+        expect(validateAgentBaseImage(`ubuntu:24.04@${digest}`)).toEqual({ valid: true });
+      });
+
+      it('should reject images that almost match but do not exactly', () => {
+        // Nearly matching but invalid
+        expect(validateAgentBaseImage('ubuntu:22.04 ').valid).toBe(false); // trailing space
+        expect(validateAgentBaseImage(' ubuntu:22.04').valid).toBe(false); // leading space  
+        expect(validateAgentBaseImage('Ubuntu:22.04').valid).toBe(false); // capital U
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:Runner-22.04').valid).toBe(false); // capital R
+      });
+    });
   });
 });
