@@ -8,8 +8,8 @@ This document outlines the supported Node.js versions, operating systems, and ot
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| Node.js 22.x | ✅ Fully Supported | Recommended for best performance |
-| Node.js 20.x | ✅ Fully Supported | Current LTS |
+| Node.js 22.x | ✅ Fully Supported | Active LTS (recommended) |
+| Node.js 20.x | ✅ Fully Supported | Maintenance LTS |
 | Node.js 18.x | ✅ Supported | Minimum required version |
 | Node.js < 18 | ❌ Not Supported | Below minimum engine requirement |
 
