@@ -127,6 +127,43 @@ export function parseDnsServers(input: string): string[] {
 }
 
 /**
+ * Default memory limit for the agent container
+ */
+export const DEFAULT_MEMORY_LIMIT = '2g';
+
+/**
+ * Validates and parses a memory limit string
+ * @param input - Memory limit string (e.g., "2g", "512m", "4096m")
+ * @returns The validated memory limit string
+ * @throws Error if the format is invalid
+ */
+export function parseMemoryLimit(input: string): string {
+  const trimmed = input.trim().toLowerCase();
+  
+  // Match format: positive integer followed by 'm' or 'g'
+  const match = trimmed.match(/^(\d+)([mg])$/);
+  
+  if (!match) {
+    throw new Error(
+      `Invalid memory limit format: ${input}. ` +
+      `Expected format: <number>m or <number>g (e.g., 512m, 1g, 2g, 4g)`
+    );
+  }
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  
+  if (value <= 0) {
+    throw new Error(
+      `Memory limit must be a positive number: ${input}`
+    );
+  }
+  
+  // Return normalized format
+  return `${value}${unit}`;
+}
+
+/**
  * Escapes a shell argument by wrapping it in single quotes and escaping any single quotes within it
  * @param arg - Argument to escape
  * @returns Escaped argument safe for shell execution
@@ -407,6 +444,12 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/githubnext/*'
   )
+  .option(
+    '--memory-limit <limit>',
+    'Memory limit for the agent container (e.g., 512m, 1g, 2g, 4g, 8g).\n' +
+    '                                   Default: 2g. AI workloads may require higher limits.',
+    '2g'
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -608,6 +651,15 @@ program
       logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
     }
 
+    // Parse and validate memory limit
+    let memoryLimit: string;
+    try {
+      memoryLimit = parseMemoryLimit(options.memoryLimit);
+    } catch (error) {
+      logger.error(`Invalid memory limit: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -629,6 +681,7 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
+      memoryLimit,
     };
 
     // Warn if --env-all is used

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, parseMemoryLimit, DEFAULT_MEMORY_LIMIT } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -772,6 +772,61 @@ describe('cli', () => {
       // Dynamic import to get the constant
       const { DEFAULT_DNS_SERVERS } = await import('./cli');
       expect(DEFAULT_DNS_SERVERS).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+  });
+
+  describe('memory limit parsing', () => {
+    it('should accept valid memory limits in gigabytes', () => {
+      expect(parseMemoryLimit('1g')).toBe('1g');
+      expect(parseMemoryLimit('2g')).toBe('2g');
+      expect(parseMemoryLimit('4g')).toBe('4g');
+      expect(parseMemoryLimit('8g')).toBe('8g');
+      expect(parseMemoryLimit('16g')).toBe('16g');
+    });
+
+    it('should accept valid memory limits in megabytes', () => {
+      expect(parseMemoryLimit('512m')).toBe('512m');
+      expect(parseMemoryLimit('1024m')).toBe('1024m');
+      expect(parseMemoryLimit('2048m')).toBe('2048m');
+    });
+
+    it('should be case-insensitive', () => {
+      expect(parseMemoryLimit('2G')).toBe('2g');
+      expect(parseMemoryLimit('2g')).toBe('2g');
+      expect(parseMemoryLimit('512M')).toBe('512m');
+      expect(parseMemoryLimit('512m')).toBe('512m');
+    });
+
+    it('should trim whitespace', () => {
+      expect(parseMemoryLimit('  2g  ')).toBe('2g');
+      expect(parseMemoryLimit('\t4g\n')).toBe('4g');
+    });
+
+    it('should reject invalid formats', () => {
+      expect(() => parseMemoryLimit('2x')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('abc')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('2gb')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('2 g')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('g')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('2')).toThrow('Invalid memory limit format');
+    });
+
+    it('should reject negative or zero values', () => {
+      expect(() => parseMemoryLimit('-1g')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('0g')).toThrow('Memory limit must be a positive number');
+      expect(() => parseMemoryLimit('0m')).toThrow('Memory limit must be a positive number');
+    });
+
+    it('should reject floating point values', () => {
+      expect(() => parseMemoryLimit('2.5g')).toThrow('Invalid memory limit format');
+      expect(() => parseMemoryLimit('1.5m')).toThrow('Invalid memory limit format');
+    });
+  });
+
+  describe('DEFAULT_MEMORY_LIMIT', () => {
+    it('should have correct default memory limit of 2g', () => {
+      expect(DEFAULT_MEMORY_LIMIT).toBe('2g');
     });
   });
 });

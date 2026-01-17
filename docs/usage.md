@@ -17,6 +17,8 @@ Options:
   --ssl-bump                 Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
                              Example: https://github.com/githubnext/*,https://api.github.com/repos/*
+  --memory-limit <limit>     Memory limit for agent container (default: 2g)
+                             Examples: 512m, 1g, 2g, 4g, 8g
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
@@ -341,6 +343,49 @@ SSL Bump requires intercepting HTTPS traffic:
 - Traffic is re-encrypted between proxy and destination
 
 For more details, see [SSL Bump documentation](ssl-bump.md).
+
+## Memory Limits
+
+The agent container has a configurable memory limit to prevent resource exhaustion DoS attacks in shared environments. The default limit is **2GB**, which is sufficient for most commands.
+
+### Adjusting Memory Limits
+
+Use `--memory-limit` to override the default:
+
+```bash
+# Default: 2GB (sufficient for most commands)
+sudo awf --allow-domains github.com -- curl https://api.github.com
+
+# AI agent workload that needs more memory
+sudo awf --memory-limit 8g --allow-domains api.openai.com \
+  -- 'npx @github/copilot@latest -p "analyze large codebase"'
+
+# Conservative limit for untrusted code
+sudo awf --memory-limit 1g --allow-domains registry.npmjs.org -- npm install
+
+# Large language model inference
+sudo awf --memory-limit 16g --allow-domains huggingface.co \
+  -- 'python run_model.py'
+```
+
+### Recommended Limits
+
+| Workload | Recommended Limit | Notes |
+|----------|------------------|-------|
+| Simple HTTP requests | 512m - 1g | curl, wget, simple scripts |
+| npm install | 1g - 2g | Standard package installations |
+| General development | 2g (default) | Build tools, linting, testing |
+| GitHub Copilot CLI | 4g | AI-powered code generation |
+| LLM inference | 8g - 16g | Large models, embedding generation |
+| Large codebase analysis | 8g+ | Semantic code analysis |
+
+### Format
+
+The memory limit accepts values with a unit suffix:
+- `m` for megabytes (e.g., `512m`, `1024m`)
+- `g` for gigabytes (e.g., `1g`, `2g`, `4g`, `8g`)
+
+Invalid formats will result in an error with guidance on the expected format.
 
 ## Limitations
 
