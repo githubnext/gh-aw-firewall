@@ -13,6 +13,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Skip validation for dependabot PRs (they use their own title format)
+          ignoreLabels: |
+            dependencies
           # Configure which types are allowed
           types: |
             feat
