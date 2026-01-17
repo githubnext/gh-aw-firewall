@@ -135,6 +135,26 @@ sudo awf --help
 - Run tests: `npm test`
 - Build: `npm run build`
 
+### Security Testing
+
+The firewall includes automated escape tests that validate the defense-in-depth architecture by attempting various bypass techniques:
+
+| Test Category | Description | Protection Mechanism |
+|---------------|-------------|---------------------|
+| DNS Exfiltration | Unauthorized DNS servers, DNS tunneling | iptables DNS rules |
+| Port Scanning | Dangerous ports (22, 3306, 5432, etc.) | iptables port blacklist |
+| iptables Modification | Flush/insert/delete rules | CAP_NET_ADMIN dropped |
+| Container Escape | mount, ptrace, kernel modules | seccomp profile |
+| Protocol Bypass | Raw sockets, non-HTTP/HTTPS traffic | CAP_NET_RAW restriction |
+| Domain Validation | Pattern handling edge cases | Domain normalization |
+
+Run security tests locally:
+```bash
+npm run test:integration -- --testPathPattern="firewall-escape"
+```
+
+These tests run automatically on every PR to ensure security controls remain effective.
+
 ## Contributing
 
 Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

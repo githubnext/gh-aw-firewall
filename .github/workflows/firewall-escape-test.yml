@@ -1,0 +1,79 @@
+name: Firewall Escape Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firewall-escape-tests:
+    name: Firewall Escape Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install awf globally
+        run: sudo npm link
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run firewall escape tests
+        run: |
+          npm run test:integration -- --testPathPattern="firewall-escape" --verbose
+        env:
+          CI: true
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firewall-escape-test-logs
+          path: |
+            /tmp/awf-*/
+            /tmp/awf-agent-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🔐 Firewall Escape Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow tests various attack vectors to validate the firewall's defense-in-depth architecture:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Categories" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Description |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| DNS Exfiltration | Blocks queries to unauthorized DNS servers |" >> $GITHUB_STEP_SUMMARY
+          echo "| Port Scanning | Blocks dangerous ports (22, 3306, 5432, etc.) |" >> $GITHUB_STEP_SUMMARY
+          echo "| iptables Modification | Blocks firewall rule changes (CAP_NET_ADMIN dropped) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Escape | Blocks mount, ptrace, kernel modules (seccomp) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Protocol Bypass | Blocks raw sockets, non-HTTP/HTTPS traffic |" >> $GITHUB_STEP_SUMMARY
+          echo "| Domain Validation | Validates domain pattern handling |" >> $GITHUB_STEP_SUMMARY
