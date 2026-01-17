@@ -135,7 +135,7 @@ The CA private key grants the ability to impersonate any HTTPS site for the dura
 | Storage Location | `/tmp/awf-<timestamp>/ssl/ca-key.pem` |
 | File Permissions | `0600` (owner read/write only) |
 | Validity | 1 day maximum |
-| Cleanup | Deleted when session ends |
+| Cleanup | Securely wiped (overwritten with random data) then deleted |
 
 **Risk scenarios:**
 1. **Multi-user systems**: Other users may read `/tmp` contents
@@ -147,11 +147,19 @@ The CA private key grants the ability to impersonate any HTTPS site for the dura
 - Per-session unique CA (not shared across sessions)
 - Short validity period (1 day)
 - Restrictive file permissions (0600)
+- **Secure key wiping**: Private key overwritten with random data (3 passes) before deletion
+- **tmpfs for SSL certificate database**: Dynamically generated certificates stored in memory-only filesystem
 - Key mounted read-only into Squid container
 - Container security hardening (dropped capabilities)
 
 :::tip[Session Isolation]
 Each awf execution uses a unique CA certificate. Old session certificates become useless after cleanup.
+:::
+
+:::tip[Best Practices for Maximum Security]
+- Ensure `/tmp` is mounted as tmpfs on your system (common on Linux)
+- Use `--keep-containers` sparingly in production environments
+- Avoid SSL Bump in multi-tenant or untrusted environments
 :::
 
 ### Trust Store Modification

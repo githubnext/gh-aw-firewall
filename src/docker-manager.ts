@@ -6,7 +6,7 @@ import execa from 'execa';
 import { DockerComposeConfig, WrapperConfig, BlockedTarget } from './types';
 import { logger } from './logger';
 import { generateSquidConfig } from './squid-config';
-import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
+import { generateSessionCa, CaFiles, parseUrlPatterns, cleanupSslBumpFiles } from './ssl-bump';
 
 const SQUID_PORT = 3128;
 const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
@@ -182,11 +182,11 @@ export function generateDockerCompose(
   ];
 
   // Add SSL-related volumes if SSL Bump is enabled
+  // Note: SSL database is NOT mounted as a volume - we use tmpfs instead (see below)
+  // This keeps dynamically generated certificates in memory only for security
   if (sslConfig) {
     squidVolumes.push(`${sslConfig.caFiles.certPath}:${sslConfig.caFiles.certPath}:ro`);
     squidVolumes.push(`${sslConfig.caFiles.keyPath}:${sslConfig.caFiles.keyPath}:ro`);
-    // Mount SSL database at /var/spool/squid_ssl_db (Squid's expected location)
-    squidVolumes.push(`${sslConfig.sslDbPath}:/var/spool/squid_ssl_db:rw`);
   }
 
   // Squid service configuration
@@ -218,6 +218,15 @@ export function generateDockerCompose(
       'SETFCAP',      // No setting file capabilities
     ],
   };
+
+  // Add tmpfs for SSL certificate database when SSL Bump is enabled
+  // This keeps dynamically generated certificates in memory only
+  // Size limit prevents DoS attacks; mode 0700 restricts access to owner
+  if (sslConfig) {
+    squidService.tmpfs = {
+      '/var/spool/squid_ssl_db': 'size=64m,mode=0700',
+    };
+  }
 
   // Only enable host.docker.internal when explicitly requested via --enable-host-access
   // This allows containers to reach services on the host machine (e.g., MCP gateways)
@@ -481,11 +490,13 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     logger.info('SSL Bump enabled - generating per-session CA certificate...');
     try {
       const caFiles = await generateSessionCa({ workDir: config.workDir });
-      const sslDbPath = await initSslDb(config.workDir);
-      sslConfig = { caFiles, sslDbPath };
+      // Note: SSL database is now initialized in the container on tmpfs (memory-only)
+      // See containers/squid/entrypoint.sh for initialization
+      sslConfig = { caFiles, sslDbPath: '/var/spool/squid_ssl_db' };
       logger.info('SSL Bump CA certificate generated successfully');
       logger.warn('⚠️  SSL Bump mode: HTTPS traffic will be intercepted for URL inspection');
       logger.warn('   A per-session CA certificate has been generated (valid for 1 day)');
+      logger.info('   SSL certificate database will use tmpfs (memory-only storage)');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to generate SSL Bump CA: ${message}`);
@@ -839,6 +850,10 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
           }
         }
       }
+
+      // Securely wipe SSL Bump private key before cleaning up workDir
+      // This provides defense-in-depth against key recovery attacks
+      await cleanupSslBumpFiles(workDir);
 
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });

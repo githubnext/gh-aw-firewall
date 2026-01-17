@@ -756,6 +756,20 @@ export interface DockerService {
    * @example '/workspace'
    */
   working_dir?: string;
+
+  /**
+   * tmpfs mounts for in-memory filesystems
+   *
+   * Creates temporary filesystems in memory that are not persisted to disk.
+   * Useful for storing sensitive data like private keys that should not
+   * be written to persistent storage.
+   *
+   * Array of paths or mapping of paths to options.
+   *
+   * @example ['/run/secrets']
+   * @example { '/run/secrets': 'size=64m,mode=0700' }
+   */
+  tmpfs?: string[] | Record<string, string>;
 }
 
 /**

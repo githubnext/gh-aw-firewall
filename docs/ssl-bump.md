@@ -168,6 +168,7 @@ The CA private key grants the ability to impersonate any HTTPS site for the dura
 - Stored in `/tmp/awf-<timestamp>/ssl/ca-key.pem`
 - Protected with file permissions `0600` (owner read/write only)
 - Exists only for the session duration
+- Securely wiped (overwritten with random data) before deletion
 
 **Risk scenarios:**
 1. **Multi-user systems**: Other users may be able to read `/tmp` contents depending on system configuration
@@ -179,8 +180,15 @@ The CA private key grants the ability to impersonate any HTTPS site for the dura
 - Per-session unique CA (not shared across sessions)
 - Short validity period (1 day)
 - Restrictive file permissions (0600)
+- **Secure key wiping**: Private key is overwritten with random data (3 passes) before deletion
+- **tmpfs for SSL certificate database**: Dynamically generated certificates are stored in memory-only filesystem inside the container
 - Key is mounted read-only into Squid container
 - Container security hardening (dropped capabilities, seccomp)
+
+**Best practices for maximum security:**
+- Ensure `/tmp` is mounted as tmpfs on your system (common on Linux)
+- Use `--keep-containers` sparingly in production environments
+- Avoid SSL Bump in multi-tenant or untrusted environments
 
 ### Certificate Validity
 

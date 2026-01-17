@@ -168,6 +168,141 @@ export async function isOpenSslAvailable(): Promise<boolean> {
 }
 
 /**
+ * Securely wipes a file by overwriting its contents with random data
+ * before deletion. This provides defense-in-depth against key recovery
+ * attacks if the underlying storage is compromised.
+ *
+ * Security notes:
+ * - Overwrites with cryptographically random data (3 passes)
+ * - Syncs to disk to ensure overwrites are flushed
+ * - File is deleted after wiping
+ * - On failure, attempts to delete anyway (best-effort cleanup)
+ *
+ * @param filePath - Path to the file to securely wipe
+ * @throws Error if file operations fail (after attempting cleanup)
+ */
+export async function secureWipeFile(filePath: string): Promise<void> {
+  if (!fs.existsSync(filePath)) {
+    logger.debug(`File not found for secure wipe: ${filePath}`);
+    return;
+  }
+
+  try {
+    const stats = fs.statSync(filePath);
+    const fileSize = stats.size;
+
+    if (fileSize === 0) {
+      // Empty file, just delete it
+      fs.unlinkSync(filePath);
+      logger.debug(`Deleted empty file: ${filePath}`);
+      return;
+    }
+
+    // Open file for writing (not appending)
+    const fd = fs.openSync(filePath, 'w');
+
+    try {
+      // Generate random data for overwriting
+      const { randomBytes } = await import('crypto');
+
+      // Perform 3 overwrite passes with random data
+      // This provides defense-in-depth against simple recovery attempts
+      for (let pass = 0; pass < 3; pass++) {
+        const randomData = randomBytes(fileSize);
+        fs.writeSync(fd, randomData, 0, fileSize, 0);
+        fs.fsyncSync(fd); // Force flush to disk
+      }
+
+      logger.debug(`Securely wiped file (${fileSize} bytes, 3 passes): ${filePath}`);
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    // Delete the file after wiping
+    fs.unlinkSync(filePath);
+    logger.debug(`Deleted file after secure wipe: ${filePath}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Secure wipe failed for ${filePath}: ${message}`);
+
+    // Best-effort cleanup: try to delete even if wipe failed
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        logger.debug(`Deleted file after failed secure wipe: ${filePath}`);
+      }
+    } catch {
+      // Ignore deletion errors - we tried our best
+    }
+  }
+}
+
+/**
+ * Cleans up SSL Bump files with secure key wiping
+ *
+ * This function should be called during cleanup to ensure the CA private key
+ * is securely wiped before the working directory is deleted. This provides
+ * defense-in-depth against key recovery in case of:
+ * - Container escape scenarios
+ * - Host filesystem compromise
+ * - Incomplete cleanup due to crashes
+ *
+ * @param workDir - Working directory containing SSL files
+ */
+export async function cleanupSslBumpFiles(workDir: string): Promise<void> {
+  const sslDir = path.join(workDir, 'ssl');
+  const keyPath = path.join(sslDir, 'ca-key.pem');
+
+  // Securely wipe the private key first (most sensitive)
+  if (fs.existsSync(keyPath)) {
+    logger.debug('Securely wiping SSL Bump CA private key...');
+    await secureWipeFile(keyPath);
+  }
+
+  // The certificate and DER files are not sensitive (public),
+  // but we can delete them normally
+  const certPath = path.join(sslDir, 'ca-cert.pem');
+  const derPath = path.join(sslDir, 'ca-cert.der');
+
+  for (const filePath of [certPath, derPath]) {
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        logger.debug(`Deleted SSL file: ${filePath}`);
+      } catch (error) {
+        logger.debug(`Failed to delete SSL file ${filePath}:`, error);
+      }
+    }
+  }
+
+  // Clean up the SSL database directory
+  const sslDbPath = path.join(workDir, 'ssl_db');
+  if (fs.existsSync(sslDbPath)) {
+    try {
+      fs.rmSync(sslDbPath, { recursive: true, force: true });
+      logger.debug(`Deleted SSL database directory: ${sslDbPath}`);
+    } catch (error) {
+      logger.debug(`Failed to delete SSL database ${sslDbPath}:`, error);
+    }
+  }
+
+  // Remove the ssl directory if it's empty
+  if (fs.existsSync(sslDir)) {
+    try {
+      const remaining = fs.readdirSync(sslDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(sslDir);
+        logger.debug(`Removed empty SSL directory: ${sslDir}`);
+      }
+    } catch (error) {
+      logger.debug(`Failed to clean up SSL directory ${sslDir}:`, error);
+    }
+  }
+
+  logger.debug('SSL Bump cleanup completed');
+}
+
+/**
  * Parses URL patterns for SSL Bump ACL rules
  *
  * Converts user-friendly URL patterns into Squid url_regex ACL patterns.
