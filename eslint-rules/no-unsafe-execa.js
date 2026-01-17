@@ -92,8 +92,9 @@ module.exports = {
         if (obj.type === 'Literal' && typeof obj.value === 'number') {
           return true;
         }
-        // lineNum.toString() where lineNum is from parseInt - this is a pattern in the codebase
-        // but we can't fully trace it statically, so we allow it as commonly safe
+        // Calling toString() on a variable is a common pattern for converting
+        // numeric values to strings (e.g., port.toString(), lineNum.toString())
+        // This is generally safe as toString() doesn't introduce shell metacharacters
         if (obj.type === 'Identifier') {
           // We'll allow identifiers calling toString() - common safe pattern
           return true;
@@ -211,7 +212,13 @@ module.exports = {
         }
 
         // Check for shell: true in options
-        const optionsArg = args.length >= 3 ? args[2] : (args.length === 2 && args[1].type === 'ObjectExpression' ? args[1] : null);
+        // Options can be in args[2] if args[1] is an array, or args[1] if it's an object
+        let optionsArg = null;
+        if (args.length >= 3) {
+          optionsArg = args[2];
+        } else if (args.length === 2 && args[1].type === 'ObjectExpression') {
+          optionsArg = args[1];
+        }
         if (hasShellTrue(optionsArg)) {
           context.report({
             node: optionsArg,

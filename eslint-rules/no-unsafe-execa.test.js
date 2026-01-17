@@ -6,7 +6,7 @@
  */
 
 const { RuleTester } = require('eslint');
-const rule = require('../eslint-rules/no-unsafe-execa');
+const rule = require('./no-unsafe-execa');
 
 const ruleTester = new RuleTester({
   parserOptions: {
