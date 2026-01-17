@@ -168,9 +168,9 @@ export async function isOpenSslAvailable(): Promise<boolean> {
 }
 
 /**
- * Regex pattern for matching valid URL path characters.
+ * Regex pattern for matching URL path characters.
  * Uses character class instead of .* to prevent catastrophic backtracking (ReDoS).
- * Matches common URL characters: alphanumeric, path separators, and safe special chars.
+ * Matches any non-whitespace character, which is appropriate for URL paths.
  */
 const URL_CHAR_PATTERN = '[^\\s]*';
 
@@ -191,10 +191,9 @@ export function parseUrlPatterns(patterns: string[]): string[] {
     // Remove trailing slash for consistency
     let p = pattern.replace(/\/$/, '');
 
-    // Preserve existing regex patterns (like [^\s]*) by using a placeholder before escaping
+    // Preserve existing .* patterns by using a placeholder before escaping
     const WILDCARD_PLACEHOLDER = '\x00WILDCARD\x00';
     p = p.replace(/\.\*/g, WILDCARD_PLACEHOLDER);
-    p = p.replace(/\[\^\\s\]\*/g, WILDCARD_PLACEHOLDER);
 
     // Escape regex special characters except *
     p = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
