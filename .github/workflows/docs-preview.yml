@@ -3,10 +3,6 @@ name: Documentation Preview
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'docs-site/**'
-      - 'docs/**'
-      - '.github/workflows/docs-preview.yml'
   pull_request_target:
     types: [closed]
 
@@ -20,11 +16,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-preview:
-    name: Build and Deploy Preview
+  build-preview:
+    name: Build Documentation Preview
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
     timeout-minutes: 10
+    outputs:
+      artifact-url: ${{ steps.upload-artifact.outputs.artifact-url }}
 
     steps:
       - name: Checkout PR source code
@@ -47,7 +45,6 @@ jobs:
           cd docs-site
           npm run build
         env:
-          # Use PR-specific base path for preview
           NODE_ENV: production
 
       - name: Upload preview artifact
@@ -76,7 +73,6 @@ jobs:
               description: `Documentation preview for PR #${context.payload.pull_request.number}`
             });
             
-            // Set deployment status to success with artifact link
             const artifactUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts`;
             
             await github.rest.repos.createDeploymentStatus({
@@ -91,38 +87,129 @@ jobs:
             
             return { deploymentId: deployment.id, artifactUrl };
 
-      - name: Comment on PR
+  preview-with-copilot:
+    name: Generate Documentation Preview with Copilot
+    runs-on: ubuntu-latest
+    needs: build-preview
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout PR source code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      - name: Download preview artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docs-preview-pr-${{ github.event.pull_request.number }}
+          path: docs-preview
+
+      - name: Install serve
+        run: npm install -g serve
+
+      - name: Start local preview server
+        run: |
+          serve docs-preview -l 3000 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          # Wait for server to be ready
+          sleep 3
+
+      - name: Generate preview screenshot and comment
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Install Playwright
+            execSync('npx playwright install chromium', { stdio: 'inherit' });
+            
+            // Create screenshot script
+            const screenshotScript = `
+            const { chromium } = require('playwright');
+            
+            (async () => {
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
+              await page.setViewportSize({ width: 1280, height: 800 });
+              
+              // Navigate to the local preview
+              await page.goto('http://localhost:3000/gh-aw-firewall/', { 
+                waitUntil: 'networkidle',
+                timeout: 30000 
+              });
+              
+              // Wait for content to load
+              await page.waitForTimeout(2000);
+              
+              // Take screenshot
+              await page.screenshot({ 
+                path: 'docs-preview-screenshot.png',
+                fullPage: false
+              });
+              
+              // Get page title for the comment
+              const title = await page.title();
+              console.log('PAGE_TITLE=' + title);
+              
+              await browser.close();
+            })();
+            `;
+            
+            fs.writeFileSync('take-screenshot.js', screenshotScript);
+            
+            // Run screenshot script
+            const output = execSync('node take-screenshot.js', { encoding: 'utf-8' });
+            const titleMatch = output.match(/PAGE_TITLE=(.+)/);
+            const pageTitle = titleMatch ? titleMatch[1] : 'Documentation Preview';
+            
             const prNumber = context.payload.pull_request.number;
             const runId = context.runId;
             const artifactUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}/artifacts`;
+            const commitSha = context.payload.pull_request.head.sha.substring(0, 7);
             
+            // Create comment with link to screenshot artifact
             const commentBody = `## 📚 Documentation Preview
             
-            A preview of your documentation changes has been built and is available for download.
+            A preview of the documentation has been built and reviewed using Playwright.
+            
+            ### 📸 Preview Screenshot
+            
+            The documentation homepage screenshot has been captured and is available as an artifact.
+            
+            **Page Title:** ${pageTitle}
+            
+            > 💡 Download the \`docs-preview-screenshot-pr-${prNumber}\` artifact to view the screenshot.
+            
+            ### Resources
             
             | Resource | Link |
             |----------|------|
-            | 📦 **Preview Artifact** | [Download docs-preview-pr-${prNumber}](${artifactUrl}) |
+            | 📷 **Screenshot** | [Download Screenshot](${artifactUrl}) |
+            | 📦 **Full Preview** | [Download docs-preview-pr-${prNumber}](${artifactUrl}) |
             | 🔧 **Workflow Run** | [View Build Logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}) |
             
             <details>
-            <summary>How to view the preview</summary>
+            <summary>How to view the full preview locally</summary>
             
-            1. Download the artifact from the link above
+            1. Download the \`docs-preview-pr-${prNumber}\` artifact from the link above
             2. Extract the zip file
-            3. Open \`index.html\` in your browser, or serve locally with:
+            3. Serve locally with:
                \`\`\`bash
                npx serve .
                \`\`\`
+            4. Open http://localhost:3000/gh-aw-firewall/ in your browser
             
             </details>
             
             ---
-            *Preview generated from commit ${context.payload.pull_request.head.sha.substring(0, 7)}*`;
+            *Preview generated from commit ${commitSha} using Playwright*`;
             
             // Find existing preview comment
             const { data: comments } = await github.rest.issues.listComments({
@@ -137,7 +224,6 @@ jobs:
             );
             
             if (botComment) {
-              // Update existing comment
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -145,7 +231,6 @@ jobs:
                 body: commentBody
               });
             } else {
-              // Create new comment
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -153,6 +238,22 @@ jobs:
                 body: commentBody
               });
             }
+            
+            console.log('Documentation preview comment posted successfully!');
+
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docs-preview-screenshot-pr-${{ github.event.pull_request.number }}
+          path: docs-preview-screenshot.png
+          retention-days: 7
+
+      - name: Stop preview server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill "$SERVER_PID" || true
+          fi
 
   cleanup:
     name: Cleanup Preview Deployment
@@ -168,14 +269,12 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const environmentName = `docs-preview-pr-${prNumber}`;
             
-            // List deployments for this PR's environment
             const { data: deployments } = await github.rest.repos.listDeployments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               environment: environmentName
             });
             
-            // Set all deployments to inactive
             for (const deployment of deployments) {
               await github.rest.repos.createDeploymentStatus({
                 owner: context.repo.owner,
