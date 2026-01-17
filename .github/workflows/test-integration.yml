@@ -37,10 +37,26 @@ jobs:
       - name: Run unit tests
         run: npm test -- --verbose --no-coverage
 
-  test-basic-firewall:
-    name: Basic Firewall Tests
+  # Integration tests run in parallel using a matrix strategy
+  # Each test file runs in its own isolated runner to avoid Docker conflicts
+  integration-tests:
+    name: Integration (${{ matrix.test-name }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false  # Don't cancel other tests if one fails
+      matrix:
+        include:
+          - test-file: basic-firewall.test.ts
+            test-name: basic-firewall
+          - test-file: robustness.test.ts
+            test-name: robustness
+          - test-file: volume-mounts.test.ts
+            test-name: volume-mounts
+          - test-file: container-workdir.test.ts
+            test-name: container-workdir
+          - test-file: no-docker.test.ts
+            test-name: no-docker
 
     steps:
       - name: Checkout repository
@@ -61,10 +77,10 @@ jobs:
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Run basic firewall tests
+      - name: Run integration tests
         id: run-tests
         run: |
-          sudo -E npm run test:integration -- basic-firewall.test.ts 2>&1 | tee test-output.log
+          sudo -E npm run test:integration -- ${{ matrix.test-file }} 2>&1 | tee test-output.log
         continue-on-error: true
 
       - name: Clean npm cache
@@ -76,7 +92,7 @@ jobs:
       - name: Generate test summary
         if: always()
         run: |
-          npx tsx scripts/ci/generate-test-summary.ts "basic-firewall.test.ts" "Basic Firewall Tests" test-output.log
+          npx tsx scripts/ci/generate-test-summary.ts "${{ matrix.test-file }}" "${{ matrix.test-name }}" test-output.log
 
       - name: Check test results
         if: steps.run-tests.outcome == 'failure'
@@ -90,68 +106,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: basic-firewall-test-logs
-          path: |
-            /tmp/*-test.log
-            /tmp/awf-*/
-            /tmp/awf-agent-logs-*/
-            /tmp/squid-logs-*/
-          retention-days: 7
-
-  test-robustness:
-    name: Robustness Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build project
-        run: npm run build
-
-      - name: Pre-test cleanup
-        run: sudo ./scripts/ci/cleanup.sh
-
-      - name: Run robustness tests
-        id: run-tests
-        run: |
-          sudo -E npm run test:integration -- robustness.test.ts 2>&1 | tee test-output.log
-        continue-on-error: true
-
-      - name: Clean npm cache
-        if: always()
-        run: |
-          sudo npm cache clean --force
-          sudo rm -rf ~/.npm/_npx
-
-      - name: Generate test summary
-        if: always()
-        run: |
-          npx tsx scripts/ci/generate-test-summary.ts "robustness.test.ts" "Robustness Tests" test-output.log
-
-      - name: Check test results
-        if: steps.run-tests.outcome == 'failure'
-        run: exit 1
-
-      - name: Post-test cleanup
-        if: always()
-        run: sudo ./scripts/ci/cleanup.sh
-
-      - name: Upload test logs on failure
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: robustness-test-logs
+          name: ${{ matrix.test-name }}-test-logs
           path: |
             /tmp/*-test.log
             /tmp/awf-*/
