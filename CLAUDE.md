@@ -37,17 +37,17 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 # Download logs from a specific run ID
 ./scripts/download-latest-artifact.sh 1234567890
 
-# Download from test-integration workflow (latest run)
-./scripts/download-latest-artifact.sh "" ".github/workflows/test-integration.yml" "integration-test-logs"
+# Download from test-coverage workflow (latest run)
+./scripts/download-latest-artifact.sh "" ".github/workflows/test-coverage.yml" "coverage-report"
 ```
 
 **Parameters:**
 - `RUN_ID` (optional): Specific workflow run ID, or empty string for latest run
-- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-integration.yml`)
-- `ARTIFACT_NAME` (optional): Artifact name (default: `integration-test-logs`)
+- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-coverage.yml`)
+- `ARTIFACT_NAME` (optional): Artifact name (default: `coverage-report`)
 
 **Artifact name:**
-- `integration-test-logs` - test-integration.yml
+- `coverage-report` - test-coverage.yml
 
 This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Requires GitHub CLI (`gh`) authenticated with the repository.
 
