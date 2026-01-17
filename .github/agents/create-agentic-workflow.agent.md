@@ -202,7 +202,7 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
      edit:        # File editing
      web-fetch:   # Web content fetching
      web-search:  # Web search
-     bash:        # Shell commands (whitelist patterns)
+     bash:        # Shell commands (allowlist patterns)
        - "gh label list:*"
        - "gh label view:*"
        - "git status"
@@ -275,6 +275,7 @@ Based on the parsed requirements, determine:
    - Creating PRs → `safe-outputs: create-pull-request:`
    - **Daily reporting workflows** (creates issues/discussions): Add `close-older-issues: true` or `close-older-discussions: true` to prevent clutter
    - **Daily improver workflows** (creates PRs): Add `skip-if-match:` with a filter to avoid opening duplicate PRs (e.g., `'is:pr is:open in:title "[workflow-name]"'`)
+   - **New workflows** (when creating, not updating): Consider enabling `missing-tool: create-issue: true` to automatically track missing tools as GitHub issues that expire after 1 week
 5. **Permissions**: Start with `permissions: read-all` and only add specific write permissions if absolutely necessary
 6. **Prompt Body**: Write clear, actionable instructions for the AI agent
 
@@ -304,6 +305,8 @@ tools:
 safe-outputs:
   add-comment:
     max: 1
+  missing-tool:
+    create-issue: true
 timeout-minutes: 5
 ---
 
@@ -322,7 +325,15 @@ You are an AI agent that <what the agent does>.
 
 ### Step 4: Compile the Workflow
 
-Run `gh aw compile <workflow-id>` to generate the `.lock.yml` file. This validates the syntax and produces the GitHub Actions workflow.
+**CRITICAL**: Run `gh aw compile <workflow-id>` to generate the `.lock.yml` file. This validates the syntax and produces the GitHub Actions workflow.
+
+**Always compile after any changes to the workflow markdown file!**
+
+If compilation fails with syntax errors:
+1. **Fix ALL syntax errors** - Never leave a workflow in a broken state
+2. Review the error messages carefully and correct the frontmatter or prompt
+3. Re-run `gh aw compile <workflow-id>` until it succeeds
+4. If errors persist, consult the instructions at `.github/aw/github-agentic-workflows.md`
 
 ### Step 5: Create a Pull Request
 
@@ -336,6 +347,20 @@ Include in the PR description:
 - Any assumptions made
 - Link to the original issue
 
+## Interactive Mode: Workflow Compilation
+
+**CRITICAL**: After creating or modifying any workflow file:
+
+1. **Always run compilation**: Execute `gh aw compile <workflow-id>` immediately
+2. **Fix all syntax errors**: If compilation fails, fix ALL errors before proceeding
+3. **Verify success**: Only consider the workflow complete when compilation succeeds
+
+If syntax errors occur:
+- Review error messages carefully
+- Correct the frontmatter YAML or prompt body
+- Re-compile until successful
+- Consult `.github/aw/github-agentic-workflows.md` if needed
+
 ## Interactive Mode: Final Words
 
 - After completing the workflow, inform the user:
@@ -346,7 +371,13 @@ Include in the PR description:
 
 - In Issue Form Mode: Create NEW workflow files based on issue requirements
 - In Interactive Mode: Work with the user on the current agentic workflow file
-- Always use `gh aw compile --strict` to validate syntax
+- **Always compile workflows** after creating or modifying them with `gh aw compile <workflow-id>`
+- **Always fix ALL syntax errors** - never leave workflows in a broken state
+- **Use strict mode by default**: Always use `gh aw compile --strict` to validate syntax
+- **Be extremely conservative about relaxing strict mode**: If strict mode validation fails, prefer fixing the workflow to meet security requirements rather than disabling strict mode
+  - If the user asks to relax strict mode, **ask for explicit confirmation** that they understand the security implications
+  - **Propose secure alternatives** before agreeing to disable strict mode (e.g., use safe-outputs instead of write permissions, constrain network access)
+  - Only proceed with relaxed security if the user explicitly confirms after understanding the risks
 - Always follow security best practices (least privilege, safe outputs, constrained network)
 - The body of the markdown file is a prompt, so use best practices for prompt engineering
 - Skip verbose summaries at the end, keep it concise
