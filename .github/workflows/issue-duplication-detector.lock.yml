@@ -548,7 +548,7 @@ jobs:
           4. **Search for potential duplicates**: If the cache is empty or you need more context, use GitHub search to find issues with similar keywords:
              - Search for issues with similar titles or key terms
              - Focus on open issues first, then consider recently closed ones
-             - Use `perPage: 20` to limit results and avoid token limits
+             - Use `perPage: 10` initially to avoid token limits, paginate if needed
           
           5. **Update the cache**: Store the new issue's signature in the cache-memory for future comparisons:
              - Save to `/tmp/gh-aw/cache-memory/issues.json`
@@ -559,7 +559,7 @@ jobs:
           
           Consider an issue a potential duplicate if ANY of these conditions are met:
           
-          - **Title similarity**: Titles share 70%+ of significant words (excluding common words like "the", "a", "is")
+          - **Title similarity**: Titles share 70%+ of significant words (excluding common words like "the", "a", "is"). Calculate by: (shared significant words / total unique significant words) × 100
           - **Key phrase match**: Both issues mention the same specific error messages, component names, or technical terms
           - **Problem description overlap**: The core problem being described is essentially the same, even if worded differently
           
