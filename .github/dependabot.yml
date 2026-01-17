@@ -1,0 +1,78 @@
+# Dependabot configuration for automated dependency updates
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # npm ecosystem - root package.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      # Group TypeScript-related dependencies
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+          - "@typescript-eslint/*"
+          - "ts-*"
+      # Group testing dependencies
+      testing:
+        patterns:
+          - "jest"
+          - "*jest*"
+      # Group linting dependencies
+      linting:
+        patterns:
+          - "eslint"
+          - "*eslint*"
+      # Group commit-related dependencies
+      commitlint:
+        patterns:
+          - "@commitlint/*"
+          - "husky"
+
+  # npm ecosystem - docs-site
+  - package-ecosystem: "npm"
+    directory: "/docs-site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Group Astro-related dependencies
+      astro:
+        patterns:
+          - "astro"
+          - "@astrojs/*"
+
+  # Docker ecosystem - agent container
+  - package-ecosystem: "docker"
+    directory: "/containers/agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+
+  # Docker ecosystem - squid container
+  - package-ecosystem: "docker"
+    directory: "/containers/squid"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+
+  # GitHub Actions ecosystem
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Group GitHub official actions
+      github-actions:
+        patterns:
+          - "actions/*"
