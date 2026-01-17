@@ -4,17 +4,17 @@ set -e
 # Script to download artifacts from GitHub Actions workflow runs
 # Usage: ./scripts/download-latest-artifact.sh [RUN_ID] [WORKFLOW_FILE] [ARTIFACT_NAME]
 #   RUN_ID: Specific run ID to download from (optional, defaults to latest run)
-#   WORKFLOW_FILE: Path to workflow file (optional, defaults to test-integration.yml)
-#   ARTIFACT_NAME: Name of artifact to download (optional, defaults to integration-test-logs)
+#   WORKFLOW_FILE: Path to workflow file (optional, defaults to test-coverage.yml)
+#   ARTIFACT_NAME: Name of artifact to download (optional, defaults to coverage-report)
 #
 # Examples:
 #   ./scripts/download-latest-artifact.sh
 #   ./scripts/download-latest-artifact.sh 1234567890
-#   ./scripts/download-latest-artifact.sh "" ".github/workflows/test-integration.yml" "integration-test-logs"
+#   ./scripts/download-latest-artifact.sh "" ".github/workflows/test-coverage.yml" "coverage-report"
 
 # Default values
-DEFAULT_WORKFLOW=".github/workflows/test-integration.yml"
-DEFAULT_ARTIFACT="integration-test-logs"
+DEFAULT_WORKFLOW=".github/workflows/test-coverage.yml"
+DEFAULT_ARTIFACT="coverage-report"
 DEFAULT_REPO="githubnext/gh-aw-firewall"
 
 # Parse arguments
