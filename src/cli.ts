@@ -83,6 +83,11 @@ export function parseDomainsFile(filePath: string): string[] {
 export const DEFAULT_DNS_SERVERS = ['8.8.8.8', '8.8.4.4'];
 
 /**
+ * Default DNS-over-HTTPS resolver (Google DoH endpoint)
+ */
+export const DEFAULT_DOH_RESOLVER = 'https://dns.google/dns-query';
+
+/**
  * Validates that a string is a valid IPv4 address
  * @param ip - String to validate
  * @returns true if the string is a valid IPv4 address
@@ -124,6 +129,44 @@ export function parseDnsServers(input: string): string[] {
   }
 
   return servers;
+}
+
+/**
+ * Validates and normalizes a DNS-over-HTTPS resolver URL
+ * @param resolver - DoH resolver URL to validate
+ * @returns Validated resolver URL
+ * @throws Error if the URL is invalid or not HTTPS
+ */
+export function validateDohResolver(resolver: string): string {
+  // Must be a valid URL
+  let url: URL;
+  try {
+    url = new URL(resolver);
+  } catch {
+    throw new Error(`Invalid DoH resolver URL: ${resolver}`);
+  }
+
+  // Must use HTTPS
+  if (url.protocol !== 'https:') {
+    throw new Error(`DoH resolver must use HTTPS (got: ${url.protocol})`);
+  }
+
+  // Must have a pathname (typically /dns-query)
+  if (!url.pathname || url.pathname === '/') {
+    throw new Error(`DoH resolver URL must include a path (e.g., /dns-query)`);
+  }
+
+  return resolver;
+}
+
+/**
+ * Extracts the hostname from a DoH resolver URL for domain allowlist validation
+ * @param resolver - DoH resolver URL
+ * @returns Hostname extracted from the URL
+ */
+export function extractDohHostname(resolver: string): string {
+  const url = new URL(resolver);
+  return url.hostname;
 }
 
 /**
@@ -381,6 +424,13 @@ program
     '8.8.8.8,8.8.4.4'
   )
   .option(
+    '--dns-over-https [resolver]',
+    'Enable DNS-over-HTTPS for encrypted DNS queries. Optionally specify resolver URL.\n' +
+    '                                   Default resolver: https://dns.google/dns-query\n' +
+    '                                   Security: Prevents DNS MITM attacks by encrypting DNS queries.\n' +
+    '                                   Note: The DoH endpoint domain must be in --allow-domains'
+  )
+  .option(
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
@@ -608,6 +658,47 @@ program
       logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
     }
 
+    // Parse and validate DNS-over-HTTPS option
+    let dnsOverHttps = false;
+    let dohResolver: string | undefined;
+
+    if (options.dnsOverHttps !== undefined) {
+      dnsOverHttps = true;
+
+      // If a custom resolver was provided, validate it; otherwise use default
+      if (typeof options.dnsOverHttps === 'string') {
+        try {
+          dohResolver = validateDohResolver(options.dnsOverHttps);
+        } catch (error) {
+          logger.error(`Invalid DoH resolver: ${error instanceof Error ? error.message : error}`);
+          process.exit(1);
+        }
+      } else {
+        dohResolver = DEFAULT_DOH_RESOLVER;
+      }
+
+      // Extract the DoH endpoint hostname for domain allowlist validation
+      const dohHostname = extractDohHostname(dohResolver);
+
+      // Check if DoH endpoint is in allowed domains
+      const dohDomainAllowed = allowedDomains.some(d => {
+        // Exact match or subdomain match
+        const normalizedDomain = d.replace(/^https?:\/\//, '').replace(/^\./, '');
+        return dohHostname === normalizedDomain ||
+               dohHostname.endsWith('.' + normalizedDomain) ||
+               (d.startsWith('*.') && dohHostname.endsWith(d.slice(1)));
+      });
+
+      if (!dohDomainAllowed) {
+        logger.error(`DoH resolver domain '${dohHostname}' is not in allowed domains`);
+        logger.error(`Add '${dohHostname}' to --allow-domains to enable DNS-over-HTTPS`);
+        process.exit(1);
+      }
+
+      logger.info(`DNS-over-HTTPS enabled with resolver: ${dohResolver}`);
+      logger.debug(`DoH endpoint domain: ${dohHostname}`);
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -624,6 +715,8 @@ program
       volumeMounts,
       containerWorkDir: options.containerWorkdir,
       dnsServers,
+      dnsOverHttps,
+      dohResolver,
       proxyLogsDir: options.proxyLogsDir,
       enableHostAccess: options.enableHostAccess,
       allowHostPorts: options.allowHostPorts,

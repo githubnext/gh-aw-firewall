@@ -60,60 +60,86 @@ fi
 
 # Get DNS servers from environment (default to Google DNS)
 DNS_SERVERS="${AWF_DNS_SERVERS:-8.8.8.8,8.8.4.4}"
-echo "[iptables] Configuring DNS rules for trusted servers: $DNS_SERVERS"
 
-# Separate IPv4 and IPv6 DNS servers
-IPV4_DNS_SERVERS=()
-IPV6_DNS_SERVERS=()
-IFS=',' read -ra DNS_ARRAY <<< "$DNS_SERVERS"
-for dns_server in "${DNS_ARRAY[@]}"; do
-  dns_server=$(echo "$dns_server" | tr -d ' ')
-  if [ -n "$dns_server" ]; then
-    if is_ipv6 "$dns_server"; then
-      IPV6_DNS_SERVERS+=("$dns_server")
-    else
-      IPV4_DNS_SERVERS+=("$dns_server")
+# Check if DNS-over-HTTPS mode is enabled
+DOH_ENABLED="${AWF_DOH_ENABLED:-false}"
+
+if [ "$DOH_ENABLED" = "true" ]; then
+  echo "[iptables] DNS-over-HTTPS mode enabled"
+  echo "[iptables] External UDP DNS will be blocked (using cloudflared DoH proxy instead)"
+
+  # In DoH mode, only allow DNS to Docker embedded DNS and the local cloudflared proxy
+  # All external DNS queries go through cloudflared → HTTPS → DoH resolver
+
+  # Allow DNS to Docker's embedded DNS server (127.0.0.11) for container name resolution
+  echo "[iptables] Allow DNS to Docker embedded DNS (127.0.0.11)..."
+  iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN
+  iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN
+
+  # Allow DNS to local cloudflared proxy (127.0.0.53) for DoH
+  echo "[iptables] Allow DNS to cloudflared DoH proxy (127.0.0.53)..."
+  iptables -t nat -A OUTPUT -p udp -d 127.0.0.53 --dport 53 -j RETURN
+  iptables -t nat -A OUTPUT -p tcp -d 127.0.0.53 --dport 53 -j RETURN
+
+  # Note: Traditional DNS servers are NOT allowed in DoH mode
+  # DNS queries go through cloudflared which uses HTTPS to the DoH resolver
+  echo "[iptables] External UDP/TCP DNS to traditional servers blocked (DoH mode)"
+else
+  echo "[iptables] Configuring DNS rules for trusted servers: $DNS_SERVERS"
+
+  # Separate IPv4 and IPv6 DNS servers
+  IPV4_DNS_SERVERS=()
+  IPV6_DNS_SERVERS=()
+  IFS=',' read -ra DNS_ARRAY <<< "$DNS_SERVERS"
+  for dns_server in "${DNS_ARRAY[@]}"; do
+    dns_server=$(echo "$dns_server" | tr -d ' ')
+    if [ -n "$dns_server" ]; then
+      if is_ipv6 "$dns_server"; then
+        IPV6_DNS_SERVERS+=("$dns_server")
+      else
+        IPV4_DNS_SERVERS+=("$dns_server")
+      fi
     fi
+  done
+
+  echo "[iptables]   IPv4 DNS servers: ${IPV4_DNS_SERVERS[*]:-none}"
+  echo "[iptables]   IPv6 DNS servers: ${IPV6_DNS_SERVERS[*]:-none}"
+
+  # Allow DNS queries ONLY to trusted IPv4 DNS servers (prevents DNS exfiltration)
+  for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
+    echo "[iptables] Allow DNS to trusted IPv4 server: $dns_server"
+    iptables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
+    iptables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
+  done
+
+  # Allow DNS queries ONLY to trusted IPv6 DNS servers
+  if [ "$IP6TABLES_AVAILABLE" = true ]; then
+    for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
+      echo "[iptables] Allow DNS to trusted IPv6 server: $dns_server"
+      ip6tables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
+      ip6tables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
+    done
+  elif [ ${#IPV6_DNS_SERVERS[@]} -gt 0 ]; then
+    echo "[iptables] WARNING: IPv6 DNS servers configured but ip6tables not available"
   fi
-done
 
-echo "[iptables]   IPv4 DNS servers: ${IPV4_DNS_SERVERS[*]:-none}"
-echo "[iptables]   IPv6 DNS servers: ${IPV6_DNS_SERVERS[*]:-none}"
+  # Allow DNS to Docker's embedded DNS server (127.0.0.11) for container name resolution
+  echo "[iptables] Allow DNS to Docker embedded DNS (127.0.0.11)..."
+  iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN
+  iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN
 
-# Allow DNS queries ONLY to trusted IPv4 DNS servers (prevents DNS exfiltration)
-for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
-  echo "[iptables] Allow DNS to trusted IPv4 server: $dns_server"
-  iptables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
-  iptables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
-done
-
-# Allow DNS queries ONLY to trusted IPv6 DNS servers
-if [ "$IP6TABLES_AVAILABLE" = true ]; then
-  for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
-    echo "[iptables] Allow DNS to trusted IPv6 server: $dns_server"
-    ip6tables -t nat -A OUTPUT -p udp -d "$dns_server" --dport 53 -j RETURN
-    ip6tables -t nat -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j RETURN
+  # Allow return traffic to trusted IPv4 DNS servers
+  echo "[iptables] Allow traffic to trusted DNS servers..."
+  for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
+    iptables -t nat -A OUTPUT -d "$dns_server" -j RETURN
   done
-elif [ ${#IPV6_DNS_SERVERS[@]} -gt 0 ]; then
-  echo "[iptables] WARNING: IPv6 DNS servers configured but ip6tables not available"
-fi
 
-# Allow DNS to Docker's embedded DNS server (127.0.0.11) for container name resolution
-echo "[iptables] Allow DNS to Docker embedded DNS (127.0.0.11)..."
-iptables -t nat -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j RETURN
-iptables -t nat -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j RETURN
-
-# Allow return traffic to trusted IPv4 DNS servers
-echo "[iptables] Allow traffic to trusted DNS servers..."
-for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
-  iptables -t nat -A OUTPUT -d "$dns_server" -j RETURN
-done
-
-# Allow return traffic to trusted IPv6 DNS servers
-if [ "$IP6TABLES_AVAILABLE" = true ]; then
-  for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
-    ip6tables -t nat -A OUTPUT -d "$dns_server" -j RETURN
-  done
+  # Allow return traffic to trusted IPv6 DNS servers
+  if [ "$IP6TABLES_AVAILABLE" = true ]; then
+    for dns_server in "${IPV6_DNS_SERVERS[@]}"; do
+      ip6tables -t nat -A OUTPUT -d "$dns_server" -j RETURN
+    done
+  fi
 fi
 
 # Allow traffic to Squid proxy itself (prevent redirect loop)
@@ -191,15 +217,24 @@ echo "[iptables] Configuring OUTPUT filter chain rules..."
 # Allow localhost traffic
 iptables -A OUTPUT -o lo -j ACCEPT
 
-# Allow DNS queries to trusted servers
-for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
-  iptables -A OUTPUT -p udp -d "$dns_server" --dport 53 -j ACCEPT
-  iptables -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j ACCEPT
-done
+# Allow DNS based on mode (DoH or traditional)
+if [ "$DOH_ENABLED" = "true" ]; then
+  # DoH mode: only allow DNS to local proxies
+  iptables -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p udp -d 127.0.0.53 --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d 127.0.0.53 --dport 53 -j ACCEPT
+else
+  # Traditional mode: allow DNS to trusted servers
+  for dns_server in "${IPV4_DNS_SERVERS[@]}"; do
+    iptables -A OUTPUT -p udp -d "$dns_server" --dport 53 -j ACCEPT
+    iptables -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j ACCEPT
+  done
 
-# Allow DNS to Docker's embedded DNS server
-iptables -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j ACCEPT
-iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
+  # Allow DNS to Docker's embedded DNS server
+  iptables -A OUTPUT -p udp -d 127.0.0.11 --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
+fi
 
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT

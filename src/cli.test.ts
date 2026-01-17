@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateDohResolver, extractDohHostname } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -772,6 +772,47 @@ describe('cli', () => {
       // Dynamic import to get the constant
       const { DEFAULT_DNS_SERVERS } = await import('./cli');
       expect(DEFAULT_DNS_SERVERS).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+  });
+
+  describe('DEFAULT_DOH_RESOLVER', () => {
+    it('should have correct default DoH resolver', async () => {
+      const { DEFAULT_DOH_RESOLVER } = await import('./cli');
+      expect(DEFAULT_DOH_RESOLVER).toBe('https://dns.google/dns-query');
+    });
+  });
+
+  describe('DoH resolver validation', () => {
+    it('should accept valid DoH resolver URLs', () => {
+      expect(validateDohResolver('https://dns.google/dns-query')).toBe('https://dns.google/dns-query');
+      expect(validateDohResolver('https://cloudflare-dns.com/dns-query')).toBe('https://cloudflare-dns.com/dns-query');
+      expect(validateDohResolver('https://dns.quad9.net/dns-query')).toBe('https://dns.quad9.net/dns-query');
+    });
+
+    it('should reject non-HTTPS URLs', () => {
+      expect(() => validateDohResolver('http://dns.google/dns-query')).toThrow('DoH resolver must use HTTPS');
+    });
+
+    it('should reject invalid URLs', () => {
+      expect(() => validateDohResolver('not-a-url')).toThrow('Invalid DoH resolver URL');
+      expect(() => validateDohResolver('')).toThrow('Invalid DoH resolver URL');
+    });
+
+    it('should reject URLs without path', () => {
+      expect(() => validateDohResolver('https://dns.google')).toThrow('must include a path');
+      expect(() => validateDohResolver('https://dns.google/')).toThrow('must include a path');
+    });
+  });
+
+  describe('DoH hostname extraction', () => {
+    it('should extract hostname from DoH resolver URL', () => {
+      expect(extractDohHostname('https://dns.google/dns-query')).toBe('dns.google');
+      expect(extractDohHostname('https://cloudflare-dns.com/dns-query')).toBe('cloudflare-dns.com');
+      expect(extractDohHostname('https://dns.quad9.net/dns-query')).toBe('dns.quad9.net');
+    });
+
+    it('should extract hostname from URL with port', () => {
+      expect(extractDohHostname('https://dns.example.com:8443/dns-query')).toBe('dns.example.com');
     });
   });
 });

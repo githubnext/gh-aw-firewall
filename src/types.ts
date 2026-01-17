@@ -216,6 +216,46 @@ export interface WrapperConfig {
   dnsServers?: string[];
 
   /**
+   * Whether to enable DNS-over-HTTPS (DoH) for encrypted DNS queries
+   *
+   * When true, DNS queries are encrypted over HTTPS, preventing DNS MITM attacks
+   * and enhancing privacy. Uses cloudflared as the local DoH proxy.
+   *
+   * When DoH is enabled:
+   * - A local DoH proxy (cloudflared) runs inside the agent container
+   * - DNS queries are sent via HTTPS to the configured DoH resolver
+   * - Traditional UDP DNS to external servers is blocked (except Docker embedded DNS)
+   * - DoH endpoint must be in the allowed domains list
+   *
+   * @default false
+   * @example
+   * ```bash
+   * # Enable DoH with default Google DNS resolver
+   * awf --dns-over-https --allow-domains github.com,dns.google -- curl https://github.com
+   *
+   * # Enable DoH with custom Cloudflare resolver
+   * awf --dns-over-https https://cloudflare-dns.com/dns-query --allow-domains github.com,cloudflare-dns.com -- curl https://github.com
+   * ```
+   */
+  dnsOverHttps?: boolean;
+
+  /**
+   * Custom DNS-over-HTTPS resolver endpoint URL
+   *
+   * The DoH resolver URL to use when dnsOverHttps is enabled.
+   * Must be a valid HTTPS URL that implements the DNS-over-HTTPS protocol (RFC 8484).
+   *
+   * Popular DoH resolvers:
+   * - Google: https://dns.google/dns-query
+   * - Cloudflare: https://cloudflare-dns.com/dns-query
+   * - Quad9: https://dns.quad9.net/dns-query
+   *
+   * @default 'https://dns.google/dns-query'
+   * @example 'https://cloudflare-dns.com/dns-query'
+   */
+  dohResolver?: string;
+
+  /**
    * Custom directory for Squid proxy logs (written directly during runtime)
    *
    * When specified, Squid proxy logs (access.log, cache.log) are written
