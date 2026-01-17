@@ -407,6 +407,13 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/githubnext/*'
   )
+  .option(
+    '--enable-dlp',
+    'Enable DLP (Data Loss Prevention) to detect and block sensitive data patterns\n' +
+    '                                   (API keys, tokens, credentials) in outgoing requests.\n' +
+    '                                   Note: For HTTPS inspection, requires --ssl-bump',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -608,6 +615,15 @@ program
       logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
     }
 
+    // Validate DLP option
+    if (options.enableDlp) {
+      logger.info('DLP mode enabled - outgoing requests will be scanned for sensitive data patterns');
+      if (!options.sslBump) {
+        logger.warn('⚠️  DLP without --ssl-bump: Only HTTP traffic will be inspected');
+        logger.warn('   Enable --ssl-bump to also inspect HTTPS traffic');
+      }
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -629,6 +645,7 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
+      enableDlp: options.enableDlp,
     };
 
     // Warn if --env-all is used

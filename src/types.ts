@@ -308,6 +308,26 @@ export interface WrapperConfig {
    * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Whether to enable DLP (Data Loss Prevention) content inspection
+   *
+   * When true, Squid will inspect outgoing request content for patterns
+   * matching sensitive data such as:
+   * - GitHub tokens (ghp_, gho_, ghs_, ghr_, github_pat_)
+   * - OpenAI API keys (sk-)
+   * - AWS credentials (AKIA)
+   * - Generic API key patterns
+   *
+   * Requests containing detected patterns are blocked with 403 Forbidden
+   * and logged with [DLP_BLOCKED] prefix.
+   *
+   * Note: DLP inspection requires SSL Bump to be enabled for HTTPS traffic,
+   * otherwise only HTTP traffic can be inspected.
+   *
+   * @default false
+   */
+  enableDlp?: boolean;
 }
 
 /**
@@ -417,6 +437,17 @@ export interface SquidConfig {
    * @example "3000-3010,8000-8090"
    */
   allowHostPorts?: string;
+
+  /**
+   * Whether to enable DLP (Data Loss Prevention) content inspection
+   *
+   * When true, Squid will inspect outgoing request content for sensitive
+   * data patterns (API keys, tokens, credentials) and block requests
+   * containing detected patterns.
+   *
+   * @default false
+   */
+  enableDlp?: boolean;
 }
 
 /**

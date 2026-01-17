@@ -9,6 +9,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
+- **DLP (Data Loss Prevention)**: Optional scanning for sensitive data patterns (API keys, tokens) in outgoing requests
 
 ## Requirements
 
@@ -122,6 +123,7 @@ sudo awf --help
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
+- [DLP (Data Loss Prevention)](docs/dlp.md) — detect and block sensitive data exfiltration
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
