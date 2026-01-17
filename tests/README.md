@@ -37,6 +37,20 @@ This directory contains comprehensive integration tests that verify firewall beh
 - **No Docker** (`no-docker.test.ts`) - Docker-in-Docker removal verification
 - **Docker Warning** (`docker-warning.test.ts`) - Docker command warning messages
 
+## Smoke Tests
+
+The firewall is tested via agentic workflow smoke tests that run through the actual firewall:
+
+- **Smoke Claude** (`.github/workflows/smoke-claude.md`) - Claude engine validation
+- **Smoke Codex** (`.github/workflows/smoke-codex.md`) - Codex engine validation  
+- **Smoke Copilot** (`.github/workflows/smoke-copilot.md`) - Copilot engine validation
+
+These smoke tests use the locally built firewall and validate:
+- GitHub MCP functionality
+- Playwright browser automation
+- File I/O operations
+- Bash command execution
+
 ## Test Structure
 
 ```
@@ -115,20 +129,17 @@ npm run test:integration
 ### Run Specific Test Suite
 
 ```bash
-# Run basic firewall tests
-npm run test:integration -- basic-firewall
+# Run volume mount tests
+npm run test:integration -- volume-mounts
 
-# Run Docker egress tests
-npm run test:integration -- docker-egress
-
-# Run robustness tests
-npm run test:integration -- robustness
+# Run container workdir tests
+npm run test:integration -- container-workdir
 ```
 
 ### Run Single Test
 
 ```bash
-npm run test:integration -- -t "Test 1: Basic connectivity"
+npm run test:integration -- -t "Test 1: Basic volume mount"
 ```
 
 ## Test Fixtures
@@ -245,13 +256,50 @@ module.exports = {
 
 ## CI/CD Integration
 
-Tests are designed to run in GitHub Actions. See `.github/workflows/test.yml` for the workflow configuration.
+Tests are designed to run in GitHub Actions. See `.github/workflows/test-coverage.yml` for the workflow configuration.
 
 Key considerations:
 - Tests run with `sudo -E` to preserve environment variables
 - Docker images are pre-pulled to avoid timeouts
 - Cleanup runs before and after tests to prevent resource leaks
 - Artifacts (logs, reports) are collected on failure
+
+## Test Suite
+
+The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
+
+**Integration test files (17 total):**
+
+| Category | Test File | Description |
+|----------|-----------|-------------|
+| Core | `basic-firewall.test.ts` | Domain whitelisting, connectivity |
+| Core | `exit-code-propagation.test.ts` | Exit code handling |
+| Core | `container-workdir.test.ts` | Container working directory |
+| Domains | `blocked-domains.test.ts` | Domain blocking |
+| Domains | `wildcard-patterns.test.ts` | Wildcard matching |
+| Security | `network-security.test.ts` | Capability restrictions, SSRF |
+| Security | `robustness.test.ts` | Edge cases, bypass prevention |
+| Config | `dns-servers.test.ts` | DNS configuration |
+| Config | `environment-variables.test.ts` | Environment variables |
+| Config | `volume-mounts.test.ts` | Volume mounts |
+| Protocol | `protocol-support.test.ts` | HTTP/HTTPS, HTTP/2 |
+| Protocol | `git-operations.test.ts` | Git over HTTPS |
+| Errors | `error-handling.test.ts` | Error scenarios |
+| Logging | `log-commands.test.ts` | Log parsing |
+| Integration | `claude-code.test.ts` | Claude Code CLI |
+| Integration | `no-docker.test.ts` | Docker removal |
+| Integration | `docker-warning.test.ts` | Docker warnings |
+
+**Smoke test workflows:**
+- `.github/workflows/smoke-claude.md` - Claude engine validation (uses locally built firewall)
+- `.github/workflows/smoke-codex.md` - Codex engine validation (uses locally built firewall)
+- `.github/workflows/smoke-copilot.md` - Copilot engine validation (uses locally built firewall)
+
+**CI workflow:**
+- All tests run with `sudo -E` for iptables manipulation
+- Tests run serially to avoid Docker resource conflicts
+- Automatic cleanup before and after test runs
+- Test logs uploaded as artifacts on failure
 
 ## Troubleshooting
 
@@ -285,38 +333,6 @@ docker pull curlimages/curl:latest
 docker pull alpine:latest
 docker pull dannydirect/tinyproxy:latest
 ```
-
-## Test Suite
-
-The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-integration.yml`:
-
-**Integration test files (17 total):**
-
-| Category | Test File | Description |
-|----------|-----------|-------------|
-| Core | `basic-firewall.test.ts` | Domain whitelisting, connectivity |
-| Core | `exit-code-propagation.test.ts` | Exit code handling |
-| Core | `container-workdir.test.ts` | Container working directory |
-| Domains | `blocked-domains.test.ts` | Domain blocking |
-| Domains | `wildcard-patterns.test.ts` | Wildcard matching |
-| Security | `network-security.test.ts` | Capability restrictions, SSRF |
-| Security | `robustness.test.ts` | Edge cases, bypass prevention |
-| Config | `dns-servers.test.ts` | DNS configuration |
-| Config | `environment-variables.test.ts` | Environment variables |
-| Config | `volume-mounts.test.ts` | Volume mounts |
-| Protocol | `protocol-support.test.ts` | HTTP/HTTPS, HTTP/2 |
-| Protocol | `git-operations.test.ts` | Git over HTTPS |
-| Errors | `error-handling.test.ts` | Error scenarios |
-| Logging | `log-commands.test.ts` | Log parsing |
-| Integration | `claude-code.test.ts` | Claude Code CLI |
-| Integration | `no-docker.test.ts` | Docker removal |
-| Integration | `docker-warning.test.ts` | Docker warnings |
-
-**CI workflow:**
-- All tests run with `sudo -E` for iptables manipulation
-- Tests run serially to avoid Docker resource conflicts
-- Automatic cleanup before and after test runs
-- Test logs uploaded as artifacts on failure
 
 ## Testing Patterns and Best Practices
 
