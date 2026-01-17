@@ -44,7 +44,19 @@ DLP uses Squid's `url_regex` ACL type to scan request URLs for sensitive pattern
 
 1. The request is blocked before being forwarded
 2. HTTP 403 Forbidden is returned to the client
-3. The block is logged in Squid access logs
+3. The block is logged in Squid access logs with `TCP_DENIED:HIER_NONE` status
+
+### Viewing Blocked Requests
+
+You can view DLP-blocked requests in the Squid access logs:
+
+```bash
+# View blocked requests
+sudo awf logs --source running | grep TCP_DENIED
+
+# Or after the command completes, check preserved logs
+cat /tmp/squid-logs-*/access.log | grep TCP_DENIED
+```
 
 ## Limitations
 
