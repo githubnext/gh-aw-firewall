@@ -106,8 +106,8 @@ Only move to non-security files if all security-critical files have >80% coverag
 For each file needing tests:
 
 ```bash
-# View the HTML coverage report details
-grep -A5 "cline-no" coverage/lcov-report/<filename>.html
+# View the HTML coverage report details (example for squid-config.ts)
+grep -A5 "cline-no" coverage/lcov-report/squid-config.ts.html
 ```
 
 Or read the source file and identify:
@@ -125,7 +125,7 @@ Look at existing tests to understand patterns:
 find src -name "*.test.ts"
 
 # View an example test file
-cat src/squid-config.test.ts | head -100
+head -100 src/squid-config.test.ts
 ```
 
 Follow existing conventions:
@@ -148,8 +148,8 @@ Create new tests that:
 After creating tests:
 
 ```bash
-# Run the new tests
-npm test -- --testPathPattern="<your-test-file>"
+# Run the new tests (example for docker-manager tests)
+npm test -- --testPathPattern="docker-manager.test.ts"
 
 # Run full test suite to ensure no regressions
 npm test
