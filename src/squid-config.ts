@@ -531,6 +531,15 @@ acl localnet src fe80::/10
 
 ${portAclsAndRules}
 
+# Security: Block direct IP address connections
+# Prevents bypassing domain-based filtering by connecting directly to IP addresses
+# IPv4: matches dotted-decimal notation (e.g., 192.168.1.1)
+# IPv6: matches addresses containing colons (e.g., ::1, 2001:db8::1)
+acl dest_is_ipv4 dstdom_regex ^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$
+acl dest_is_ipv6 dstdom_regex :
+http_access deny dest_is_ipv4
+http_access deny dest_is_ipv6
+
 ${accessRulesSection}# Deny requests to unknown domains (not in allow-list)
 # This applies to all sources including localnet
 ${denyRule}
