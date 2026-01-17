@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**/*.ts'
       - 'containers/**'
+      - 'docs/**'
   workflow_dispatch:
 permissions:
   contents: read
