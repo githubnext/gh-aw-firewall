@@ -16,12 +16,7 @@ tools:
   github:
     toolsets: [default, actions]
   bash:
-    - "ls:*"
-    - "cat:*"
-    - "grep:*"
-    - "find:*"
-    - "head:*"
-    - "tail:*"
+    - "*"
   web-fetch:
   cache-memory: true
 network:
