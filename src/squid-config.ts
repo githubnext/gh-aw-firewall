@@ -534,8 +534,13 @@ ${portAclsAndRules}
 # Security: Block direct IP address connections
 # Prevents bypassing domain-based filtering by connecting directly to IP addresses
 # IPv4: matches dotted-decimal notation (e.g., 192.168.1.1)
-# IPv6: matches addresses containing colons (e.g., ::1, 2001:db8::1)
+# Note: Pattern uses bounded quantifiers {1,3} to prevent ReDoS. Being over-inclusive
+# (matching invalid IPs like 999.999.999.999) is intentional for security - we want to
+# block anything that looks like an IP address, not validate it.
 acl dest_is_ipv4 dstdom_regex ^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$
+# IPv6: matches any destination containing a colon (e.g., ::1, 2001:db8::1)
+# Valid domain names cannot contain colons (RFC 1123), and dstdom_regex only matches
+# against the destination host/domain, not the full URL with path/query strings.
 acl dest_is_ipv6 dstdom_regex :
 http_access deny dest_is_ipv4
 http_access deny dest_is_ipv6
