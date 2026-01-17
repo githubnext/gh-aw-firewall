@@ -4,8 +4,7 @@ on:
   schedule: every 12h
   workflow_dispatch:
   pull_request:
-    types: [labeled]
-    names: ["smoke"]
+    types: [opened, synchronize, reopened]
   reaction: "eyes"
 permissions:
   contents: read
@@ -37,8 +36,6 @@ sandbox:
 safe-outputs:
     add-comment:
       hide-older-comments: true
-    create-issue:
-      expires: 2h
     add-labels:
       allowed: [smoke-copilot]
     messages:
