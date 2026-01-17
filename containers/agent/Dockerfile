@@ -57,16 +57,23 @@ RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/
 
 # Install docker wrapper to intercept docker commands
 # Handle cases where docker may already exist (symlink or binary)
-RUN if [ -f /usr/bin/docker ] && [ ! -L /usr/bin/docker ]; then \
-        mv /usr/bin/docker /usr/bin/docker-real; \
-    elif [ -L /usr/bin/docker ]; then \
-        # Docker is a symlink, resolve and copy the target (with error checking)
-        DOCKER_TARGET=$(readlink -f /usr/bin/docker) && \
-        if [ -n "$DOCKER_TARGET" ] && [ -f "$DOCKER_TARGET" ]; then \
-            rm /usr/bin/docker && \
-            cp "$DOCKER_TARGET" /usr/bin/docker-real; \
+RUN DOCKER_PATH=$(command -v docker || echo "") && \
+    if [ -n "$DOCKER_PATH" ]; then \
+        # Docker exists somewhere in PATH
+        if [ -L "$DOCKER_PATH" ]; then \
+            # Docker is a symlink, resolve and copy the target (with error checking)
+            DOCKER_TARGET=$(readlink -f "$DOCKER_PATH") && \
+            if [ -n "$DOCKER_TARGET" ] && [ -f "$DOCKER_TARGET" ]; then \
+                cp "$DOCKER_TARGET" /usr/bin/docker-real; \
+            else \
+                echo "ERROR: Docker symlink at $DOCKER_PATH is broken" && exit 1; \
+            fi; \
         else \
-            # Broken symlink or target doesn't exist, just remove it
+            # Docker is a regular file, copy it to docker-real
+            cp "$DOCKER_PATH" /usr/bin/docker-real; \
+        fi; \
+        # Remove existing docker if it's at /usr/bin/docker
+        if [ "$DOCKER_PATH" = "/usr/bin/docker" ]; then \
             rm /usr/bin/docker; \
         fi; \
     fi && \
