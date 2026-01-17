@@ -17,7 +17,7 @@ awf --env-all 'command'
 
 When using `sudo -E`, these host variables are automatically passed: `GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `USER`, `TERM`, `HOME`, `XDG_CONFIG_HOME`.
 
-The following are always set/overridden: `HTTP_PROXY`, `HTTPS_PROXY` (Squid proxy), `PATH`, `DOCKER_HOST`, `DOCKER_CONTEXT` (container values).
+The following are always set/overridden: `HTTP_PROXY`, `HTTPS_PROXY` (Squid proxy), `PATH` (container values).
 
 Variables from `--env` flags override everything else.
 
@@ -30,7 +30,7 @@ Using `--env-all` passes all host environment variables to the container, which 
 3. **Unnecessary Access**: Extra variables increase attack surface (violates least privilege)
 4. **Accidental Sharing**: Easy to forget what's in your environment when sharing commands
 
-**Excluded variables** (even with `--env-all`): `PATH`, `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`, `PWD`, `OLDPWD`, `SHLVL`, `_`, `SUDO_*`
+**Excluded variables** (even with `--env-all`): `PATH`, `PWD`, `OLDPWD`, `SHLVL`, `_`, `SUDO_*`
 
 ## Best Practices
 

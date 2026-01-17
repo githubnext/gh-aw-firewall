@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -60,11 +62,6 @@ jobs:
         run: |
           echo "=== Testing blocked-domains.sh ==="
           sudo ./examples/blocked-domains.sh
-
-      - name: Test docker-in-docker.sh
-        run: |
-          echo "=== Testing docker-in-docker.sh ==="
-          sudo ./examples/docker-in-docker.sh
 
       # Note: github-copilot.sh is skipped as it requires GITHUB_TOKEN for Copilot CLI
       # To test it, you would need to set up a secret with a valid Copilot token

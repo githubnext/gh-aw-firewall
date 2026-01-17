@@ -158,7 +158,6 @@ describe('docker-manager', () => {
 
       expect(volumes).toContain('/:/host:rw');
       expect(volumes).toContain('/tmp:/tmp:rw');
-      expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
@@ -180,7 +179,6 @@ describe('docker-manager', () => {
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
-      expect(volumes).toContain('/var/run/docker.sock:/var/run/docker.sock:rw');
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
@@ -596,25 +594,6 @@ describe('docker-manager', () => {
 
       // Verify squid-logs directory was created
       expect(fs.existsSync(path.join(testDir, 'squid-logs'))).toBe(true);
-    });
-
-    it('should create .docker config directory', async () => {
-      const config: WrapperConfig = {
-        allowedDomains: ['github.com'],
-        agentCommand: 'echo test',
-        logLevel: 'info',
-        keepContainers: false,
-        workDir: testDir,
-      };
-
-      try {
-        await writeConfigs(config);
-      } catch {
-        // May fail, but directories should still be created
-      }
-
-      // Verify .docker config directory was created
-      expect(fs.existsSync(path.join(testDir, '.docker'))).toBe(true);
     });
 
     it('should write squid.conf file', async () => {

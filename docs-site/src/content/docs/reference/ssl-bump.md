@@ -158,8 +158,6 @@ Each awf execution uses a unique CA certificate. Old session certificates become
 
 - The session CA is injected only into the agent container's trust store
 - Host system trust stores are NOT modified
-- Spawned containers inherit the modified trust store
-- This means spawned containers can also have HTTPS traffic intercepted
 
 ### Traffic Visibility
 

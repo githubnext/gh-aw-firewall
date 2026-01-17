@@ -10,7 +10,7 @@ tools:
   github:
     toolsets: [repos]
   web-fetch:
-  bash:
+  bash: ["*"]
   cache-memory: true
 network:
   allowed:
@@ -127,16 +127,14 @@ You are running inside the AWF (Agent Workflow Firewall) container. Your goal is
    - `src/host-iptables.ts` - Host-level iptables rules
    - `src/squid-config.ts` - Squid proxy configuration
    - `src/docker-manager.ts` - Container lifecycle management
-   - `containers/copilot/setup-iptables.sh` - Container NAT rules
-   - `containers/copilot/docker-wrapper.sh` - Docker command interception
-   - `containers/copilot/entrypoint.sh` - Container startup
+   - `containers/agent/setup-iptables.sh` - Container NAT rules
+   - `containers/agent/entrypoint.sh` - Container startup
    - `AGENTS.md` - Architecture documentation
 
 3. **Understand the layered architecture**:
    - How does the Squid proxy filter traffic?
    - What iptables rules are applied at the host level?
    - What NAT rules redirect traffic inside the container?
-   - How does the Docker wrapper prevent container escapes?
 
 4. **Identify potential attack surfaces** based on what you learn:
    - Look for gaps between the layers

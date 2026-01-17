@@ -21,19 +21,16 @@ RUN apt-get update && \
     netcat-openbsd \
     gosu \
     libcap2-bin && \
-    # Install Node.js 22 from NodeSource (only if not already installed or not v22.x)
+    # Install Node.js 22 from NodeSource
+    # Check if Node.js 22 is already installed (common in runner images)
     if ! command -v node >/dev/null 2>&1 || ! node --version | grep -qE '^v22\.'; then \
+        # Remove any existing nodejs packages first to avoid conflicts
+        apt-get remove -y nodejs npm || true && \
         curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-        apt-get install -y nodejs; \
-    fi && \
-    # Install Docker CLI for MCP servers that run as containers (only if not already installed)
-    if ! command -v docker >/dev/null 2>&1; then \
-        install -m 0755 -d /etc/apt/keyrings && \
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
-        chmod a+r /etc/apt/keyrings/docker.asc && \
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-        apt-get update && \
-        apt-get install -y docker-ce-cli; \
+        apt-get install -y nodejs && \
+        # Verify Node.js 22 was installed correctly
+        node --version | grep -q "^v22\." || (echo "ERROR: Node.js 22 not installed correctly" && exit 1) && \
+        npx --version || (echo "ERROR: npx not found" && exit 1); \
     fi && \
     rm -rf /var/lib/apt/lists/*
 
@@ -48,36 +45,16 @@ RUN groupadd -g ${USER_GID} awfuser && \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script, docker wrapper, and PID logger
+# Copy iptables setup script and PID logger
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker-wrapper.sh /usr/local/bin/docker-wrapper.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/docker-wrapper.sh /usr/local/bin/pid-logger.sh
+RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
-# Install docker wrapper to intercept docker commands
-# Handle cases where docker may already exist (symlink or binary)
-RUN DOCKER_PATH=$(command -v docker || echo "") && \
-    if [ -n "$DOCKER_PATH" ]; then \
-        # Docker exists somewhere in PATH
-        if [ -L "$DOCKER_PATH" ]; then \
-            # Docker is a symlink, resolve and copy the target (with error checking)
-            DOCKER_TARGET=$(readlink -f "$DOCKER_PATH") && \
-            if [ -n "$DOCKER_TARGET" ] && [ -f "$DOCKER_TARGET" ]; then \
-                cp "$DOCKER_TARGET" /usr/bin/docker-real; \
-            else \
-                echo "ERROR: Docker symlink at $DOCKER_PATH is broken" && exit 1; \
-            fi; \
-        else \
-            # Docker is a regular file, copy it to docker-real
-            cp "$DOCKER_PATH" /usr/bin/docker-real; \
-        fi; \
-        # Remove existing docker if it's at /usr/bin/docker
-        if [ "$DOCKER_PATH" = "/usr/bin/docker" ]; then \
-            rm /usr/bin/docker; \
-        fi; \
-    fi && \
-    ln -sf /usr/local/bin/docker-wrapper.sh /usr/bin/docker
+# Install Docker stub script that shows helpful error message
+# Docker-in-Docker support was removed in v0.9.1
+COPY docker-stub.sh /usr/bin/docker
+RUN chmod +x /usr/bin/docker
 
 # Set working directory
 WORKDIR /workspace

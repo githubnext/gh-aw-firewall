@@ -9,6 +9,7 @@ import { generateSquidConfig } from './squid-config';
 import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
 
 const SQUID_PORT = 3128;
+const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
  * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
@@ -204,7 +205,7 @@ export function generateDockerCompose(
       retries: 5,
       start_period: '10s',
     },
-    ports: [`${SQUID_PORT}:${SQUID_PORT}`],
+    ports: [`${SQUID_PORT}:${SQUID_PORT}`, `${SQUID_INTERCEPT_PORT}:${SQUID_INTERCEPT_PORT}`],
     // Security hardening: Drop unnecessary capabilities
     // Squid only needs network capabilities, not system administration capabilities
     cap_drop: [
@@ -242,9 +243,6 @@ export function generateDockerCompose(
   // System variables that must be overridden or excluded (would break container operation)
   const EXCLUDED_ENV_VARS = new Set([
     'PATH',           // Must use container's PATH
-    'DOCKER_HOST',    // Must use container's socket path
-    'DOCKER_CONTEXT', // Must use default context
-    'DOCKER_CONFIG',  // Must use clean config
     'PWD',            // Container's working directory
     'OLDPWD',         // Not relevant in container
     'SHLVL',          // Shell level not relevant
@@ -261,10 +259,9 @@ export function generateDockerCompose(
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
+    SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
     HOME: process.env.HOME || '/root',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-    DOCKER_HOST: 'unix:///var/run/docker.sock',
-    DOCKER_CONTEXT: 'default',
   };
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
@@ -295,6 +292,11 @@ export function generateDockerCompose(
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
   environment.AWF_DNS_SERVERS = dnsServers.join(',');
 
+  // Pass allowed ports to container for setup-iptables.sh (if specified)
+  if (config.allowHostPorts) {
+    environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
+  }
+
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();
@@ -306,13 +308,6 @@ export function generateDockerCompose(
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
     `${process.env.HOME}:${process.env.HOME}:rw`,
-    // Mount Docker socket for MCP servers that need to run containers
-    '/var/run/docker.sock:/var/run/docker.sock:rw',
-    // Mount clean Docker config to override host's context
-    `${config.workDir}/.docker:/workspace/.docker:rw`,
-    // Override host's .docker directory with clean config to prevent Docker CLI
-    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
@@ -442,23 +437,6 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     fs.mkdirSync(config.workDir, { recursive: true });
   }
 
-  // Create a clean Docker config directory to prevent host's Docker context from being used
-  // This is mounted into the container via DOCKER_CONFIG env var
-  const dockerConfigDir = path.join(config.workDir, '.docker');
-  if (!fs.existsSync(dockerConfigDir)) {
-    fs.mkdirSync(dockerConfigDir, { recursive: true });
-  }
-
-  // Write a minimal Docker config that uses default context (no custom socket paths)
-  const dockerConfig = {
-    currentContext: 'default',
-  };
-  fs.writeFileSync(
-    path.join(dockerConfigDir, 'config.json'),
-    JSON.stringify(dockerConfig, null, 2)
-  );
-  logger.debug(`Docker config written to: ${dockerConfigDir}/config.json`);
-
   // Create agent logs directory for persistence
   const agentLogsDir = path.join(config.workDir, 'agent-logs');
   if (!fs.existsSync(agentLogsDir)) {
@@ -539,6 +517,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     caFiles: sslConfig?.caFiles,
     sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
     urlPatterns,
+    enableHostAccess: config.enableHostAccess,
+    allowHostPorts: config.allowHostPorts,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);
