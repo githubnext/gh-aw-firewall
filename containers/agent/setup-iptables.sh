@@ -120,6 +120,39 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
+# Block dangerous ports at NAT level (defense-in-depth with Squid ACL filtering)
+# These ports are explicitly blocked to prevent access to sensitive services
+# even if Squid ACL filtering fails. The ports RETURN from NAT (not redirected)
+# and are then blocked by the DROP rule in the OUTPUT filter chain.
+echo "[iptables] Configuring NAT blacklist for dangerous ports..."
+
+# Dangerous ports list - matches DANGEROUS_PORTS in squid-config.ts
+DANGEROUS_PORTS=(
+  22      # SSH
+  23      # Telnet
+  25      # SMTP (mail)
+  110     # POP3 (mail)
+  143     # IMAP (mail)
+  445     # SMB (file sharing)
+  1433    # MS SQL Server
+  1521    # Oracle DB
+  3306    # MySQL
+  3389    # RDP (Windows Remote Desktop)
+  5432    # PostgreSQL
+  6379    # Redis
+  27017   # MongoDB
+  27018   # MongoDB sharding
+  28017   # MongoDB web interface
+)
+
+# Add NAT RETURN rules for each dangerous port
+# This prevents these ports from being redirected to Squid
+# They will be dropped by the OUTPUT filter chain's final DROP rule
+for port in "${DANGEROUS_PORTS[@]}"; do
+  iptables -t nat -A OUTPUT -p tcp --dport "$port" -j RETURN
+done
+echo "[iptables] NAT blacklist applied for ${#DANGEROUS_PORTS[@]} dangerous ports"
+
 # Redirect standard HTTP/HTTPS ports to Squid
 # This provides defense-in-depth: iptables enforces port policy, Squid enforces domain policy
 echo "[iptables] Redirect HTTP (80) and HTTPS (443) to Squid..."
