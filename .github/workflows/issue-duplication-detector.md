@@ -14,6 +14,8 @@ tools:
     toolsets: [issues, repos, search]
   cache-memory:
     key: issue-duplication-detector
+  bash:
+    - "*"
 safe-outputs:
   add-comment:
     max: 1
