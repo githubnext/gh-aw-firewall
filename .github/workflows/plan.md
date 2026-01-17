@@ -105,7 +105,7 @@ Order the tasks logically:
 Each task should:
 - Be completable in a single PR
 - Not be too large (avoid epic-sized tasks)
-- With a single focus or goal. Keep them extremely small and focused even it means more tasks.
+- With a single focus or goal. Keep them extremely small and focused even if it means more tasks.
 - Have clear acceptance criteria
 
 ### 4. SWE Agent Formulation
