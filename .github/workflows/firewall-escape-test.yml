@@ -1,0 +1,73 @@
+name: Firewall Escape Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-tests:
+    name: Firewall Escape Prevention Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Build Docker containers
+        run: |
+          docker build -t awf-squid:test -f containers/squid/Dockerfile containers/squid
+          docker build -t awf-agent:test -f containers/agent/Dockerfile containers/agent
+
+      - name: Run firewall escape tests
+        run: |
+          npx jest tests/integration/network-security.test.ts --verbose --testTimeout=120000
+        env:
+          # Use locally built images for testing
+          AWF_BUILD_LOCAL: 'true'
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🔒 Firewall Escape Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow validates that the firewall cannot be bypassed through various attack vectors:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Security Controls Tested" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Description |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Capability Restrictions** | NET_ADMIN dropped after iptables setup |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Firewall Bypass Prevention** | curl --connect-to, NO_PROXY, ALL_PROXY blocked |" >> $GITHUB_STEP_SUMMARY
+          echo "| **SSRF Protection** | AWS/GCP/Azure metadata endpoints blocked |" >> $GITHUB_STEP_SUMMARY
+          echo "| **DNS Security** | DoH endpoints blocked when not in allowlist |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Container Escape Prevention** | ptrace, mount syscalls blocked by seccomp |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Raw Socket Prevention** | ICMP/ping blocked (NET_RAW dropped) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **DNS Exfiltration Prevention** | Only trusted DNS servers allowed |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ All security tests passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some security tests failed. Review the logs for details." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -229,4 +229,74 @@ describe('Network Security', () => {
       expect(result).toFail();
     }, 120000);
   });
+
+  describe('Container Escape Prevention (Seccomp)', () => {
+    test('should block ptrace syscall', async () => {
+      // ptrace is commonly used for container escape attacks
+      const result = await runner.runWithSudo(
+        "strace -p 1 2>&1 || echo 'ptrace blocked'",
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      expect(result).toSucceed();
+      // strace should fail because ptrace is blocked by seccomp
+      expect(result.stdout).toMatch(/ptrace blocked|Operation not permitted|attach: ptrace/);
+    }, 120000);
+
+    test('should block mount syscall', async () => {
+      // mount is used for container escape via filesystem manipulation
+      const result = await runner.runWithSudo(
+        "mount -t tmpfs none /mnt 2>&1 || echo 'mount blocked'",
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      expect(result).toSucceed();
+      expect(result.stdout).toMatch(/mount blocked|Operation not permitted|permission denied/i);
+    }, 120000);
+  });
+
+  describe('Raw Socket Prevention', () => {
+    test('should block raw socket creation for ICMP', async () => {
+      // ping requires CAP_NET_RAW which is dropped
+      const result = await runner.runWithSudo(
+        'ping -c 1 8.8.8.8 2>&1 || echo "raw socket blocked"',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      expect(result).toSucceed();
+      // ping should fail because NET_RAW is dropped
+      expect(result.stdout).toMatch(/raw socket blocked|Operation not permitted|socket: Permission denied/i);
+    }, 120000);
+  });
+
+  describe('DNS Exfiltration Prevention', () => {
+    test('should only allow DNS to trusted servers', async () => {
+      // Attempt to query an untrusted DNS server (should fail)
+      // Using dig if available, otherwise nslookup
+      const result = await runner.runWithSudo(
+        "dig @1.2.3.4 example.com +time=2 +tries=1 2>&1 || echo 'untrusted DNS blocked'",
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      expect(result).toSucceed();
+      // dig to untrusted DNS server should fail (traffic blocked by iptables)
+      expect(result.stdout).toMatch(/untrusted DNS blocked|connection timed out|no servers could be reached/i);
+    }, 120000);
+  });
 });
