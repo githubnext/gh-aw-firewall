@@ -45,7 +45,6 @@ You are an AI agent that systematically improves test coverage in this repositor
 ## Repository Context
 
 - **Repository**: ${{ github.repository }}
-- **Run Time**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
 This repository implements an **Agentic Workflow Firewall (AWF)** - a network firewall for AI agents that provides L7 (HTTP/HTTPS) egress control using Squid proxy and Docker containers.
 
@@ -80,10 +79,10 @@ After running tests, analyze the coverage data:
 
 ```bash
 # View the coverage summary
-cat coverage/coverage-summary.json | jq '.total'
+jq '.total' coverage/coverage-summary.json
 
-# View per-file coverage
-cat coverage/coverage-summary.json | jq 'to_entries | map(select(.key != "total")) | sort_by(.value.lines.pct) | .[:10]'
+# View per-file coverage (sorted by lowest coverage first)
+jq 'to_entries | map(select(.key != "total")) | sort_by(.value.lines.pct) | .[:10]' coverage/coverage-summary.json
 ```
 
 Look for:
@@ -108,7 +107,7 @@ For each file needing tests:
 
 ```bash
 # View the HTML coverage report details
-cat coverage/lcov-report/<filename>.html | grep -A5 "cline-no"
+grep -A5 "cline-no" coverage/lcov-report/<filename>.html
 ```
 
 Or read the source file and identify:
