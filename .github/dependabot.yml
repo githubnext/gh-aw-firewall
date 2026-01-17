@@ -1,6 +1,9 @@
+# Dependabot configuration for automated dependency updates
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
 version: 2
 updates:
-  # npm dependencies
+  # npm ecosystem - root package.json
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -8,80 +11,30 @@ updates:
       day: "monday"
     open-pull-requests-limit: 10
     groups:
-      # Group minor and patch updates for production dependencies
-      production-dependencies:
-        dependency-type: "production"
-        update-types:
-          - "minor"
-          - "patch"
-      # Group minor and patch updates for development dependencies
-      development-dependencies:
-        dependency-type: "development"
-        update-types:
-          - "minor"
-          - "patch"
-      # Group TypeScript related packages
+      # Group TypeScript-related dependencies
       typescript:
         patterns:
           - "typescript"
+          - "@types/*"
           - "@typescript-eslint/*"
           - "ts-*"
-        update-types:
-          - "minor"
-          - "patch"
-      # Group testing packages
+      # Group testing dependencies
       testing:
         patterns:
           - "jest"
-          - "@types/jest"
-          - "ts-jest"
-        update-types:
-          - "minor"
-          - "patch"
-    labels:
-      - "dependencies"
-
-  # GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    groups:
-      # Group GitHub Actions updates
-      actions:
+          - "*jest*"
+      # Group linting dependencies
+      linting:
         patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    labels:
-      - "dependencies"
-      - "ci"
+          - "eslint"
+          - "*eslint*"
+      # Group commit-related dependencies
+      commitlint:
+        patterns:
+          - "@commitlint/*"
+          - "husky"
 
-  # Docker dependencies
-  - package-ecosystem: "docker"
-    directory: "/containers/agent"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "docker"
-
-  - package-ecosystem: "docker"
-    directory: "/containers/squid"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "docker"
-
-  # Documentation site npm dependencies
+  # npm ecosystem - docs-site
   - package-ecosystem: "npm"
     directory: "/docs-site"
     schedule:
@@ -89,15 +42,37 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     groups:
-      # Group Astro-related packages
+      # Group Astro-related dependencies
       astro:
         patterns:
-          - "@astrojs/*"
           - "astro"
-          - "starlight*"
-        update-types:
-          - "minor"
-          - "patch"
-    labels:
-      - "dependencies"
-      - "docs"
+          - "@astrojs/*"
+
+  # Docker ecosystem - agent container
+  - package-ecosystem: "docker"
+    directory: "/containers/agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+
+  # Docker ecosystem - squid container
+  - package-ecosystem: "docker"
+    directory: "/containers/squid"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+
+  # GitHub Actions ecosystem
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Group GitHub official actions
+      github-actions:
+        patterns:
+          - "actions/*"
