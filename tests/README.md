@@ -4,46 +4,36 @@ TypeScript-based integration tests for the awf (Agentic Workflow Firewall) CLI.
 
 ## Overview
 
-This directory contains comprehensive integration tests that verify firewall behavior across multiple scenarios:
+This directory contains integration tests that verify firewall behavior across multiple scenarios:
 
-- **Basic Firewall Functionality** (`integration/basic-firewall.test.ts`) - 9 tests
-  - Domain whitelisting
-  - Subdomain matching
-  - Exit code propagation
-  - DNS resolution
-  - Localhost connectivity
-  - Container lifecycle management
+- **Volume Mounts Tests** (`integration/volume-mounts.test.ts`) - Custom volume mount functionality
+- **Container Workdir Tests** (`integration/container-workdir.test.ts`) - Container working directory handling
+- **Docker Warning Tests** (`integration/docker-warning.test.ts`) - Docker warning functionality
+- **No Docker Tests** (`integration/no-docker.test.ts`) - Testing without Docker available
 
-- **Robustness Tests** (`integration/robustness.test.ts`) - ~40 tests
-  - Happy-path basics (exact domains, subdomains, case insensitivity)
-  - Deny cases (IP literals, non-standard ports)
-  - Redirect behavior (cross-domain vs same-domain)
-  - Protocol & transport edges (HTTP/2, DoH, bypass attempts)
-  - IPv4/IPv6 parity
-  - Git operations
-  - Security corner cases
-  - Observability (audit log validation)
+## Smoke Tests
 
-- **Docker Egress Tests** (`integration/docker-egress.test.ts`) - ~20 tests
-  - Basic container egress (allow/block)
-  - Network modes (bridge, host, none, custom)
-  - DNS controls from containers
-  - Proxy pivot attempts
-  - Container-to-container bounce
-  - UDP, QUIC, multicast from containers
-  - Metadata & link-local protection
-  - Privilege & capability abuse
-  - Direct IP and SNI/Host mismatch
-  - IPv6 from containers
+The firewall is tested via agentic workflow smoke tests that run through the actual firewall:
+
+- **Smoke Claude** (`.github/workflows/smoke-claude.md`) - Claude engine validation
+- **Smoke Codex** (`.github/workflows/smoke-codex.md`) - Codex engine validation  
+- **Smoke Copilot** (`.github/workflows/smoke-copilot.md`) - Copilot engine validation
+
+These smoke tests use the locally built firewall and validate:
+- GitHub MCP functionality
+- Playwright browser automation
+- File I/O operations
+- Bash command execution
 
 ## Test Structure
 
 ```
 tests/
 ├── integration/          # Integration test suites
-│   ├── basic-firewall.test.ts
-│   ├── robustness.test.ts
-│   └── docker-egress.test.ts
+│   ├── volume-mounts.test.ts
+│   ├── container-workdir.test.ts
+│   ├── docker-warning.test.ts
+│   └── no-docker.test.ts
 ├── fixtures/             # Reusable test utilities
 │   ├── cleanup.ts        # Docker resource cleanup
 │   ├── awf-runner.ts     # Execute awf commands
@@ -99,20 +89,17 @@ npm run test:integration
 ### Run Specific Test Suite
 
 ```bash
-# Run basic firewall tests
-npm run test:integration -- basic-firewall
+# Run volume mount tests
+npm run test:integration -- volume-mounts
 
-# Run Docker egress tests
-npm run test:integration -- docker-egress
-
-# Run robustness tests
-npm run test:integration -- robustness
+# Run container workdir tests
+npm run test:integration -- container-workdir
 ```
 
 ### Run Single Test
 
 ```bash
-npm run test:integration -- -t "Test 1: Basic connectivity"
+npm run test:integration -- -t "Test 1: Basic volume mount"
 ```
 
 ## Test Fixtures
@@ -229,13 +216,23 @@ module.exports = {
 
 ## CI/CD Integration
 
-Tests are designed to run in GitHub Actions. See `.github/workflows/test.yml` for the workflow configuration.
+Tests are designed to run in GitHub Actions. See `.github/workflows/test-coverage.yml` for the workflow configuration.
 
 Key considerations:
 - Tests run with `sudo -E` to preserve environment variables
 - Docker images are pre-pulled to avoid timeouts
 - Cleanup runs before and after tests to prevent resource leaks
 - Artifacts (logs, reports) are collected on failure
+
+## Smoke Tests
+
+Comprehensive firewall testing is done via agentic workflow smoke tests:
+
+- `.github/workflows/smoke-claude.md` - Claude engine smoke tests
+- `.github/workflows/smoke-codex.md` - Codex engine smoke tests
+- `.github/workflows/smoke-copilot.md` - Copilot engine smoke tests
+
+These smoke tests build and test the firewall locally, validating end-to-end functionality.
 
 ## Troubleshooting
 
@@ -272,12 +269,16 @@ docker pull dannydirect/tinyproxy:latest
 
 ## Test Suite
 
-The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-integration.yml`:
+The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
 
 **Integration test suites:**
-- `tests/integration/basic-firewall.test.ts` - Core firewall functionality (9 tests)
-- `tests/integration/robustness.test.ts` - Edge cases and error handling (20 tests)
-- `tests/integration/docker-egress.test.ts` - Docker-in-docker egress control (19 tests)
+- `tests/integration/volume-mounts.test.ts` - Custom volume mount functionality
+- `tests/integration/container-workdir.test.ts` - Container working directory handling
+
+**Smoke test workflows:**
+- `.github/workflows/smoke-claude.md` - Claude engine validation (uses locally built firewall)
+- `.github/workflows/smoke-codex.md` - Codex engine validation (uses locally built firewall)
+- `.github/workflows/smoke-copilot.md` - Copilot engine validation (uses locally built firewall)
 
 **CI workflow:**
 - All tests run with `sudo -E` for iptables manipulation
