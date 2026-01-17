@@ -16,7 +16,6 @@ This directory contains integration tests that verify firewall behavior across m
 The firewall is tested via agentic workflow smoke tests that run through the actual firewall:
 
 - **Smoke Claude** (`.github/workflows/smoke-claude.md`) - Claude engine validation
-- **Smoke Codex** (`.github/workflows/smoke-codex.md`) - Codex engine validation  
 - **Smoke Copilot** (`.github/workflows/smoke-copilot.md`) - Copilot engine validation
 
 These smoke tests use the locally built firewall and validate:
@@ -229,7 +228,6 @@ Key considerations:
 Comprehensive firewall testing is done via agentic workflow smoke tests:
 
 - `.github/workflows/smoke-claude.md` - Claude engine smoke tests
-- `.github/workflows/smoke-codex.md` - Codex engine smoke tests
 - `.github/workflows/smoke-copilot.md` - Copilot engine smoke tests
 
 These smoke tests build and test the firewall locally, validating end-to-end functionality.
@@ -277,7 +275,6 @@ The project uses TypeScript-based integration tests that run in CI via `.github/
 
 **Smoke test workflows:**
 - `.github/workflows/smoke-claude.md` - Claude engine validation (uses locally built firewall)
-- `.github/workflows/smoke-codex.md` - Codex engine validation (uses locally built firewall)
 - `.github/workflows/smoke-copilot.md` - Copilot engine validation (uses locally built firewall)
 
 **CI workflow:**
