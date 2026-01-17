@@ -161,12 +161,21 @@ export function validateDohResolver(resolver: string): string {
 
 /**
  * Extracts the hostname from a DoH resolver URL for domain allowlist validation
- * @param resolver - DoH resolver URL
+ * 
+ * Note: This function expects a valid URL. Call validateDohResolver() first to ensure
+ * the URL is valid before calling this function.
+ * 
+ * @param resolver - DoH resolver URL (must be a valid URL)
  * @returns Hostname extracted from the URL
+ * @throws Error if the URL is invalid (should not happen if validateDohResolver was called first)
  */
 export function extractDohHostname(resolver: string): string {
-  const url = new URL(resolver);
-  return url.hostname;
+  try {
+    const url = new URL(resolver);
+    return url.hostname;
+  } catch {
+    throw new Error(`Cannot extract hostname from invalid URL: ${resolver}`);
+  }
 }
 
 /**

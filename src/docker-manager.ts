@@ -322,10 +322,12 @@ export function generateDockerCompose(
   environment.AWF_DNS_SERVERS = dnsServers.join(',');
 
   // Pass DNS-over-HTTPS configuration to container
-  if (config.dnsOverHttps && config.dohResolver) {
+  if (config.dnsOverHttps) {
     environment.AWF_DOH_ENABLED = 'true';
-    environment.AWF_DOH_RESOLVER = config.dohResolver;
-    logger.debug(`DoH enabled with resolver: ${config.dohResolver}`);
+    // Use configured resolver or fall back to default (Google DoH)
+    const dohResolver = config.dohResolver || 'https://dns.google/dns-query';
+    environment.AWF_DOH_RESOLVER = dohResolver;
+    logger.debug(`DoH enabled with resolver: ${dohResolver}`);
   }
 
   // Pass allowed ports to container for setup-iptables.sh (if specified)

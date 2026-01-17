@@ -814,5 +814,9 @@ describe('cli', () => {
     it('should extract hostname from URL with port', () => {
       expect(extractDohHostname('https://dns.example.com:8443/dns-query')).toBe('dns.example.com');
     });
+
+    it('should throw error for invalid URL', () => {
+      expect(() => extractDohHostname('not-a-url')).toThrow('Cannot extract hostname from invalid URL');
+    });
   });
 });
