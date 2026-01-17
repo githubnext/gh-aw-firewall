@@ -4,9 +4,12 @@ Get started with the firewall in 5 minutes!
 
 ## Prerequisites
 
-- Docker installed and running
-- Node.js 18+ and npm
-- GitHub Copilot CLI (if testing with copilot)
+- **Docker**: 20.10+ with Docker Compose v2 installed and running
+- **Node.js**: 18+ and npm (for building from source)
+- **OS**: Ubuntu 22.04+ or compatible Linux distribution
+- **GitHub Copilot CLI**: (optional, if testing with copilot)
+
+See [Compatibility](compatibility.md) for full version details and tested configurations.
 
 ## Installation
 
