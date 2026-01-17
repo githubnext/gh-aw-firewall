@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  issues: read
+  issues: write
 imports:
   - shared/mcp-pagination.md
 tools:
