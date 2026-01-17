@@ -27,7 +27,7 @@ name: "Documentation Preview Reviewer"
     paths:
     - docs/**
     - docs-site/**
-    - "*.md"
+    - "**/*.md"
     - README.md
     types:
     - opened

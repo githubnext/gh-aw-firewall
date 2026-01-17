@@ -6,7 +6,7 @@ on:
     paths:
       - 'docs/**'
       - 'docs-site/**'
-      - '*.md'
+      - '**/*.md'
       - 'README.md'
   workflow_dispatch:
 permissions:
@@ -19,6 +19,7 @@ tools:
 safe-outputs:
   add-comment:
     max: 1
+    # Collapse previous review comments when posting a new one to keep the PR clean
     hide-older-comments: true
 timeout-minutes: 10
 ---
