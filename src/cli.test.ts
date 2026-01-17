@@ -842,6 +842,39 @@ describe('cli', () => {
         expect(result.valid).toBe(false);
         expect(result.error).toContain('Invalid base image');
       });
+
+      it('should reject ubuntu with only major version', () => {
+        const result = validateAgentBaseImage('ubuntu:22');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject catthehacker with wrong prefix', () => {
+        const result = validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:minimal-22.04');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject malformed SHA256 digest (too short)', () => {
+        const result = validateAgentBaseImage('ubuntu:22.04@sha256:abc123');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should reject image with path traversal attempt', () => {
+        const result = validateAgentBaseImage('../ubuntu:22.04');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid base image');
+      });
+
+      it('should provide helpful error message with allowed options', () => {
+        const result = validateAgentBaseImage('invalid:image');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('ubuntu:XX.XX');
+        expect(result.error).toContain('ghcr.io/catthehacker/ubuntu:runner-XX.XX');
+        expect(result.error).toContain('ghcr.io/catthehacker/ubuntu:full-XX.XX');
+        expect(result.error).toContain('@sha256:');
+      });
     });
   });
 });
