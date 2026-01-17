@@ -63,7 +63,7 @@ describe('stats-formatter', () => {
       const stats = createEmptyStats();
       const output = formatStatsMarkdown(stats);
 
-      expect(output).toContain('### Firewall Activity');
+      expect(output).toContain('<summary>Firewall Activity</summary>');
       expect(output).toContain('0 requests');
       expect(output).toContain('0 allowed');
       expect(output).toContain('0 blocked');
@@ -74,7 +74,7 @@ describe('stats-formatter', () => {
       const stats = createSampleStats();
       const output = formatStatsMarkdown(stats);
 
-      expect(output).toContain('### Firewall Activity');
+      expect(output).toContain('<summary>Firewall Activity</summary>');
       expect(output).toContain('10 requests');
       expect(output).toContain('8 allowed');
       expect(output).toContain('2 blocked');
@@ -84,13 +84,12 @@ describe('stats-formatter', () => {
       expect(output).toContain('| evil.com |');
     });
 
-    it('should use collapsible details section', () => {
+    it('should use collapsible details section with title in summary', () => {
       const stats = createSampleStats();
       const output = formatStatsMarkdown(stats);
 
       expect(output).toContain('<details>');
-      expect(output).toContain('<summary>');
-      expect(output).toContain('</summary>');
+      expect(output).toContain('<summary>Firewall Activity</summary>');
       expect(output).toContain('</details>');
     });
 
@@ -186,7 +185,7 @@ describe('stats-formatter', () => {
       const stats = createSampleStats();
       const output = formatStats(stats, 'markdown');
 
-      expect(output).toContain('### Firewall Activity');
+      expect(output).toContain('<summary>Firewall Activity</summary>');
     });
 
     it('should route to pretty formatter', () => {
