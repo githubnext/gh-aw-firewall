@@ -215,8 +215,13 @@ describe('Firewall Escape Prevention', () => {
 
     test('should verify firewall still works after bypass attempt', async () => {
       // Attempt to bypass, then verify firewall is still enforced
+      const command = [
+        'iptables -F 2>/dev/null',
+        'curl -f https://example.com --max-time 5 2>&1 || echo "firewall still active"',
+      ].join('; ');
+
       const result = await runner.runWithSudo(
-        "bash -c 'iptables -F 2>/dev/null; curl -f https://example.com --max-time 5 2>&1 || echo \"firewall still active\"'",
+        `bash -c '${command}'`,
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
@@ -327,8 +332,10 @@ describe('Firewall Escape Prevention', () => {
 
     test('should block UDP traffic to non-DNS ports', async () => {
       // Attempt UDP traffic to a non-DNS port
+      // Using bash -c to properly handle pipe and redirection
+      const udpCommand = 'echo test | nc -u -w 3 8.8.8.8 12345 2>&1';
       const result = await runner.runWithSudo(
-        'bash -c "echo test | nc -u -w 3 8.8.8.8 12345 2>&1" || echo "UDP blocked"',
+        `bash -c "${udpCommand}" || echo "UDP blocked"`,
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
@@ -390,15 +397,14 @@ describe('Firewall Escape Prevention', () => {
   describe('Combined Attack Scenarios', () => {
     test('should maintain firewall after multiple bypass attempts', async () => {
       // Attempt multiple bypass techniques, then verify firewall
+      const bypassScript = [
+        'iptables -F 2>/dev/null',
+        'iptables -t nat -F OUTPUT 2>/dev/null',
+        'curl -f https://example.com --max-time 5 2>&1 || echo "firewall still enforced"',
+      ].join('; ');
+
       const result = await runner.runWithSudo(
-        `bash -c '
-          # Try iptables flush
-          iptables -F 2>/dev/null
-          # Try NAT modification
-          iptables -t nat -F OUTPUT 2>/dev/null
-          # Verify firewall is still active
-          curl -f https://example.com --max-time 5 2>&1 || echo "firewall still enforced"
-        '`,
+        `bash -c '${bypassScript}'`,
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
@@ -427,8 +433,15 @@ describe('Firewall Escape Prevention', () => {
 
     test('should block environment variable proxy bypass', async () => {
       // Attempt to bypass proxy via environment variables
+      // Using env to set proxy-related vars before curl
+      const proxyBypassCommand = [
+        "no_proxy='*'",
+        "http_proxy=''",
+        "https_proxy=''",
+      ].join(' ');
+
       const result = await runner.runWithSudo(
-        "env no_proxy='*' http_proxy='' https_proxy='' curl -f https://example.com --max-time 5",
+        `env ${proxyBypassCommand} curl -f https://example.com --max-time 5`,
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
