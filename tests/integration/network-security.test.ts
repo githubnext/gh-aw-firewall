@@ -233,8 +233,9 @@ describe('Network Security', () => {
   describe('Container Escape Prevention (Seccomp)', () => {
     test('should block ptrace syscall', async () => {
       // ptrace is commonly used for container escape attacks
+      // Start a background process and try to trace it using $! (last background PID)
       const result = await runner.runWithSudo(
-        "strace -p 1 2>&1 || echo 'ptrace blocked'",
+        "bash -c 'sleep 10 & strace -p $! 2>&1' || echo 'ptrace blocked'",
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
