@@ -3,7 +3,7 @@
  */
 
 import chalk from 'chalk';
-import { ParsedLogEntry, OutputFormat } from '../types';
+import { ParsedLogEntry, OutputFormat, EnhancedLogEntry } from '../types';
 
 /**
  * Options for log formatting
@@ -28,12 +28,12 @@ export class LogFormatter {
   }
 
   /**
-   * Formats a parsed log entry
+   * Formats a parsed log entry (supports both ParsedLogEntry and EnhancedLogEntry)
    *
-   * @param entry - Parsed log entry
+   * @param entry - Parsed log entry (may include PID info)
    * @returns Formatted string with newline
    */
-  formatEntry(entry: ParsedLogEntry): string {
+  formatEntry(entry: ParsedLogEntry | EnhancedLogEntry): string {
     switch (this.format) {
       case 'raw':
         throw new Error('Cannot format parsed entry as raw - use formatRaw for raw lines');
@@ -57,7 +57,7 @@ export class LogFormatter {
   /**
    * Formats an entry as pretty, human-readable output
    */
-  private formatPretty(entry: ParsedLogEntry): string {
+  private formatPretty(entry: ParsedLogEntry | EnhancedLogEntry): string {
     // Format timestamp as readable date
     const date = new Date(entry.timestamp * 1000);
     const timeStr = date.toISOString().replace('T', ' ').substring(0, 23);
@@ -73,8 +73,14 @@ export class LogFormatter {
     const userAgentPart =
       entry.userAgent && entry.userAgent !== '-' ? ` [${entry.userAgent}]` : '';
 
+    // PID info (show if available)
+    const enhancedEntry = entry as EnhancedLogEntry;
+    const pidPart = enhancedEntry.pid !== undefined && enhancedEntry.pid !== -1
+      ? ` <PID:${enhancedEntry.pid} ${enhancedEntry.comm || 'unknown'}>`
+      : '';
+
     // Build message
-    const message = `[${timeStr}] ${entry.method} ${target} → ${entry.statusCode} (${statusText})${userAgentPart}`;
+    const message = `[${timeStr}] ${entry.method} ${target} → ${entry.statusCode} (${statusText})${userAgentPart}${pidPart}`;
 
     // Colorize based on allowed/denied
     if (!this.colorize) {
@@ -87,14 +93,14 @@ export class LogFormatter {
   /**
    * Formats an entry as JSON (newline-delimited)
    */
-  private formatJson(entry: ParsedLogEntry): string {
+  private formatJson(entry: ParsedLogEntry | EnhancedLogEntry): string {
     return JSON.stringify(entry) + '\n';
   }
 
   /**
    * Formats a batch of entries (primarily for JSON array output)
    */
-  formatBatch(entries: ParsedLogEntry[]): string {
+  formatBatch(entries: (ParsedLogEntry | EnhancedLogEntry)[]): string {
     if (this.format === 'json') {
       return entries.map(e => this.formatJson(e)).join('');
     }

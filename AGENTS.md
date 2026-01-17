@@ -59,17 +59,17 @@ Use `scripts/download-latest-artifact.sh` to download logs from GitHub Actions r
 # Download logs from a specific run ID
 ./scripts/download-latest-artifact.sh 1234567890
 
-# Download from test-integration workflow (latest run)
-./scripts/download-latest-artifact.sh "" ".github/workflows/test-integration.yml" "integration-test-logs"
+# Download from test-coverage workflow (latest run)
+./scripts/download-latest-artifact.sh "" ".github/workflows/test-coverage.yml" "coverage-report"
 ```
 
 **Parameters:**
 - `RUN_ID` (optional): Specific workflow run ID, or empty string for latest run
-- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-integration.yml`)
-- `ARTIFACT_NAME` (optional): Artifact name (default: `integration-test-logs`)
+- `WORKFLOW_FILE` (optional): Path to workflow file (default: `.github/workflows/test-coverage.yml`)
+- `ARTIFACT_NAME` (optional): Artifact name (default: `coverage-report`)
 
 **Artifact name:**
-- `integration-test-logs` - test-integration.yml
+- `coverage-report` - test-coverage.yml
 
 This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Requires GitHub CLI (`gh`) authenticated with the repository.
 
@@ -89,6 +89,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - Both commit messages AND PR titles must follow this format
 - PR descriptions should be 1-2 sentences max
 
+**Allowed scopes for PR titles:** `cli`, `docker`, `squid`, `proxy`, `ci`, `deps`
+- Using scopes not in this list will cause the PR Title Check to fail
+- If unsure, omit the scope entirely (e.g., `test: add new tests` instead of `test(security): add new tests`)
+
 **Common types:**
 - `feat`: New feature
 - `fix`: Bug fix
@@ -103,8 +107,10 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 - ✅ `docs(template): fix duplicate heading in release template`
 - ✅ `feat: add new domain whitelist option`
 - ✅ `fix(cleanup): resolve container cleanup race condition`
+- ✅ `test: add NET_ADMIN capability verification tests`
 - ❌ `Fix bug` (missing type)
 - ❌ `docs: Fix template.` (uppercase subject, period at end)
+- ❌ `test(security): add new tests` (scope `security` not in allowed list for PR titles)
 
 ## Development Commands
 
@@ -205,24 +211,18 @@ The codebase follows a modular architecture with clear separation of concerns:
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
 
 **Agent Execution Container** (`containers/agent/`)
-- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm, docker-cli
+- Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
 - Mounts entire host filesystem at `/host` and user home directory for full access
-- Mounts Docker socket (`/var/run/docker.sock`) for docker-in-docker support
-- `NET_ADMIN` capability required for iptables manipulation
+- `NET_ADMIN` capability required for iptables setup during initialization
+- **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
-  2. `entrypoint.sh`: Tests connectivity, then executes user command
-- **Docker Wrapper** (`docker-wrapper.sh`): Intercepts `docker run` commands to inject network and proxy configuration
-  - Symlinked at `/usr/bin/docker` (real docker at `/usr/bin/docker-real`)
-  - Automatically injects `--network awf-net` to all spawned containers
-  - Injects proxy environment variables: `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`
-  - Logs all intercepted commands to `/tmp/docker-wrapper.log` for debugging
+  2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
 - Key iptables rules (in `setup-iptables.sh`):
   - Allow localhost traffic (for stdio MCP servers)
   - Allow DNS queries
   - Allow traffic to Squid proxy itself
   - Redirect all HTTP (port 80) and HTTPS (port 443) to Squid via DNAT (NAT table)
-  - **Note:** These NAT rules only apply to the agent container itself, not spawned containers
 
 ### Traffic Flow
 
@@ -436,24 +436,30 @@ To use a local, writable GitHub MCP server with Copilot CLI, you must:
 
 The agent container mounts the HOME directory, so this config file is automatically accessible to GitHub Copilot CLI running inside the container.
 
-**Format:**
+**Format (stdio-based with npx):**
 ```json
 {
   "mcpServers": {
     "github": {
-      "type": "local",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
-        "GITHUB_TOOLSETS=default",
-        "ghcr.io/github/github-mcp-server:v0.19.0"
-      ],
-      "tools": ["*"],
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "github-mcp-custom@1.0.20", "stdio"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Alternative (using Go binary):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "/usr/local/bin/github-mcp-server",
+      "args": ["stdio"],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
@@ -463,13 +469,13 @@ The agent container mounts the HOME directory, so this config file is automatica
 ```
 
 **Key Requirements:**
-- ✅ **`"tools": ["*"]`** - Required field. Use `["*"]` to enable all tools, or list specific tool names
-  - ⚠️ Empty array `[]` means NO tools will be available
-- ✅ **`"type": "local"`** - Required to specify local MCP server type
+- ✅ **`"type": "stdio"`** - Uses stdio transport (not Docker)
 - ✅ **`"env"` section** - Environment variables must be declared here with `${VAR}` syntax for interpolation
-- ✅ **Environment variable in args** - Use bare variable names in `-e` flags (e.g., `"GITHUB_PERSONAL_ACCESS_TOKEN"` without `$`)
 - ✅ **Shell environment** - Variables must be exported in the shell before running awf
 - ✅ **MCP server name** - Use `"github"` as the server name (must match `--allow-tool` flag)
+- ✅ **npx availability** - The agent container includes Node.js 22 with npx pre-installed
+
+**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/githubnext/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
 
 ### Running Copilot CLI with Local MCP Through Firewall
 
@@ -498,17 +504,17 @@ sudo -E awf \
 1. `awf` needs sudo for iptables manipulation
 2. `-E` preserves GITHUB_TOKEN and GITHUB_PERSONAL_ACCESS_TOKEN
 3. These variables are passed into the agent container via the HOME directory mount
-4. The GitHub MCP server Docker container inherits them from the agent container's environment
+4. The stdio-based MCP server (running via npx) inherits them from the agent container's environment
 
 ### Troubleshooting
 
 **Problem:** MCP server starts but says "GITHUB_PERSONAL_ACCESS_TOKEN not set"
-- **Cause:** Environment variable not passed correctly through sudo or to Docker container
+- **Cause:** Environment variable not passed correctly through sudo
 - **Solution:** Use `sudo -E` when running awf, and ensure the variable is exported before running the command
 
 **Problem:** MCP config validation error: "Invalid input"
-- **Cause:** Missing `"tools"` field
-- **Solution:** Add `"tools": ["*"]` to the MCP server config
+- **Cause:** Invalid configuration format or missing required fields
+- **Solution:** Ensure `"type": "stdio"` and `"env"` section are properly configured
 
 **Problem:** Copilot uses read-only remote MCP instead of local
 - **Cause:** Built-in MCP not disabled
@@ -528,7 +534,7 @@ Check GitHub Copilot CLI logs (use `--log-level debug`) for these indicators:
 
 **Local MCP working:**
 ```
-Starting MCP client for github with command: docker
+Starting MCP client for github with command: npx
 GitHub MCP Server running on stdio
 readOnly=false
 MCP client for github connected
@@ -545,7 +551,7 @@ Starting remote MCP client for github-mcp-server
 For GitHub Actions workflows:
 1. Create MCP config script that writes to `~/.copilot/mcp-config.json` (note: `~` = `/home/runner` in GitHub Actions)
 2. Export both `GITHUB_TOKEN` (for GitHub Copilot CLI) and `GITHUB_PERSONAL_ACCESS_TOKEN` (for GitHub MCP server) as environment variables
-3. Pull the MCP server Docker image before running tests: `docker pull ghcr.io/github/github-mcp-server:v0.19.0`
+3. Use stdio-based MCP configuration (npx or Go binary) - Docker-based MCP servers are no longer supported as of v0.9.1
 4. Run awf with `sudo -E` to preserve environment variables
 5. Always use `--disable-builtin-mcps` and `--allow-tool github` flags when running GitHub Copilot CLI
 

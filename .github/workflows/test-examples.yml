@@ -1,18 +1,20 @@
-name: Claude Code Tests
+name: Examples Test
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test-claude-code:
-    name: Claude Code Integration Tests
+  test-examples:
+    name: Test Examples
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -32,36 +34,47 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Install awf globally
+        run: sudo npm link
+
       - name: Pre-test cleanup
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Run Claude Code tests
-        id: run-tests
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          set +e
-          sudo -E npm run test:integration -- claude-code.test.ts 2>&1 | tee test-output.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-        continue-on-error: true
+      - name: Make examples executable
+        run: chmod +x examples/*.sh
 
-      - name: Check test results
-        if: always()
+      - name: Test basic-curl.sh
         run: |
-          if [ "${{ steps.run-tests.outputs.exit_code }}" != "0" ]; then
-            echo "Tests failed with exit code ${{ steps.run-tests.outputs.exit_code }}"
-            exit 1
-          fi
+          echo "=== Testing basic-curl.sh ==="
+          sudo ./examples/basic-curl.sh
+
+      - name: Test using-domains-file.sh
+        run: |
+          echo "=== Testing using-domains-file.sh ==="
+          sudo ./examples/using-domains-file.sh
+
+      - name: Test debugging.sh
+        run: |
+          echo "=== Testing debugging.sh ==="
+          sudo ./examples/debugging.sh
+
+      - name: Test blocked-domains.sh
+        run: |
+          echo "=== Testing blocked-domains.sh ==="
+          sudo ./examples/blocked-domains.sh
+
+      # Note: github-copilot.sh is skipped as it requires GITHUB_TOKEN for Copilot CLI
+      # To test it, you would need to set up a secret with a valid Copilot token
 
       - name: Post-test cleanup
         if: always()
         run: sudo ./scripts/ci/cleanup.sh
 
-      - name: Upload test logs on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: claude-code-test-logs
+          name: examples-test-logs
           path: |
             /tmp/*-test.log
             /tmp/awf-*/

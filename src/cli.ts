@@ -300,14 +300,24 @@ program
   .version(version)
   .option(
     '--allow-domains <domains>',
-    'Comma-separated list of allowed domains. Supports wildcards:\n' +
-    '                                   github.com        - exact domain + subdomains\n' +
-    '                                   *.github.com      - any subdomain of github.com\n' +
-    '                                   api-*.example.com - api-* subdomains'
+    'Comma-separated list of allowed domains. Supports wildcards and protocol prefixes:\n' +
+    '                                   github.com         - exact domain + subdomains (HTTP & HTTPS)\n' +
+    '                                   *.github.com       - any subdomain of github.com\n' +
+    '                                   api-*.example.com  - api-* subdomains\n' +
+    '                                   https://secure.com - HTTPS only\n' +
+    '                                   http://legacy.com  - HTTP only'
   )
   .option(
     '--allow-domains-file <path>',
     'Path to file containing allowed domains (one per line or comma-separated, supports # comments)'
+  )
+  .option(
+    '--block-domains <domains>',
+    'Comma-separated list of blocked domains (takes precedence over allowed domains). Supports wildcards.'
+  )
+  .option(
+    '--block-domains-file <path>',
+    'Path to file containing blocked domains (one per line or comma-separated, supports # comments)'
   )
   .option(
     '--log-level <level>',
@@ -352,7 +362,7 @@ program
   )
   .option(
     '--env-all',
-    'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
+    'Pass all host environment variables to container (excludes system vars like PATH)',
     false
   )
   .option(
@@ -373,6 +383,29 @@ program
   .option(
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
+  )
+  .option(
+    '--enable-host-access',
+    'Enable access to host services via host.docker.internal. ' +
+    'Security warning: When combined with --allow-domains host.docker.internal, ' +
+    'containers can access ANY service on the host machine.',
+    false
+  )
+  .option(
+    '--allow-host-ports <ports>',
+    'Comma-separated list of ports or port ranges to allow when using --enable-host-access. ' +
+    'By default, only ports 80 and 443 are allowed. ' +
+    'Example: --allow-host-ports 3000 or --allow-host-ports 3000,8080 or --allow-host-ports 3000-3010,8000-8090'
+  )
+  .option(
+    '--ssl-bump',
+    'Enable SSL Bump for HTTPS content inspection (allows URL path filtering for HTTPS)',
+    false
+  )
+  .option(
+    '--allow-urls <urls>',
+    'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
+    '                                   Supports wildcards: https://github.com/githubnext/*'
   )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
@@ -457,6 +490,38 @@ program
       }
     }
 
+    // Parse blocked domains from both --block-domains flag and --block-domains-file
+    let blockedDomains: string[] = [];
+
+    // Parse blocked domains from command-line flag if provided
+    if (options.blockDomains) {
+      blockedDomains = parseDomains(options.blockDomains);
+    }
+
+    // Parse blocked domains from file if provided
+    if (options.blockDomainsFile) {
+      try {
+        const fileBlockedDomainsArray = parseDomainsFile(options.blockDomainsFile);
+        blockedDomains.push(...fileBlockedDomainsArray);
+      } catch (error) {
+        logger.error(`Failed to read blocked domains file: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
+
+    // Remove duplicates from blocked domains
+    blockedDomains = [...new Set(blockedDomains)];
+
+    // Validate all blocked domains and patterns
+    for (const domain of blockedDomains) {
+      try {
+        validateDomainOrPattern(domain);
+      } catch (error) {
+        logger.error(`Invalid blocked domain or pattern: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    }
+
     // Parse additional environment variables from --env flags
     let additionalEnv: Record<string, string> = {};
     if (options.env && Array.isArray(options.env)) {
@@ -490,8 +555,62 @@ program
       process.exit(1);
     }
 
+    // Parse --allow-urls for SSL Bump mode
+    let allowedUrls: string[] | undefined;
+    if (options.allowUrls) {
+      allowedUrls = parseDomains(options.allowUrls);
+      if (allowedUrls.length > 0 && !options.sslBump) {
+        logger.error('--allow-urls requires --ssl-bump to be enabled');
+        process.exit(1);
+      }
+
+      // Validate URL patterns for security
+      for (const url of allowedUrls) {
+        // URL patterns must start with https://
+        if (!url.startsWith('https://')) {
+          logger.error(`URL patterns must start with https:// (got: ${url})`);
+          logger.error('Use --allow-domains for domain-level filtering without SSL Bump');
+          process.exit(1);
+        }
+
+        // Reject overly broad patterns that would bypass security
+        const dangerousPatterns = [
+          /^https:\/\/\*$/,           // https://*
+          /^https:\/\/\*\.\*$/,       // https://*.*
+          /^https:\/\/\.\*$/,         // https://.*
+          /^\.\*$/,                   // .*
+          /^\*$/,                     // *
+          /^https:\/\/[^/]*\*[^/]*$/, // https://*anything* without path
+        ];
+
+        for (const pattern of dangerousPatterns) {
+          if (pattern.test(url)) {
+            logger.error(`URL pattern "${url}" is too broad and would bypass security controls`);
+            logger.error('URL patterns must include a specific domain and path, e.g., https://github.com/org/*');
+            process.exit(1);
+          }
+        }
+
+        // Ensure pattern has a path component (not just domain)
+        const urlWithoutScheme = url.replace(/^https:\/\//, '');
+        if (!urlWithoutScheme.includes('/')) {
+          logger.error(`URL pattern "${url}" must include a path component`);
+          logger.error('For domain-only filtering, use --allow-domains instead');
+          logger.error('Example: https://github.com/githubnext/* (includes path)');
+          process.exit(1);
+        }
+      }
+    }
+
+    // Validate SSL Bump option
+    if (options.sslBump) {
+      logger.info('SSL Bump mode enabled - HTTPS content inspection will be performed');
+      logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
+    }
+
     const config: WrapperConfig = {
       allowedDomains,
+      blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
       agentCommand,
       logLevel,
       keepContainers: options.keepContainers,
@@ -506,12 +625,34 @@ program
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
+      enableHostAccess: options.enableHostAccess,
+      allowHostPorts: options.allowHostPorts,
+      sslBump: options.sslBump,
+      allowedUrls,
     };
 
     // Warn if --env-all is used
     if (config.envAll) {
       logger.warn('⚠️  Using --env-all: All host environment variables will be passed to container');
       logger.warn('   This may expose sensitive credentials if logs or configs are shared');
+    }
+
+    // Warn if --allow-host-ports is used without --enable-host-access
+    if (config.allowHostPorts && !config.enableHostAccess) {
+      logger.error('❌ --allow-host-ports requires --enable-host-access to be set');
+      process.exit(1);
+    }
+
+    // Warn if --enable-host-access is used with host.docker.internal in allowed domains
+    if (config.enableHostAccess) {
+      const hasHostDomain = allowedDomains.some(d =>
+        d === 'host.docker.internal' || d.endsWith('.host.docker.internal')
+      );
+      if (hasHostDomain) {
+        logger.warn('⚠️  Host access enabled with host.docker.internal in allowed domains');
+        logger.warn('   Containers can access ANY service running on the host machine');
+        logger.warn('   Only use this for trusted workloads (e.g., MCP gateways)');
+      }
     }
 
     // Log config with redacted secrets
@@ -521,6 +662,9 @@ program
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
+    if (blockedDomains.length > 0) {
+      logger.info(`Blocked domains: ${blockedDomains.join(', ')}`);
+    }
     logger.debug(`DNS servers: ${dnsServers.join(', ')}`);
 
     let exitCode = 0;
@@ -598,10 +742,24 @@ program
     }
   });
 
+/**
+ * Validates that a format string is one of the allowed values
+ * 
+ * @param format - Format string to validate
+ * @param validFormats - Array of valid format options
+ * @throws Exits process with error if format is invalid
+ */
+function validateFormat(format: string, validFormats: string[]): void {
+  if (!validFormats.includes(format)) {
+    logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // Logs subcommand - view Squid proxy logs
-program
+const logsCmd = program
   .command('logs')
-  .description('View Squid proxy logs from current or previous runs')
+  .description('View and analyze Squid proxy logs from current or previous runs')
   .option('-f, --follow', 'Follow log output in real-time (like tail -f)', false)
   .option(
     '--format <format>',
@@ -610,12 +768,19 @@ program
   )
   .option('--source <path>', 'Path to log directory or "running" for live container')
   .option('--list', 'List available log sources', false)
+  .option(
+    '--with-pid',
+    'Enrich logs with PID/process info (real-time only, requires -f)',
+    false
+  )
   .action(async (options) => {
     // Validate format option
     const validFormats: OutputFormat[] = ['raw', 'pretty', 'json'];
-    if (!validFormats.includes(options.format)) {
-      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
-      process.exit(1);
+    validateFormat(options.format, validFormats);
+
+    // Warn if --with-pid is used without -f
+    if (options.withPid && !options.follow) {
+      logger.warn('--with-pid only works with real-time streaming (-f). PID tracking disabled.');
     }
 
     // Dynamic import to avoid circular dependencies
@@ -625,6 +790,54 @@ program
       format: options.format as OutputFormat,
       source: options.source,
       list: options.list,
+      withPid: options.withPid && options.follow, // Only enable if also following
+    });
+  });
+
+// Logs stats subcommand - show aggregated statistics
+logsCmd
+  .command('stats')
+  .description('Show aggregated statistics from firewall logs')
+  .option(
+    '--format <format>',
+    'Output format: json, markdown, pretty',
+    'pretty'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .action(async (options) => {
+    // Validate format option
+    const validFormats = ['json', 'markdown', 'pretty'];
+    if (!validFormats.includes(options.format)) {
+      logger.error(`Invalid format: ${options.format}. Must be one of: ${validFormats.join(', ')}`);
+      process.exit(1);
+    }
+
+    const { statsCommand } = await import('./commands/logs-stats');
+    await statsCommand({
+      format: options.format as 'json' | 'markdown' | 'pretty',
+      source: options.source,
+    });
+  });
+
+// Logs summary subcommand - generate summary report (optimized for GitHub Actions)
+logsCmd
+  .command('summary')
+  .description('Generate summary report (defaults to markdown for GitHub Actions)')
+  .option(
+    '--format <format>',
+    'Output format: json, markdown, pretty',
+    'markdown'
+  )
+  .option('--source <path>', 'Path to log directory or "running" for live container')
+  .action(async (options) => {
+    // Validate format option
+    const validFormats = ['json', 'markdown', 'pretty'];
+    validateFormat(options.format, validFormats);
+
+    const { summaryCommand } = await import('./commands/logs-summary');
+    await summaryCommand({
+      format: options.format as 'json' | 'markdown' | 'pretty',
+      source: options.source,
     });
   });
 

@@ -10,9 +10,30 @@ Get started with the firewall in 5 minutes!
 
 ## Installation
 
+### Option 1: Install Script (Recommended for Local Use)
+
+```bash
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+
+# Verify installation
+sudo awf --version
+```
+
+### Option 2: GitHub Action (Recommended for CI/CD)
+
+```yaml
+- name: Setup awf
+  uses: githubnext/gh-aw-firewall@main
+```
+
+See [GitHub Actions Integration](github_actions.md) for more details.
+
+### Option 3: Build from Source
+
 ```bash
 # Clone the repository
-git clone <your-repo-url> awf
+git clone https://github.com/githubnext/gh-aw-firewall.git awf
 cd awf
 
 # Install dependencies
@@ -254,7 +275,7 @@ docker run --rm --cap-add NET_ADMIN ubuntu iptables -L
 1. **Read the full documentation**: [README.md](../README.md)
 2. **Review the architecture**: [architecture.md](architecture.md)
 3. **Run the test suite**: `npm test` (unit tests) or `sudo npm run test:integration` (integration tests)
-4. **Check GitHub Actions tests**: `.github/workflows/test-integration.yml`
+4. **Check GitHub Actions tests**: `.github/workflows/test-coverage.yml` and smoke test workflows (`.github/workflows/smoke-*.md`)
 
 ## Getting Help
 

@@ -766,4 +766,12 @@ describe('cli', () => {
       expect(() => parseDnsServers('8.8.8.8,invalid,1.1.1.1')).toThrow('Invalid DNS server IP address: invalid');
     });
   });
+
+  describe('DEFAULT_DNS_SERVERS', () => {
+    it('should have correct default DNS servers', async () => {
+      // Dynamic import to get the constant
+      const { DEFAULT_DNS_SERVERS } = await import('./cli');
+      expect(DEFAULT_DNS_SERVERS).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+  });
 });

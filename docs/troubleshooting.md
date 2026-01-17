@@ -227,46 +227,6 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
    docker exec awf-agent ping -c 3 172.30.0.10
    ```
 
-## Docker-in-Docker Issues
-
-### Spawned Containers Not Using Proxy
-
-**Problem:** Containers spawned by docker commands don't respect firewall
-
-**Solution:**
-- Verify docker-wrapper.sh is working:
-  ```bash
-  docker exec awf-agent cat /tmp/docker-wrapper.log
-  ```
-- Check that spawned containers have correct network:
-  ```bash
-  docker network inspect awf-net
-  # Should show spawned containers in "Containers" section
-  ```
-
-### Docker Bypass Attempts Blocked
-
-**Problem:** `--network host is not allowed (bypasses firewall)`
-
-**Solution:**
-- This is expected behavior - `--network host` bypasses the firewall
-- Use default network instead (no `--network` flag needed)
-- The firewall automatically injects the correct network
-
-**Problem:** `--add-host is not allowed (enables DNS poisoning)`
-
-**Solution:**
-- This is expected behavior - `--add-host` can bypass domain restrictions
-- Remove `--add-host` flag from docker command
-- Use legitimate DNS resolution instead
-
-**Problem:** `--privileged is not allowed (bypasses all security)`
-
-**Solution:**
-- This is expected behavior - `--privileged` can disable firewall rules
-- Remove `--privileged` flag from docker command
-- Use containers without privileged mode
-
 ## Cleanup Issues
 
 ### Orphaned Containers
@@ -349,6 +309,54 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
    ```
 3. This is why pre-test cleanup is critical in CI/CD
 
+## SSL Bump Issues
+
+### Certificate Validation Failures
+
+**Problem:** Agent reports SSL/TLS certificate errors when `--ssl-bump` is enabled
+
+**Solution:**
+1. Verify the CA was injected into the trust store:
+   ```bash
+   docker exec awf-agent ls -la /usr/local/share/ca-certificates/
+   docker exec awf-agent cat /etc/ssl/certs/ca-certificates.crt | grep -A1 "AWF Session CA"
+   ```
+2. Check if the application uses certificate pinning (incompatible with SSL Bump)
+3. For Node.js applications, verify NODE_EXTRA_CA_CERTS is not overriding:
+   ```bash
+   docker exec awf-agent printenv | grep -i cert
+   ```
+
+### URL Patterns Not Matching
+
+**Problem:** Allowed URL patterns are being blocked with `--ssl-bump`
+
+**Solution:**
+1. Enable debug logging to see pattern matching:
+   ```bash
+   sudo awf --log-level debug --ssl-bump --allow-urls "..." 'your-command'
+   ```
+2. Check the exact URL format in Squid logs:
+   ```bash
+   sudo cat /tmp/squid-logs-*/access.log | grep your-domain
+   ```
+3. Ensure patterns include the scheme:
+   ```bash
+   # ✗ Wrong: github.com/githubnext/*
+   # ✓ Correct: https://github.com/githubnext/*
+   ```
+
+### Application Fails with Certificate Pinning
+
+**Problem:** Application refuses to connect due to certificate pinning
+
+**Solution:**
+- Applications with certificate pinning are incompatible with SSL Bump
+- Use domain-only filtering without `--ssl-bump` for these applications:
+  ```bash
+  sudo awf --allow-domains github.com 'your-pinned-app'
+  ```
+
 ## Getting More Help
 
 If you're still experiencing issues:
@@ -366,10 +374,10 @@ If you're still experiencing issues:
 3. **Review all logs:**
    - Agent logs: `/tmp/awf-agent-logs-<timestamp>/`
    - Squid logs: `/tmp/squid-logs-<timestamp>/`
-   - Docker wrapper logs: `docker exec awf-agent cat /tmp/docker-wrapper.log`
    - Container logs: `docker logs awf-agent`
 
 4. **Check documentation:**
    - [Architecture](architecture.md) - Understand how the system works
    - [Usage Guide](usage.md) - Detailed usage examples
+   - [SSL Bump](ssl-bump.md) - HTTPS content inspection and URL filtering
    - [Logging Documentation](../LOGGING.md) - Comprehensive logging guide

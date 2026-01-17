@@ -6,8 +6,10 @@ import execa from 'execa';
 import { DockerComposeConfig, WrapperConfig, BlockedTarget } from './types';
 import { logger } from './logger';
 import { generateSquidConfig } from './squid-config';
+import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
 
 const SQUID_PORT = 3128;
+const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
  * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
@@ -147,12 +149,21 @@ async function _generateRandomSubnet(): Promise<{ subnet: string; squidIp: strin
 }
 
 /**
+ * SSL configuration for Docker Compose (when SSL Bump is enabled)
+ */
+export interface SslConfig {
+  caFiles: CaFiles;
+  sslDbPath: string;
+}
+
+/**
  * Generates Docker Compose configuration
  * Note: Uses external network 'awf-net' created by host-iptables setup
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; agentIp: string }
+  networkConfig: { subnet: string; squidIp: string; agentIp: string },
+  sslConfig?: SslConfig
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
 
@@ -164,6 +175,20 @@ export function generateDockerCompose(
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
 
+  // Build Squid volumes list
+  const squidVolumes = [
+    `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
+    `${squidLogsPath}:/var/log/squid:rw`,
+  ];
+
+  // Add SSL-related volumes if SSL Bump is enabled
+  if (sslConfig) {
+    squidVolumes.push(`${sslConfig.caFiles.certPath}:${sslConfig.caFiles.certPath}:ro`);
+    squidVolumes.push(`${sslConfig.caFiles.keyPath}:${sslConfig.caFiles.keyPath}:ro`);
+    // Mount SSL database at /var/spool/squid_ssl_db (Squid's expected location)
+    squidVolumes.push(`${sslConfig.sslDbPath}:/var/spool/squid_ssl_db:rw`);
+  }
+
   // Squid service configuration
   const squidService: any = {
     container_name: 'awf-squid',
@@ -172,10 +197,7 @@ export function generateDockerCompose(
         ipv4_address: networkConfig.squidIp,
       },
     },
-    volumes: [
-      `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
-      `${squidLogsPath}:/var/log/squid:rw`,
-    ],
+    volumes: squidVolumes,
     healthcheck: {
       test: ['CMD', 'nc', '-z', 'localhost', '3128'],
       interval: '5s',
@@ -183,11 +205,32 @@ export function generateDockerCompose(
       retries: 5,
       start_period: '10s',
     },
-    ports: [`${SQUID_PORT}:${SQUID_PORT}`],
+    ports: [`${SQUID_PORT}:${SQUID_PORT}`, `${SQUID_INTERCEPT_PORT}:${SQUID_INTERCEPT_PORT}`],
+    // Security hardening: Drop unnecessary capabilities
+    // Squid only needs network capabilities, not system administration capabilities
+    cap_drop: [
+      'NET_RAW',      // No raw socket access needed
+      'SYS_ADMIN',    // No system administration needed
+      'SYS_PTRACE',   // No process tracing needed
+      'SYS_MODULE',   // No kernel module loading
+      'MKNOD',        // No device node creation
+      'AUDIT_WRITE',  // No audit log writing
+      'SETFCAP',      // No setting file capabilities
+    ],
   };
 
+  // Only enable host.docker.internal when explicitly requested via --enable-host-access
+  // This allows containers to reach services on the host machine (e.g., MCP gateways)
+  // Security note: When combined with allowing host.docker.internal domain,
+  // containers can access any port on the host
+  if (config.enableHostAccess) {
+    squidService.extra_hosts = ['host.docker.internal:host-gateway'];
+    logger.debug('Host access enabled: host.docker.internal will resolve to host gateway');
+  }
+
   // Use GHCR image or build locally
-  if (useGHCR) {
+  // For SSL Bump, we always build locally to include OpenSSL tools
+  if (useGHCR && !config.sslBump) {
     squidService.image = `${registry}/squid:${tag}`;
   } else {
     squidService.build = {
@@ -200,9 +243,6 @@ export function generateDockerCompose(
   // System variables that must be overridden or excluded (would break container operation)
   const EXCLUDED_ENV_VARS = new Set([
     'PATH',           // Must use container's PATH
-    'DOCKER_HOST',    // Must use container's socket path
-    'DOCKER_CONTEXT', // Must use default context
-    'DOCKER_CONFIG',  // Must use clean config
     'PWD',            // Container's working directory
     'OLDPWD',         // Not relevant in container
     'SHLVL',          // Shell level not relevant
@@ -219,10 +259,9 @@ export function generateDockerCompose(
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
+    SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
     HOME: process.env.HOME || '/root',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-    DOCKER_HOST: 'unix:///var/run/docker.sock',
-    DOCKER_CONTEXT: 'default',
   };
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
@@ -253,6 +292,11 @@ export function generateDockerCompose(
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
   environment.AWF_DNS_SERVERS = dnsServers.join(',');
 
+  // Pass allowed ports to container for setup-iptables.sh (if specified)
+  if (config.allowHostPorts) {
+    environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
+  }
+
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();
@@ -264,16 +308,17 @@ export function generateDockerCompose(
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
     `${process.env.HOME}:${process.env.HOME}:rw`,
-    // Mount Docker socket for MCP servers that need to run containers
-    '/var/run/docker.sock:/var/run/docker.sock:rw',
-    // Mount clean Docker config to override host's context
-    `${config.workDir}/.docker:/workspace/.docker:rw`,
-    // Override host's .docker directory with clean config to prevent Docker CLI
-    // from reading host's context (e.g., desktop-linux pointing to wrong socket)
-    `${config.workDir}/.docker:${process.env.HOME}/.docker:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
   ];
+
+  // Add SSL CA certificate mount if SSL Bump is enabled
+  // This allows the agent container to trust the dynamically-generated CA
+  if (sslConfig) {
+    agentVolumes.push(`${sslConfig.caFiles.certPath}:/usr/local/share/ca-certificates/awf-ca.crt:ro`);
+    // Set environment variable to indicate SSL Bump is enabled
+    environment.AWF_SSL_BUMP_ENABLED = 'true';
+  }
 
   // Add custom volume mounts if specified
   if (config.volumeMounts && config.volumeMounts.length > 0) {
@@ -304,7 +349,11 @@ export function generateDockerCompose(
         condition: 'service_healthy',
       },
     },
-    cap_add: ['NET_ADMIN'], // Required for iptables
+    // NET_ADMIN is required for iptables setup in entrypoint.sh.
+    // Security: The capability is dropped before running user commands
+    // via 'capsh --drop=cap_net_admin' in containers/agent/entrypoint.sh.
+    // This prevents malicious code from modifying iptables rules.
+    cap_add: ['NET_ADMIN'],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
@@ -313,8 +362,11 @@ export function generateDockerCompose(
       'SYS_RAWIO',    // Prevents raw I/O access
       'MKNOD',        // Prevents device node creation
     ],
-    // Apply seccomp profile to restrict dangerous syscalls
-    security_opt: [`seccomp=${config.workDir}/seccomp-profile.json`],
+    // Apply seccomp profile and no-new-privileges to restrict dangerous syscalls and prevent privilege escalation
+    security_opt: [
+      'no-new-privileges:true',
+      `seccomp=${config.workDir}/seccomp-profile.json`,
+    ],
     // Resource limits to prevent DoS attacks (conservative defaults)
     mem_limit: '4g',           // 4GB memory limit
     memswap_limit: '4g',       // No swap (same as mem_limit)
@@ -330,6 +382,11 @@ export function generateDockerCompose(
   if (config.containerWorkDir) {
     agentService.working_dir = config.containerWorkDir;
     logger.debug(`Set container working directory to: ${config.containerWorkDir}`);
+  }
+
+  // Enable host.docker.internal for agent when --enable-host-access is set
+  if (config.enableHostAccess) {
+    agentService.extra_hosts = ['host.docker.internal:host-gateway'];
   }
 
   // Use GHCR image or build locally
@@ -372,23 +429,6 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   if (!fs.existsSync(config.workDir)) {
     fs.mkdirSync(config.workDir, { recursive: true });
   }
-
-  // Create a clean Docker config directory to prevent host's Docker context from being used
-  // This is mounted into the container via DOCKER_CONFIG env var
-  const dockerConfigDir = path.join(config.workDir, '.docker');
-  if (!fs.existsSync(dockerConfigDir)) {
-    fs.mkdirSync(dockerConfigDir, { recursive: true });
-  }
-
-  // Write a minimal Docker config that uses default context (no custom socket paths)
-  const dockerConfig = {
-    currentContext: 'default',
-  };
-  fs.writeFileSync(
-    path.join(dockerConfigDir, 'config.json'),
-    JSON.stringify(dockerConfig, null, 2)
-  );
-  logger.debug(`Docker config written to: ${dockerConfigDir}/config.json`);
 
   // Create agent logs directory for persistence
   const agentLogsDir = path.join(config.workDir, 'agent-logs');
@@ -435,17 +475,50 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     }
   }
 
+  // Generate SSL Bump certificates if enabled
+  let sslConfig: SslConfig | undefined;
+  if (config.sslBump) {
+    logger.info('SSL Bump enabled - generating per-session CA certificate...');
+    try {
+      const caFiles = await generateSessionCa({ workDir: config.workDir });
+      const sslDbPath = await initSslDb(config.workDir);
+      sslConfig = { caFiles, sslDbPath };
+      logger.info('SSL Bump CA certificate generated successfully');
+      logger.warn('⚠️  SSL Bump mode: HTTPS traffic will be intercepted for URL inspection');
+      logger.warn('   A per-session CA certificate has been generated (valid for 1 day)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to generate SSL Bump CA: ${message}`);
+      throw new Error(`SSL Bump initialization failed: ${message}`);
+    }
+  }
+
+  // Transform user URL patterns to regex patterns for Squid ACLs
+  let urlPatterns: string[] | undefined;
+  if (config.allowedUrls && config.allowedUrls.length > 0) {
+    urlPatterns = parseUrlPatterns(config.allowedUrls);
+    logger.debug(`Parsed ${urlPatterns.length} URL pattern(s) for SSL Bump filtering`);
+  }
+
   // Write Squid config
+  // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
   const squidConfig = generateSquidConfig({
     domains: config.allowedDomains,
+    blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
+    sslBump: config.sslBump,
+    caFiles: sslConfig?.caFiles,
+    sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
+    urlPatterns,
+    enableHostAccess: config.enableHostAccess,
+    allowHostPorts: config.allowHostPorts,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig);
   logger.debug(`Squid config written to: ${squidConfigPath}`);
 
   // Write Docker Compose config
-  const dockerCompose = generateDockerCompose(config, networkConfig);
+  const dockerCompose = generateDockerCompose(config, networkConfig, sslConfig);
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
   fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose));
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);

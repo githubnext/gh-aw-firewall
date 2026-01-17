@@ -36,11 +36,24 @@ export interface WrapperConfig {
   allowedDomains: string[];
 
   /**
+   * List of blocked domains for HTTP/HTTPS egress traffic
+   * 
+   * Blocked domains take precedence over allowed domains. If a domain matches
+   * both the allowlist and blocklist, it will be blocked. This allows for
+   * fine-grained control like allowing '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as allowedDomains.
+   * 
+   * @example ['internal.example.com', '*.sensitive.org']
+   */
+  blockedDomains?: string[];
+
+  /**
    * The command to execute inside the firewall container
    * 
    * This command runs inside an Ubuntu-based Docker container with iptables rules
    * that redirect all HTTP/HTTPS traffic through a Squid proxy. The command has
-   * access to the host filesystem (mounted at /host and ~) and Docker socket.
+   * access to the host filesystem (mounted at /host and ~).
    * 
    * @example 'npx @github/copilot --prompt "list files"'
    * @example 'curl https://api.github.com/zen'
@@ -220,6 +233,81 @@ export interface WrapperConfig {
    * @example '/tmp/my-proxy-logs'
    */
   proxyLogsDir?: string;
+
+  /**
+   * Enable access to host services via host.docker.internal
+   *
+   * When true, adds `host.docker.internal` hostname resolution to containers,
+   * allowing traffic to reach services running on the host machine.
+   *
+   * **Security Warning**: When enabled and `host.docker.internal` is added to
+   * --allow-domains, containers can access ANY service running on the host,
+   * including databases, APIs, and other sensitive services. Only enable this
+   * when you specifically need container-to-host communication (e.g., for MCP
+   * gateways running on the host).
+   *
+   * @default false
+   * @example
+   * ```bash
+   * # Enable host access for MCP gateway on host
+   * awf --enable-host-access --allow-domains host.docker.internal -- curl http://host.docker.internal:8080
+   * ```
+   */
+  enableHostAccess?: boolean;
+
+  /**
+   * Additional ports to allow when using --enable-host-access
+   *
+   * Comma-separated list of ports or port ranges to allow in addition to
+   * standard HTTP (80) and HTTPS (443). This provides explicit control over
+   * which non-standard ports can be accessed when using host access.
+   *
+   * By default, only ports 80 and 443 are allowed even with --enable-host-access.
+   * Use this flag to explicitly allow specific ports needed for your use case.
+   *
+   * @default undefined (only 80 and 443 allowed)
+   * @example
+   * ```bash
+   * # Allow MCP gateway on port 3000
+   * awf --enable-host-access --allow-host-ports 3000 --allow-domains host.docker.internal -- command
+   *
+   * # Allow multiple ports
+   * awf --enable-host-access --allow-host-ports 3000,8080,9000 --allow-domains host.docker.internal -- command
+   *
+   * # Allow port ranges
+   * awf --enable-host-access --allow-host-ports 3000-3010,8000-8090 --allow-domains host.docker.internal -- command
+   * ```
+   */
+  allowHostPorts?: string;
+
+  /**
+   * Whether to enable SSL Bump for HTTPS content inspection
+   *
+   * When true, Squid will intercept HTTPS connections and generate
+   * per-host certificates on-the-fly, allowing inspection of URL paths,
+   * query parameters, and request methods for HTTPS traffic.
+   *
+   * Security implications:
+   * - A per-session CA certificate is generated (valid for 1 day)
+   * - The CA certificate is injected into the agent container's trust store
+   * - HTTPS traffic is decrypted at the proxy for inspection
+   * - The CA private key is stored only in the temporary work directory
+   *
+   * @default false
+   */
+  sslBump?: boolean;
+
+  /**
+   * URL patterns to allow for HTTPS traffic (requires sslBump: true)
+   *
+   * When SSL Bump is enabled, these patterns are used to filter HTTPS
+   * traffic by URL path, not just domain. Supports wildcards (*).
+   *
+   * If not specified, falls back to domain-only filtering.
+   *
+   * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
+   */
+  allowedUrls?: string[];
 }
 
 /**
@@ -239,7 +327,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * 
  * Used to generate squid.conf with domain-based access control lists (ACLs).
  * The generated configuration implements L7 (application layer) filtering for
- * HTTP and HTTPS traffic using domain whitelisting.
+ * HTTP and HTTPS traffic using domain whitelisting and optional blocklisting.
  */
 export interface SquidConfig {
   /**
@@ -252,6 +340,17 @@ export interface SquidConfig {
   domains: string[];
 
   /**
+   * List of blocked domains for proxy access
+   * 
+   * These domains are explicitly denied. Blocked domains take precedence over
+   * allowed domains. This allows for fine-grained control like allowing 
+   * '*.example.com' but blocking 'internal.example.com'.
+   * 
+   * Supports the same wildcard patterns as domains.
+   */
+  blockedDomains?: string[];
+
+  /**
    * Port number for the Squid proxy to listen on
    * 
    * The proxy listens on this port within the Docker network for HTTP
@@ -260,6 +359,64 @@ export interface SquidConfig {
    * @default 3128
    */
   port: number;
+
+  /**
+   * Whether to enable SSL Bump for HTTPS content inspection
+   *
+   * When true, Squid will intercept HTTPS connections and generate
+   * per-host certificates on-the-fly, allowing inspection of URL paths.
+   *
+   * @default false
+   */
+  sslBump?: boolean;
+
+  /**
+   * Paths to CA certificate files for SSL Bump
+   *
+   * Required when sslBump is true.
+   */
+  caFiles?: {
+    certPath: string;
+    keyPath: string;
+  };
+
+  /**
+   * Path to SSL certificate database for dynamic certificate generation
+   *
+   * Required when sslBump is true.
+   */
+  sslDbPath?: string;
+
+  /**
+   * URL patterns for HTTPS traffic filtering (requires sslBump)
+   *
+   * When SSL Bump is enabled, these regex patterns are used to filter
+   * HTTPS traffic by URL path, not just domain.
+   */
+  urlPatterns?: string[];
+
+  /**
+   * Whether to enable host access (allows non-standard ports)
+   *
+   * When true, Squid will allow connections to any port, not just
+   * standard HTTP (80) and HTTPS (443) ports. This is required when
+   * --enable-host-access is used to allow access to host services
+   * running on non-standard ports.
+   *
+   * @default false
+   */
+  enableHostAccess?: boolean;
+
+  /**
+   * Additional ports to allow (comma-separated list)
+   *
+   * Ports or port ranges specified by the user via --allow-host-ports flag.
+   * These are added to the Safe_ports ACL in addition to 80 and 443.
+   *
+   * @example "3000,8080,9000"
+   * @example "3000-3010,8000-8090"
+   */
+  allowHostPorts?: string;
 }
 
 /**
@@ -394,10 +551,20 @@ export interface DockerService {
 
   /**
    * DNS search domains for the container
-   * 
+   *
    * Appended to unqualified hostnames during DNS resolution.
    */
   dns_search?: string[];
+
+  /**
+   * Extra hosts to add to /etc/hosts in the container
+   *
+   * Array of host:ip mappings. Used to enable host.docker.internal
+   * on Linux where it's not available by default.
+   *
+   * @example ['host.docker.internal:host-gateway']
+   */
+  extra_hosts?: string[];
 
   /**
    * Volume mount specifications
@@ -409,7 +576,6 @@ export interface DockerService {
    * Common mounts:
    * - Host filesystem: '/:/host:ro' (read-only host access)
    * - Home directory: '${HOME}:${HOME}' (user files)
-   * - Docker socket: '/var/run/docker.sock:/var/run/docker.sock' (docker-in-docker)
    * - Configs: '${workDir}/squid.conf:/etc/squid/squid.conf:ro'
    * 
    * @example ['./squid.conf:/etc/squid/squid.conf:ro']
@@ -718,6 +884,11 @@ export interface ParsedLogEntry {
 export type OutputFormat = 'raw' | 'pretty' | 'json';
 
 /**
+ * Output format for log stats and summary commands
+ */
+export type LogStatsFormat = 'json' | 'markdown' | 'pretty';
+
+/**
  * Source of log data (running container or preserved log files)
  */
 export interface LogSource {
@@ -731,4 +902,40 @@ export interface LogSource {
   timestamp?: number;
   /** Human-readable date string (for preserved type) */
   dateStr?: string;
+}
+
+/**
+ * Result of PID tracking operation
+ *
+ * Contains information about the process that made a network request,
+ * identified by correlating the source port with /proc filesystem data.
+ */
+export interface PidTrackResult {
+  /** Process ID that owns the socket, or -1 if not found */
+  pid: number;
+  /** Full command line of the process, or 'unknown' if not found */
+  cmdline: string;
+  /** Short command name (from /proc/[pid]/comm), or 'unknown' if not found */
+  comm: string;
+  /** Socket inode number, or undefined if not found */
+  inode?: string;
+  /** Error message if tracking failed, or undefined on success */
+  error?: string;
+}
+
+/**
+ * Extended log entry with PID tracking information
+ *
+ * Combines the standard parsed log entry with process attribution
+ * for complete request tracking.
+ */
+export interface EnhancedLogEntry extends ParsedLogEntry {
+  /** Process ID that made the request, or -1 if unknown */
+  pid?: number;
+  /** Full command line of the process that made the request */
+  cmdline?: string;
+  /** Short command name (from /proc/[pid]/comm) */
+  comm?: string;
+  /** Socket inode associated with the connection */
+  inode?: string;
 }

@@ -263,4 +263,58 @@ describe('LogFormatter', () => {
       expect(result).toContain('8080');
     });
   });
+
+  describe('PID enrichment', () => {
+    it('should display PID info in pretty format when available', () => {
+      const enhancedEntry = {
+        ...allowedEntry,
+        pid: 12345,
+        cmdline: 'curl https://api.github.com',
+        comm: 'curl',
+        inode: '123456',
+      };
+      const formatter = new LogFormatter({ format: 'pretty', colorize: false });
+      const result = formatter.formatEntry(enhancedEntry);
+
+      expect(result).toContain('<PID:12345 curl>');
+    });
+
+    it('should not display PID info when pid is -1', () => {
+      const enhancedEntry = {
+        ...allowedEntry,
+        pid: -1,
+        cmdline: 'unknown',
+        comm: 'unknown',
+      };
+      const formatter = new LogFormatter({ format: 'pretty', colorize: false });
+      const result = formatter.formatEntry(enhancedEntry);
+
+      expect(result).not.toContain('<PID:');
+    });
+
+    it('should not display PID info when pid is undefined', () => {
+      const formatter = new LogFormatter({ format: 'pretty', colorize: false });
+      const result = formatter.formatEntry(allowedEntry);
+
+      expect(result).not.toContain('<PID:');
+    });
+
+    it('should include PID fields in JSON output when available', () => {
+      const enhancedEntry = {
+        ...allowedEntry,
+        pid: 12345,
+        cmdline: 'curl https://api.github.com',
+        comm: 'curl',
+        inode: '123456',
+      };
+      const formatter = new LogFormatter({ format: 'json' });
+      const result = formatter.formatEntry(enhancedEntry);
+
+      const parsed = JSON.parse(result);
+      expect(parsed.pid).toBe(12345);
+      expect(parsed.cmdline).toBe('curl https://api.github.com');
+      expect(parsed.comm).toBe('curl');
+      expect(parsed.inode).toBe('123456');
+    });
+  });
 });

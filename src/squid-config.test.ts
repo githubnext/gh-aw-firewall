@@ -4,25 +4,51 @@ import { SquidConfig } from './types';
 describe('generateSquidConfig', () => {
   const defaultPort = 3128;
 
-  describe('Domain Normalization', () => {
-    it('should remove http:// protocol prefix', () => {
+  describe('Protocol-Specific Domain Handling', () => {
+    it('should treat http:// prefix as HTTP-only domain', () => {
       const config: SquidConfig = {
         domains: ['http://github.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('acl allowed_http_only dstdomain .github.com');
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only');
       expect(result).not.toContain('http://');
     });
 
-    it('should remove https:// protocol prefix', () => {
+    it('should treat https:// prefix as HTTPS-only domain', () => {
       const config: SquidConfig = {
         domains: ['https://api.github.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .api.github.com');
+      expect(result).toContain('acl allowed_https_only dstdomain .api.github.com');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only');
       expect(result).not.toContain('https://');
+    });
+
+    it('should treat domain without prefix as allowing both protocols', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('http_access deny !allowed_domains');
+    });
+
+    it('should handle mixed protocol domains', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.httponly.com', 'https://secure.httpsonly.com', 'both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // HTTP-only domain
+      expect(result).toContain('acl allowed_http_only dstdomain .api.httponly.com');
+      // HTTPS-only domain
+      expect(result).toContain('acl allowed_https_only dstdomain .secure.httpsonly.com');
+      // Both protocols domain
+      expect(result).toContain('acl allowed_domains dstdomain .both.com');
     });
 
     it('should remove trailing slash', () => {
@@ -35,13 +61,13 @@ describe('generateSquidConfig', () => {
       expect(result).not.toMatch(/github\.com\//);
     });
 
-    it('should remove both protocol and trailing slash', () => {
+    it('should remove trailing slash with protocol prefix', () => {
       const config: SquidConfig = {
         domains: ['https://example.com/'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .example.com');
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
       expect(result).not.toContain('https://');
       expect(result).not.toMatch(/example\.com\//);
     });
@@ -62,8 +88,8 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      // Path should be preserved (Squid handles domain matching)
-      expect(result).toContain('acl allowed_domains dstdomain .api.github.com/v3/users');
+      // Path should be preserved (Squid handles domain matching), as HTTPS-only
+      expect(result).toContain('acl allowed_https_only dstdomain .api.github.com/v3/users');
     });
   });
 
@@ -304,6 +330,24 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('dns_nameservers');
       // Check for custom log format
       expect(result).toContain('logformat firewall_detailed');
+    });
+
+    it('should allow CONNECT to Safe_ports (80 and 443) for HTTP proxy compatibility', () => {
+      // See: https://github.com/githubnext/gh-aw-firewall/issues/189
+      // Node.js fetch uses CONNECT method even for HTTP connections when proxied
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+
+      // Should deny CONNECT to non-Safe_ports (not just SSL_ports)
+      expect(result).toContain('http_access deny CONNECT !Safe_ports');
+      // Should NOT deny CONNECT to non-SSL_ports (would block port 80)
+      expect(result).not.toContain('http_access deny CONNECT !SSL_ports');
+      // Safe_ports should include both 80 and 443
+      expect(result).toContain('acl Safe_ports port 80');
+      expect(result).toContain('acl Safe_ports port 443');
     });
 
     it('should deny access to domains not in the allowlist', () => {
@@ -691,5 +735,561 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('# ACL definitions for allowed domains');
       expect(result).toContain('# ACL definitions for allowed domain patterns');
     });
+  });
+
+  describe('Protocol-Specific Wildcard Patterns', () => {
+    it('should handle HTTP-only wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['http://*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.example\\.com$');
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only_regex');
+    });
+
+    it('should handle HTTPS-only wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['https://*.secure.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.secure\\.com$');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only_regex');
+    });
+
+    it('should handle mixed protocol wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['http://*.api.com', 'https://*.secure.com', '*.both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // HTTP-only pattern
+      expect(result).toContain('acl allowed_http_only_regex dstdom_regex -i ^.*\\.api\\.com$');
+      // HTTPS-only pattern
+      expect(result).toContain('acl allowed_https_only_regex dstdom_regex -i ^.*\\.secure\\.com$');
+      // Both protocols pattern
+      expect(result).toContain('acl allowed_domains_regex dstdom_regex -i ^.*\\.both\\.com$');
+    });
+  });
+
+  describe('Protocol Access Rules Order', () => {
+    it('should put protocol-specific allow rules before deny rule', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.example.com', 'both.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      const allowIndex = result.indexOf('http_access allow !CONNECT allowed_http_only');
+      const denyIndex = result.indexOf('http_access deny !allowed_domains');
+      expect(allowIndex).toBeGreaterThan(-1);
+      expect(denyIndex).toBeGreaterThan(-1);
+      expect(allowIndex).toBeLessThan(denyIndex);
+    });
+
+    it('should deny all when only protocol-specific domains are configured', () => {
+      const config: SquidConfig = {
+        domains: ['http://api.example.com', 'https://secure.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Should have deny all since no 'both' domains
+      expect(result).toContain('http_access deny all');
+      // But should have allow rules for specific protocols
+      expect(result).toContain('http_access allow !CONNECT allowed_http_only');
+      expect(result).toContain('http_access allow CONNECT allowed_https_only');
+    });
+  });
+
+  describe('Protocol-Specific Subdomain Handling', () => {
+    it('should not remove http-only subdomain when parent has https-only', () => {
+      const config: SquidConfig = {
+        domains: ['https://example.com', 'http://api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both should be present since protocols are different
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
+      expect(result).toContain('acl allowed_http_only dstdomain .api.example.com');
+    });
+
+    it('should remove subdomain when parent has "both" protocol', () => {
+      const config: SquidConfig = {
+        domains: ['example.com', 'http://api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // api.example.com should be removed since example.com with 'both' covers it
+      expect(result).toContain('acl allowed_domains dstdomain .example.com');
+      expect(result).not.toContain('api.example.com');
+    });
+
+    it('should not remove "both" subdomain when parent has single protocol', () => {
+      const config: SquidConfig = {
+        domains: ['https://example.com', 'api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both should be present since api.example.com needs both protocols
+      expect(result).toContain('acl allowed_https_only dstdomain .example.com');
+      expect(result).toContain('acl allowed_domains dstdomain .api.example.com');
+    });
+  });
+
+  describe('Blocklist Support', () => {
+    it('should generate blocked domain ACL for plain domain', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: ['internal.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl blocked_domains dstdomain .internal.github.com');
+      expect(result).toContain('http_access deny blocked_domains');
+    });
+
+    it('should generate blocked domain ACL for wildcard pattern', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        blockedDomains: ['*.internal.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl blocked_domains_regex dstdom_regex -i');
+      expect(result).toContain('^.*\\.internal\\.example\\.com$');
+      expect(result).toContain('http_access deny blocked_domains_regex');
+    });
+
+    it('should handle both plain and wildcard blocked domains', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        blockedDomains: ['internal.example.com', '*.secret.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl blocked_domains dstdomain .internal.example.com');
+      expect(result).toContain('acl blocked_domains_regex dstdom_regex -i');
+      expect(result).toContain('http_access deny blocked_domains');
+      expect(result).toContain('http_access deny blocked_domains_regex');
+    });
+
+    it('should place blocked domains deny rule before allowed domains deny rule', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: ['internal.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      const blockRuleIndex = result.indexOf('http_access deny blocked_domains');
+      const allowRuleIndex = result.indexOf('http_access deny !allowed_domains');
+      expect(blockRuleIndex).toBeLessThan(allowRuleIndex);
+    });
+
+    it('should include blocklist comment section', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: ['internal.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('# ACL definitions for blocked domains');
+      expect(result).toContain('# Deny requests to blocked domains (blocklist takes precedence)');
+    });
+
+    it('should work without blocklist (backward compatibility)', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).not.toContain('blocked_domains');
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+    });
+
+    it('should work with empty blocklist', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: [],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).not.toContain('blocked_domains');
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+    });
+
+    it('should normalize blocked domains (remove protocol)', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: ['https://internal.github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl blocked_domains dstdomain .internal.github.com');
+      expect(result).not.toContain('https://');
+    });
+
+    it('should handle multiple blocked domains', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        blockedDomains: ['internal.example.com', 'secret.example.com', 'admin.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl blocked_domains dstdomain .internal.example.com');
+      expect(result).toContain('acl blocked_domains dstdomain .secret.example.com');
+      expect(result).toContain('acl blocked_domains dstdomain .admin.example.com');
+    });
+
+    it('should throw error for invalid blocked domain pattern', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        blockedDomains: ['*'],
+        port: defaultPort,
+      };
+      expect(() => generateSquidConfig(config)).toThrow();
+    });
+  });
+
+  describe('SSL Bump Mode', () => {
+    it('should add SSL Bump section when sslBump is enabled', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('SSL Bump configuration for HTTPS content inspection');
+      expect(result).toContain('ssl-bump');
+      expect(result).toContain('security_file_certgen');
+    });
+
+    it('should include SSL Bump warning comment', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('SSL Bump mode enabled');
+      expect(result).toContain('HTTPS traffic will be intercepted');
+    });
+
+    it('should configure HTTP port with SSL Bump', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128 ssl-bump');
+    });
+
+    it('should include CA certificate path', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('cert=/tmp/test/ssl/ca-cert.pem');
+      expect(result).toContain('key=/tmp/test/ssl/ca-key.pem');
+    });
+
+    it('should include SSL Bump ACL steps', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl step1 at_step SslBump1');
+      expect(result).toContain('acl step2 at_step SslBump2');
+      expect(result).toContain('ssl_bump peek step1');
+      expect(result).toContain('ssl_bump stare step2');
+    });
+
+    it('should include ssl_bump rules for allowed domains', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump allowed_domains');
+      expect(result).toContain('ssl_bump terminate all');
+    });
+
+    it('should include URL pattern ACLs when provided', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+        urlPatterns: ['^https://github\\.com/githubnext/.*'],
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_url_0 url_regex');
+      expect(result).toContain('^https://github\\.com/githubnext/.*');
+    });
+
+    it('should not include SSL Bump section when disabled', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+        sslBump: false,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).not.toContain('SSL Bump configuration');
+      expect(result).not.toContain('https_port');
+      expect(result).not.toContain('ssl-bump');
+    });
+
+    it('should use http_port only when SSL Bump is disabled', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128');
+      expect(result).not.toContain('https_port');
+    });
+  });
+});
+
+describe('Port validation in generateSquidConfig', () => {
+  it('should accept valid single ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept valid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-3010,8000-8090',
+      });
+    }).not.toThrow();
+  });
+
+  it('should reject invalid port numbers', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '70000',
+      });
+    }).toThrow('Invalid port: 70000');
+  });
+
+  it('should reject negative ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '-1',
+      });
+    }).toThrow('Invalid port: -1');
+  });
+
+  it('should reject non-numeric ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: 'abc',
+      });
+    }).toThrow('Invalid port: abc');
+  });
+
+  it('should reject invalid port ranges', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-2000',
+      });
+    }).toThrow('Invalid port range: 3000-2000');
+  });
+
+  it('should reject port ranges with invalid boundaries', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000-70000',
+      });
+    }).toThrow('Invalid port range: 3000-70000');
+  });
+});
+
+describe('Dangerous ports blocklist in generateSquidConfig', () => {
+  it('should reject SSH port 22', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '22',
+      });
+    }).toThrow('Port 22 is blocked for security reasons');
+  });
+
+  it('should reject MySQL port 3306', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3306',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should reject PostgreSQL port 5432', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5432',
+      });
+    }).toThrow('Port 5432 is blocked for security reasons');
+  });
+
+  it('should reject Redis port 6379', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '6379',
+      });
+    }).toThrow('Port 6379 is blocked for security reasons');
+  });
+
+  it('should reject MongoDB port 27017', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '27017',
+      });
+    }).toThrow('Port 27017 is blocked for security reasons');
+  });
+
+  it('should reject port range containing SSH (20-25)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '20-25',
+      });
+    }).toThrow('Port range 20-25 includes dangerous port 22');
+  });
+
+  it('should reject port range containing MySQL (3300-3310)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3300-3310',
+      });
+    }).toThrow('Port range 3300-3310 includes dangerous port 3306');
+  });
+
+  it('should reject port range containing PostgreSQL (5400-5500)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5400-5500',
+      });
+    }).toThrow('Port range 5400-5500 includes dangerous port 5432');
+  });
+
+  it('should reject multiple ports including a dangerous one', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,3306,8080',
+      });
+    }).toThrow('Port 3306 is blocked for security reasons');
+  });
+
+  it('should accept safe ports not in blocklist', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '3000,8080,9000',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept safe port range not overlapping with dangerous ports', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8000-8100',
+      });
+    }).not.toThrow();
   });
 });

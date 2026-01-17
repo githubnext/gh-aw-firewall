@@ -21,6 +21,10 @@ awf [options] -- <command>
 |--------|------|---------|-------------|
 | `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (required unless `--allow-domains-file` used) |
 | `--allow-domains-file <path>` | string | — | Path to file containing allowed domains |
+| `--block-domains <domains>` | string | — | Comma-separated list of blocked domains (takes precedence over allowed) |
+| `--block-domains-file <path>` | string | — | Path to file containing blocked domains |
+| `--ssl-bump` | flag | `false` | Enable SSL Bump for HTTPS content inspection |
+| `--allow-urls <urls>` | string | — | Comma-separated list of allowed URL patterns (requires `--ssl-bump`) |
 | `--log-level <level>` | string | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `--keep-containers` | flag | `false` | Keep containers running after command exits |
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
@@ -40,10 +44,32 @@ awf [options] -- <command>
 
 ### `--allow-domains <domains>`
 
-Comma-separated list of allowed domains. Domains automatically match all subdomains.
+Comma-separated list of allowed domains. Domains automatically match all subdomains. Supports wildcard patterns and protocol-specific filtering.
 
 ```bash
 --allow-domains github.com,npmjs.org
+--allow-domains '*.github.com,api-*.example.com'
+```
+
+#### Protocol-Specific Filtering
+
+Restrict domains to HTTP-only or HTTPS-only traffic by prefixing with the protocol:
+
+```bash
+# HTTPS only - blocks HTTP traffic to this domain
+--allow-domains 'https://secure.example.com'
+
+# HTTP only - blocks HTTPS traffic to this domain
+--allow-domains 'http://legacy-api.example.com'
+
+# Both protocols (default behavior, backward compatible)
+--allow-domains 'example.com'
+
+# Mixed configuration
+--allow-domains 'example.com,https://secure.example.com,http://legacy.example.com'
+
+# Works with wildcards
+--allow-domains 'https://*.secure.example.com'
 ```
 
 ### `--allow-domains-file <path>`
@@ -53,6 +79,67 @@ Path to file with allowed domains. Supports comments (`#`) and one domain per li
 ```bash
 --allow-domains-file ./allowed-domains.txt
 ```
+
+### `--block-domains <domains>`
+
+Comma-separated list of blocked domains. **Blocked domains take precedence over allowed domains**, enabling fine-grained control. Supports the same wildcard patterns as `--allow-domains`.
+
+```bash
+# Block specific subdomain while allowing parent domain
+--allow-domains example.com --block-domains internal.example.com
+
+# Block with wildcards
+--allow-domains '*.example.com' --block-domains '*.secret.example.com'
+```
+
+### `--block-domains-file <path>`
+
+Path to file with blocked domains. Supports the same format as `--allow-domains-file`.
+
+```bash
+--block-domains-file ./blocked-domains.txt
+```
+
+### `--ssl-bump`
+
+Enable SSL Bump for HTTPS content inspection. When enabled, the firewall generates a per-session CA certificate and intercepts HTTPS connections, allowing URL path filtering.
+
+```bash
+--ssl-bump --allow-urls "https://github.com/githubnext/*"
+```
+
+:::caution[HTTPS Interception]
+SSL Bump decrypts HTTPS traffic at the proxy. The proxy can see full URLs, headers, and request bodies. Applications with certificate pinning will fail to connect.
+:::
+
+**How it works:**
+1. A unique CA certificate is generated (valid for 1 day)
+2. The CA is injected into the agent container's trust store
+3. Squid intercepts HTTPS using SSL Bump (peek, stare, bump)
+4. Full URLs become visible for filtering via `--allow-urls`
+
+**See also:** [SSL Bump Reference](/gh-aw-firewall/reference/ssl-bump/) for complete documentation.
+
+### `--allow-urls <urls>`
+
+Comma-separated list of allowed URL patterns for HTTPS traffic. Requires `--ssl-bump`.
+
+```bash
+# Single pattern
+--allow-urls "https://github.com/githubnext/*"
+
+# Multiple patterns
+--allow-urls "https://github.com/org1/*,https://api.github.com/repos/*"
+```
+
+**Pattern syntax:**
+- Must include scheme (`https://`)
+- `*` matches any characters in a path segment
+- Patterns are matched against the full request URL
+
+:::note
+Without `--ssl-bump`, the firewall can only see domain names (via SNI). Enable `--ssl-bump` to filter by URL path.
+:::
 
 ### `--log-level <level>`
 
@@ -125,7 +212,6 @@ Mount host directories into container. Format: `host_path:container_path[:ro|rw]
 **Default mounts:**
 - Host filesystem at `/host` (read-only)
 - User home directory (read-write)
-- Docker socket at `/var/run/docker.sock`
 
 ### `--container-workdir <dir>`
 
@@ -174,6 +260,7 @@ awf logs [options]
 | `--format <format>` | string | `pretty` | Output format: `raw`, `pretty`, `json` |
 | `--source <path>` | string | auto | Path to log directory or `running` for live container |
 | `--list` | flag | `false` | List available log sources |
+| `--with-pid` | flag | `false` | Enrich logs with PID/process info (requires `-f`) |
 
 #### Output Formats
 
@@ -203,14 +290,156 @@ awf logs --source /tmp/squid-logs-1234567890
 
 # Stream from running container
 awf logs --source running -f
+
+# Follow logs with PID/process tracking
+awf logs -f --with-pid
 ```
+
+#### PID Tracking
+
+The `--with-pid` flag enriches log entries with process information, correlating each network request to the specific process that made it.
+
+**Pretty format with PID:**
+```
+[2024-01-01 12:00:00.123] CONNECT api.github.com → 200 (ALLOWED) [curl/7.88.1] <PID:12345 curl>
+```
+
+**JSON output includes additional fields:**
+```json
+{
+  "timestamp": 1703001234.567,
+  "domain": "github.com",
+  "pid": 12345,
+  "cmdline": "curl https://github.com",
+  "comm": "curl",
+  "inode": "123456"
+}
+```
+
+:::caution
+PID tracking only works with `-f` (follow mode) and requires Linux. Process information is only available while processes are running.
+:::
 
 :::note
 Log sources are auto-discovered in this order: running containers, `AWF_LOGS_DIR` environment variable, then preserved log directories in `/tmp/squid-logs-*`.
 :::
 
+### `awf logs stats`
+
+Show aggregated statistics from firewall logs.
+
+```bash
+awf logs stats [options]
+```
+
+:::note[stats vs summary]
+Use `awf logs stats` for terminal output (defaults to colorized `pretty` format). Use `awf logs summary` for CI/CD integration (defaults to `markdown` format for `$GITHUB_STEP_SUMMARY`). Both commands provide the same data in different default formats.
+:::
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format <format>` | string | `pretty` | Output format: `json`, `markdown`, `pretty` |
+| `--source <path>` | string | auto | Path to log directory or `running` for live container |
+
+#### Output Formats
+
+| Format | Description |
+|--------|-------------|
+| `pretty` | Colorized terminal output with summary and domain breakdown (default) |
+| `markdown` | Markdown table format suitable for documentation |
+| `json` | Structured JSON for programmatic consumption |
+
+#### Examples
+
+```bash
+# Show stats with colorized terminal output
+awf logs stats
+
+# Get stats in JSON format for scripting
+awf logs stats --format json
+
+# Get stats in markdown format
+awf logs stats --format markdown
+
+# Use a specific log directory
+awf logs stats --source /tmp/squid-logs-1234567890
+```
+
+#### Example Output (Pretty)
+
+```
+Firewall Statistics
+────────────────────────────────────────
+
+Total Requests:  150
+Allowed:         145 (96.7%)
+Denied:          5 (3.3%)
+Unique Domains:  12
+
+Domains:
+  api.github.com       50 allowed, 0 denied
+  registry.npmjs.org   95 allowed, 0 denied
+  evil.com             0 allowed, 5 denied
+```
+
+### `awf logs summary`
+
+Generate summary report optimized for GitHub Actions step summaries.
+
+```bash
+awf logs summary [options]
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format <format>` | string | `markdown` | Output format: `json`, `markdown`, `pretty` |
+| `--source <path>` | string | auto | Path to log directory or `running` for live container |
+
+:::tip[GitHub Actions]
+The `summary` command defaults to markdown format, making it perfect for piping directly to `$GITHUB_STEP_SUMMARY`.
+:::
+
+#### Examples
+
+```bash
+# Generate markdown summary (default)
+awf logs summary
+
+# Add to GitHub Actions step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+
+# Get summary in JSON format
+awf logs summary --format json
+
+# Get summary with colorized terminal output
+awf logs summary --format pretty
+```
+
+#### Example Output (Markdown)
+
+```markdown
+<details>
+<summary>Firewall Activity</summary>
+
+▼ 150 requests | 145 allowed | 5 blocked | 12 unique domains
+
+| Domain | Allowed | Denied |
+|--------|---------|--------|
+| api.github.com | 50 | 0 |
+| registry.npmjs.org | 95 | 0 |
+| evil.com | 0 | 5 |
+
+</details>
+```
+
 ## See Also
 
+- [Domain Filtering Guide](/gh-aw-firewall/guides/domain-filtering) - Allowlists, blocklists, and wildcards
+- [SSL Bump Reference](/gh-aw-firewall/reference/ssl-bump/) - HTTPS content inspection and URL filtering
 - [Quick Start Guide](/gh-aw-firewall/quickstart) - Getting started with examples
 - [Usage Guide](/gh-aw-firewall/usage) - Detailed usage patterns and examples
 - [Troubleshooting](/gh-aw-firewall/troubleshooting) - Common issues and solutions

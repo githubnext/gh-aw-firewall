@@ -12,3 +12,16 @@ export {
   listLogSources,
 } from './log-discovery';
 export { streamLogs, StreamOptions } from './log-streamer';
+export {
+  aggregateLogs,
+  loadAllLogs,
+  loadAndAggregate,
+  AggregatedStats,
+  DomainStats,
+} from './log-aggregator';
+export {
+  formatStats,
+  formatStatsJson,
+  formatStatsMarkdown,
+  formatStatsPretty,
+} from './stats-formatter';

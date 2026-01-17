@@ -8,9 +8,23 @@ sudo awf [options] <command>
 Options:
   --allow-domains <domains>  Comma-separated list of allowed domains (required)
                              Example: github.com,api.github.com,arxiv.org
+  --allow-domains-file <path>  Path to file containing allowed domains
+  --block-domains <domains>  Comma-separated list of blocked domains
+                             Takes precedence over allowed domains
+  --block-domains-file <path>  Path to file containing blocked domains
+  --enable-host-access       Enable access to host services via host.docker.internal
+                             (see "Host Access" section for security implications)
+  --ssl-bump                 Enable SSL Bump for HTTPS content inspection
+  --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
+                             Example: https://github.com/githubnext/*,https://api.github.com/repos/*
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
+  --dns-servers <servers>    Comma-separated list of DNS servers (default: 8.8.8.8,8.8.4.4)
+  -e, --env <KEY=VALUE>      Additional environment variables (can repeat)
+  --env-all                  Pass all host environment variables to container
+  -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
+  --tty                      Allocate a pseudo-TTY for interactive tools
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
@@ -26,23 +40,6 @@ Arguments:
 sudo awf \
   --allow-domains github.com,api.github.com \
   'curl https://api.github.com'
-```
-
-### Docker-in-Docker Example
-
-The firewall enforces domain filtering on spawned containers:
-
-```bash
-# Allowed - api.github.com is in the allowlist
-sudo awf \
-  --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
-
-# Blocked - api.github.com NOT in the allowlist
-sudo awf \
-  --allow-domains registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
-# Returns: curl: (22) The requested URL returned error: 403
 ```
 
 ### With GitHub Copilot CLI
@@ -121,6 +118,34 @@ Domains automatically match all subdomains:
 sudo awf --allow-domains github.com "curl https://api.github.com"  # ✓ works
 ```
 
+### Wildcard Patterns
+
+You can use wildcard patterns with `*` to match multiple domains:
+
+```bash
+# Match any subdomain of github.com
+--allow-domains '*.github.com'
+
+# Match api-v1.example.com, api-v2.example.com, etc.
+--allow-domains 'api-*.example.com'
+
+# Combine plain domains and wildcards
+--allow-domains 'github.com,*.googleapis.com,api-*.example.com'
+```
+
+**Pattern rules:**
+- `*` matches any characters (converted to regex `.*`)
+- Patterns are case-insensitive (DNS is case-insensitive)
+- Overly broad patterns like `*`, `*.*`, or `*.*.*` are rejected for security
+- Use quotes around patterns to prevent shell expansion
+
+**Examples:**
+| Pattern | Matches | Does Not Match |
+|---------|---------|----------------|
+| `*.github.com` | `api.github.com`, `raw.github.com` | `github.com` |
+| `api-*.example.com` | `api-v1.example.com`, `api-test.example.com` | `api.example.com` |
+| `github.com` | `github.com`, `api.github.com` | `notgithub.com` |
+
 ### Multiple Domains
 
 ```bash
@@ -155,16 +180,169 @@ For MCP servers:
   mcp.deepwiki.com
 ```
 
-## Limitations
+## Domain Blocklist
 
-### No Wildcard Syntax
+You can explicitly block specific domains using `--block-domains` and `--block-domains-file`. **Blocked domains take precedence over allowed domains**, enabling fine-grained control.
 
-Wildcards are not needed - subdomains match automatically:
+### Basic Blocklist Usage
 
 ```bash
---allow-domains '*.github.com'  # ✗ syntax not supported
---allow-domains github.com       # ✓ matches *.github.com automatically
+# Allow example.com but block internal.example.com
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://api.example.com  # ✓ works
+
+sudo awf \
+  --allow-domains example.com \
+  --block-domains internal.example.com \
+  -- curl https://internal.example.com  # ✗ blocked
 ```
+
+### Blocklist with Wildcards
+
+```bash
+# Allow all of example.com except any subdomain starting with "internal-"
+sudo awf \
+  --allow-domains example.com \
+  --block-domains 'internal-*.example.com' \
+  -- curl https://api.example.com  # ✓ works
+
+# Block all subdomains matching the pattern
+sudo awf \
+  --allow-domains '*.example.com' \
+  --block-domains '*.secret.example.com' \
+  -- curl https://api.example.com  # ✓ works
+```
+
+### Using a Blocklist File
+
+```bash
+# Create a blocklist file
+cat > blocked-domains.txt << 'EOF'
+# Internal services that should never be accessed
+internal.example.com
+admin.example.com
+
+# Block all subdomains of sensitive.org
+*.sensitive.org
+EOF
+
+# Use the blocklist file
+sudo awf \
+  --allow-domains example.com,sensitive.org \
+  --block-domains-file blocked-domains.txt \
+  -- curl https://api.example.com
+```
+
+**Combining flags:**
+```bash
+# You can combine all domain flags
+sudo awf \
+  --allow-domains github.com \
+  --allow-domains-file allowed.txt \
+  --block-domains internal.github.com \
+  --block-domains-file blocked.txt \
+  -- your-command
+```
+
+**Use cases:**
+- Allow a broad domain (e.g., `*.example.com`) but block specific sensitive subdomains
+- Block known bad domains while allowing a curated list
+- Prevent access to internal services from AI agents
+
+## Host Access (MCP Gateways)
+
+When running MCP gateways or other services on your host machine that need to be accessible from inside the firewall, use the `--enable-host-access` flag.
+
+### Enabling Host Access
+
+```bash
+# Enable access to services running on the host via host.docker.internal
+sudo awf \
+  --enable-host-access \
+  --allow-domains host.docker.internal \
+  -- curl http://host.docker.internal:8080
+```
+
+### Security Considerations
+
+> ⚠️ **Security Warning**: When `--enable-host-access` is combined with `host.docker.internal` in `--allow-domains`, containers can access **ANY service** running on the host machine, including:
+> - Local databases (PostgreSQL, MySQL, Redis)
+> - Development servers
+> - Other sensitive services
+>
+> Only enable this for trusted workloads like MCP gateways.
+
+**Why opt-in?** By default, `host.docker.internal` hostname resolution is disabled to prevent containers from accessing host services. This is a defense-in-depth measure against malicious code attempting to access local resources.
+
+### Example: MCP Gateway on Host
+
+```bash
+# Start your MCP gateway on the host (port 8080)
+./my-mcp-gateway --port 8080 &
+
+# Run awf with host access enabled
+sudo awf \
+  --enable-host-access \
+  --allow-domains host.docker.internal,api.github.com \
+  -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
+```
+
+### CONNECT Method on Port 80
+
+The firewall allows the HTTP CONNECT method on both ports 80 and 443. This is required because some HTTP clients (e.g., Node.js fetch) use the CONNECT method even for HTTP connections when going through a proxy. Domain ACLs remain the primary security control.
+
+## SSL Bump (HTTPS Content Inspection)
+
+By default, awf filters HTTPS traffic based on domain names only (using SNI). Enable SSL Bump to filter by URL path.
+
+### Enabling SSL Bump
+
+```bash
+sudo awf \
+  --allow-domains github.com \
+  --ssl-bump \
+  --allow-urls "https://github.com/githubnext/*" \
+  'curl https://github.com/githubnext/some-repo'
+```
+
+### URL Pattern Syntax
+
+URL patterns support wildcards:
+
+```bash
+# Match any path under an organization
+--allow-urls "https://github.com/githubnext/*"
+
+# Match specific API endpoints
+--allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"
+
+# Multiple patterns (comma-separated)
+--allow-urls "https://github.com/org1/*,https://github.com/org2/*"
+```
+
+### How It Works
+
+When `--ssl-bump` is enabled:
+
+1. A per-session CA certificate is generated (valid for 1 day)
+2. The CA is injected into the agent container's trust store
+3. Squid intercepts HTTPS connections to inspect full URLs
+4. Requests are matched against `--allow-urls` patterns
+
+### Security Note
+
+SSL Bump requires intercepting HTTPS traffic:
+
+- The session CA is unique to each execution
+- CA private key exists only in the temporary work directory
+- Short certificate validity (1 day) limits exposure
+- Traffic is re-encrypted between proxy and destination
+
+For more details, see [SSL Bump documentation](ssl-bump.md).
+
+## Limitations
 
 ### No Internationalized Domains
 
@@ -216,46 +394,6 @@ sudo awf --allow-domains echo.websocket.events "wscat -c wss://echo.websocket.ev
 
 # Install tools first or use available ones (curl, git, nodejs, npm)
 sudo awf --allow-domains github.com "npm install -g wscat && wscat -c wss://echo.websocket.events"
-```
-
-### Docker --network host is Blocked
-
-```bash
-# --network host bypasses firewall and is blocked
-sudo awf --allow-domains github.com \
-  "docker run --rm --network host curlimages/curl https://example.com"  # ✗ fails
-# Error: --network host is not allowed (bypasses firewall)
-
-# Use default network (awf-net is injected automatically)
-sudo awf --allow-domains example.com \
-  "docker run --rm curlimages/curl https://example.com"  # ✓ works
-```
-
-### Docker --add-host is Blocked (DNS Poisoning Protection)
-
-```bash
-# --add-host can map whitelisted domains to unauthorized IPs (DNS poisoning attack)
-ip=$(getent hosts example.com | awk '{print $1}' | head -1)
-sudo awf --allow-domains github.com \
-  "docker run --rm --add-host github.com:$ip curlimages/curl https://github.com"  # ✗ fails
-# Error: --add-host is not allowed (enables DNS poisoning)
-
-# Without --add-host, DNS resolution is legitimate
-sudo awf --allow-domains github.com \
-  "docker run --rm curlimages/curl https://github.com"  # ✓ works
-```
-
-### Docker --privileged is Blocked (Security Bypass Protection)
-
-```bash
-# --privileged grants unrestricted access and can disable firewall rules
-sudo awf --allow-domains github.com \
-  "docker run --rm --privileged curlimages/curl https://example.com"  # ✗ fails
-# Error: --privileged is not allowed (bypasses all security)
-
-# Use containers without privileged mode
-sudo awf --allow-domains example.com \
-  "docker run --rm curlimages/curl https://example.com"  # ✓ works
 ```
 
 ## IP-Based Access
@@ -429,6 +567,44 @@ awf logs -f --format json
 awf logs --source /tmp/squid-logs-1760987995318 --format raw
 ```
 
+### PID/Process Tracking
+
+Correlate network requests with the specific processes that made them using the `--with-pid` flag. This enables security auditing and forensic analysis.
+
+```bash
+# Follow logs with PID tracking (requires -f for real-time mode)
+awf logs -f --with-pid
+```
+
+**Pretty format output with PID:**
+```
+[2024-01-01 12:00:00.123] CONNECT api.github.com → 200 (ALLOWED) [curl/7.88.1] <PID:12345 curl>
+```
+
+**JSON format includes additional PID fields:**
+```json
+{
+  "timestamp": 1703001234.567,
+  "domain": "github.com",
+  "statusCode": 200,
+  "isAllowed": true,
+  "pid": 12345,
+  "cmdline": "curl https://github.com",
+  "comm": "curl",
+  "inode": "123456"
+}
+```
+
+**Important limitations:**
+- **Real-time only**: `--with-pid` requires `-f` (follow mode) because PID tracking reads the live `/proc` filesystem
+- **Linux only**: PID tracking requires the `/proc` filesystem (standard on Linux)
+- **Process must be running**: By the time historical logs are viewed, processes may have exited
+
+**Use cases:**
+- **Security auditing**: Identify which command or tool made each request
+- **Incident response**: Trace suspicious network activity to specific processes
+- **Debugging**: Correlate MCP server or tool behavior with network requests
+
 ### Troubleshooting with Logs
 
 **Find blocked requests:**
@@ -447,6 +623,52 @@ awf logs --format json | jq -s 'group_by(.isAllowed) | map({allowed: .[0].isAllo
 ```
 
 ## Log Analysis
+
+### Using `awf logs stats`
+
+Get aggregated statistics from firewall logs including total requests, allowed/denied counts, and per-domain breakdown:
+
+```bash
+# Pretty terminal output (default)
+awf logs stats
+
+# JSON format for scripting
+awf logs stats --format json
+
+# Markdown format
+awf logs stats --format markdown
+```
+
+Example output:
+```
+Firewall Statistics
+────────────────────────────────────────
+
+Total Requests:  150
+Allowed:         145 (96.7%)
+Denied:          5 (3.3%)
+Unique Domains:  12
+
+Domains:
+  api.github.com       50 allowed, 0 denied
+  registry.npmjs.org   95 allowed, 0 denied
+  evil.com             0 allowed, 5 denied
+```
+
+### Using `awf logs summary` (GitHub Actions)
+
+Generate a markdown summary optimized for GitHub Actions:
+
+```bash
+# Generate markdown summary and append to step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+```
+
+This creates a collapsible summary in your GitHub Actions workflow output showing all allowed and blocked domains.
+
+### Manual Log Queries
+
+For more granular analysis, you can query the logs directly:
 
 Find all blocked domains:
 ```bash

@@ -5,7 +5,62 @@
  * Examples:
  *   *.github.com      -> matches api.github.com, raw.github.com, etc.
  *   api-*.example.com -> matches api-v1.example.com, api-test.example.com, etc.
+ *
+ * Also supports protocol-specific domain allowlisting:
+ *   http://github.com  -> allow only HTTP traffic (port 80)
+ *   https://github.com -> allow only HTTPS traffic (port 443)
+ *   github.com         -> allow both HTTP and HTTPS (default)
  */
+
+/**
+ * Protocol restriction for a domain
+ */
+export type DomainProtocol = 'http' | 'https' | 'both';
+
+/**
+ * Parsed domain with protocol information
+ */
+export interface ParsedDomain {
+  /** The domain name without protocol prefix */
+  domain: string;
+  /** Which protocol(s) are allowed */
+  protocol: DomainProtocol;
+}
+
+/**
+ * Parse a domain string and extract protocol restriction if present
+ *
+ * @param input - Domain string, optionally prefixed with http:// or https://
+ * @returns ParsedDomain with the domain and protocol restriction
+ *
+ * Examples:
+ *   'github.com'        -> { domain: 'github.com', protocol: 'both' }
+ *   'http://github.com' -> { domain: 'github.com', protocol: 'http' }
+ *   'https://github.com' -> { domain: 'github.com', protocol: 'https' }
+ */
+export function parseDomainWithProtocol(input: string): ParsedDomain {
+  const trimmed = input.trim();
+
+  if (trimmed.startsWith('http://')) {
+    return {
+      domain: trimmed.slice(7).replace(/\/$/, ''),
+      protocol: 'http',
+    };
+  }
+
+  if (trimmed.startsWith('https://')) {
+    return {
+      domain: trimmed.slice(8).replace(/\/$/, ''),
+      protocol: 'https',
+    };
+  }
+
+  // No protocol prefix - allow both
+  return {
+    domain: trimmed.replace(/\/$/, ''),
+    protocol: 'both',
+  };
+}
 
 /**
  * Check if a domain string contains wildcard characters
@@ -70,7 +125,7 @@ export function wildcardToRegex(pattern: string): string {
 /**
  * Validate a domain or wildcard pattern
  *
- * @param input - Domain or pattern to validate
+ * @param input - Domain or pattern to validate (may include protocol prefix)
  * @throws Error if the input is invalid or too broad
  */
 export function validateDomainOrPattern(input: string): void {
@@ -79,7 +134,14 @@ export function validateDomainOrPattern(input: string): void {
     throw new Error('Domain cannot be empty');
   }
 
-  const trimmed = input.trim();
+  // Strip protocol prefix for validation
+  const parsed = parseDomainWithProtocol(input);
+  const trimmed = parsed.domain;
+
+  // Check for empty domain after stripping protocol
+  if (!trimmed || trimmed === '') {
+    throw new Error('Domain cannot be empty');
+  }
 
   // Check for overly broad patterns
   if (trimmed === '*') {
@@ -130,35 +192,52 @@ export function validateDomainOrPattern(input: string): void {
 export interface DomainPattern {
   original: string;
   regex: string;
+  protocol: DomainProtocol;
+}
+
+/**
+ * A plain domain entry with protocol restriction
+ */
+export interface PlainDomainEntry {
+  domain: string;
+  protocol: DomainProtocol;
 }
 
 export interface ParsedDomainList {
-  plainDomains: string[];
+  /** Plain domains without wildcards */
+  plainDomains: PlainDomainEntry[];
+  /** Wildcard patterns with regex */
   patterns: DomainPattern[];
 }
 
 /**
  * Parse and categorize domains into plain domains and wildcard patterns
  *
- * @param domains - Array of domain strings (may include wildcards)
+ * @param domains - Array of domain strings (may include wildcards and protocol prefixes)
  * @returns Object with plainDomains and patterns arrays
  * @throws Error if any domain/pattern is invalid
  */
 export function parseDomainList(domains: string[]): ParsedDomainList {
-  const plainDomains: string[] = [];
+  const plainDomains: PlainDomainEntry[] = [];
   const patterns: DomainPattern[] = [];
 
-  for (const domain of domains) {
+  for (const domainInput of domains) {
     // Validate each domain/pattern
-    validateDomainOrPattern(domain);
+    validateDomainOrPattern(domainInput);
+
+    // Parse protocol and domain
+    const parsed = parseDomainWithProtocol(domainInput);
+    const domain = parsed.domain;
+    const protocol = parsed.protocol;
 
     if (isWildcardPattern(domain)) {
       patterns.push({
         original: domain,
         regex: wildcardToRegex(domain),
+        protocol,
       });
     } else {
-      plainDomains.push(domain);
+      plainDomains.push({ domain, protocol });
     }
   }
 
@@ -167,23 +246,43 @@ export function parseDomainList(domains: string[]): ParsedDomainList {
 
 /**
  * Check if a plain domain would be matched by any of the wildcard patterns
+ * considering protocol restrictions.
  *
- * Used to remove redundant plain domains when a pattern already covers them.
+ * A domain is only considered "matched" if both:
+ * 1. The domain matches the pattern regex
+ * 2. The pattern's protocol restriction covers the domain's protocol
  *
- * @param domain - Plain domain to check
- * @param patterns - Array of wildcard patterns with their regex
- * @returns true if the domain matches any pattern
+ * Protocol compatibility:
+ * - Pattern 'both' covers any domain protocol (http, https, both)
+ * - Pattern 'http' only covers domain with 'http' protocol
+ * - Pattern 'https' only covers domain with 'https' protocol
+ *
+ * @param domainEntry - Plain domain entry with protocol to check
+ * @param patterns - Array of wildcard patterns with their regex and protocol
+ * @returns true if the domain is fully covered by a pattern
  */
 export function isDomainMatchedByPattern(
-  domain: string,
+  domainEntry: PlainDomainEntry,
   patterns: DomainPattern[]
 ): boolean {
   for (const pattern of patterns) {
     try {
       // Use case-insensitive matching (DNS is case-insensitive)
       const regex = new RegExp(pattern.regex, 'i');
-      if (regex.test(domain)) {
-        return true;
+      if (regex.test(domainEntry.domain)) {
+        // Check protocol compatibility
+        // Pattern 'both' covers any domain
+        if (pattern.protocol === 'both') {
+          return true;
+        }
+        // A domain that needs both protocols cannot be fully covered by a single-protocol pattern
+        if (domainEntry.protocol === 'both') {
+          continue;
+        }
+        // Pattern matches specific protocol
+        if (pattern.protocol === domainEntry.protocol) {
+          return true;
+        }
       }
     } catch {
       // Invalid regex, skip this pattern

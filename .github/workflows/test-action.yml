@@ -1,0 +1,118 @@
+name: Test Setup Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-action-latest:
+    name: Test Action (Latest Version)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup awf using action
+        id: setup-awf
+        uses: ./
+
+      - name: Verify awf is installed
+        run: |
+          echo "Installed version: ${{ steps.setup-awf.outputs.version }}"
+          which awf
+          awf --version
+          awf --help
+
+  test-action-specific-version:
+    name: Test Action (Specific Version)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup awf using action with specific version
+        id: setup-awf
+        uses: ./
+        with:
+          version: 'v0.7.0'
+
+      - name: Verify awf is installed with correct version
+        run: |
+          echo "Installed version: ${{ steps.setup-awf.outputs.version }}"
+          echo "Image tag: ${{ steps.setup-awf.outputs.image-tag }}"
+          which awf
+          awf --version
+          # Verify the version matches
+          if [[ "${{ steps.setup-awf.outputs.version }}" != "v0.7.0" ]]; then
+            echo "::error::Version mismatch! Expected v0.7.0, got ${{ steps.setup-awf.outputs.version }}"
+            exit 1
+          fi
+          # Verify image tag is set correctly (without 'v' prefix)
+          if [[ "${{ steps.setup-awf.outputs.image-tag }}" != "0.7.0" ]]; then
+            echo "::error::Image tag mismatch! Expected 0.7.0, got ${{ steps.setup-awf.outputs.image-tag }}"
+            exit 1
+          fi
+
+  test-action-with-images:
+    name: Test Action (With Image Pull)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup awf with image pull
+        id: setup-awf
+        uses: ./
+        with:
+          version: 'v0.7.0'
+          pull-images: 'true'
+
+      - name: Verify awf and images are available
+        run: |
+          echo "Installed version: ${{ steps.setup-awf.outputs.version }}"
+          echo "Image tag: ${{ steps.setup-awf.outputs.image-tag }}"
+          which awf
+          awf --version
+          
+          # Verify Docker images are pulled
+          echo "Checking for pulled images..."
+          docker images ghcr.io/githubnext/gh-aw-firewall/squid
+          docker images ghcr.io/githubnext/gh-aw-firewall/agent
+
+  test-action-invalid-version:
+    name: Test Action (Invalid Version - Should Fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup awf with invalid version (should fail)
+        id: setup-awf
+        uses: ./
+        with:
+          version: 'invalid-version'
+        continue-on-error: true
+
+      - name: Verify action failed as expected
+        run: |
+          if [[ "${{ steps.setup-awf.outcome }}" == "success" ]]; then
+            echo "::error::Action should have failed with invalid version"
+            exit 1
+          fi
+          echo "Action correctly rejected invalid version format"
