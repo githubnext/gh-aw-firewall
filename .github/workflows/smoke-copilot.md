@@ -20,8 +20,6 @@ network:
     - node
     - github
     - playwright
-sandbox:
-  local-build: true
 tools:
   agentic-workflows:
   cache-memory: true
@@ -33,6 +31,9 @@ tools:
     allowed_domains:
       - github.com
   web-fetch:
+sandbox:
+  mcp:
+    container: "ghcr.io/githubnext/gh-aw-mcpg"
 safe-outputs:
     add-comment:
       hide-older-comments: true

@@ -25,7 +25,8 @@ network:
     - github
     - playwright
 sandbox:
-  local-build: true
+  mcp:
+    container: "ghcr.io/githubnext/gh-aw-mcpg"
 tools:
   cache-memory: true
   github:
