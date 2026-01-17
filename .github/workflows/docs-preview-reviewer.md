@@ -13,14 +13,28 @@ permissions:
   contents: read
   pull-requests: read
   issues: read
+network:
+  allowed:
+    - playwright
+    - node
 tools:
   github:
     toolsets: [default]
+  bash:
+    - "npm ci"
+    - "npm run build"
+    - "npm run preview*"
+  playwright:
+    allowed_domains:
+      - localhost
 safe-outputs:
   add-comment:
     max: 1
     # Collapse previous review comments when posting a new one to keep the PR clean
     hide-older-comments: true
+  upload-asset:
+    allowed-exts: [.png, .jpg]
+    max: 5
 timeout-minutes: 10
 ---
 
@@ -36,17 +50,26 @@ You are an AI documentation reviewer that provides preview-like feedback on docu
 
 ## Your Task
 
-Review the documentation changes in this pull request and provide constructive feedback:
+Review the documentation changes in this pull request and provide constructive feedback with visual previews:
 
 1. **Fetch the PR Details**: Use the GitHub tools to get the PR diff and changed files
-2. **Analyze Documentation Quality**: Review the changes for:
+2. **Build and Preview the Docs Site**: 
+   - Navigate to the `docs-site` directory
+   - Run `npm ci` to install dependencies
+   - Run `npm run build` to build the docs
+   - Start a local preview server with `npm run preview`
+3. **Capture Screenshots**: Use the Playwright tool to:
+   - Navigate to the local preview server (typically http://localhost:4321)
+   - Take screenshots of the pages affected by the documentation changes
+   - Upload the screenshots using the upload-asset safe output
+4. **Analyze Documentation Quality**: Review the changes for:
    - Clarity and readability
    - Technical accuracy
    - Proper formatting (headings, code blocks, links)
    - Spelling and grammar
    - Broken or missing links
    - Consistency with existing documentation style
-3. **Provide Structured Feedback**: Create a helpful review comment
+5. **Provide Structured Feedback**: Create a helpful review comment with embedded screenshots
 
 ## Review Criteria
 
@@ -81,6 +104,10 @@ Create a single comment with the following structure:
 
 ### Overview
 Brief summary of the changes reviewed.
+
+### 📸 Visual Preview
+Screenshots of the rendered documentation pages (uploaded as assets):
+![Page Screenshot](link-to-uploaded-screenshot.png)
 
 ### ✅ What Looks Good
 - Positive aspects of the changes
