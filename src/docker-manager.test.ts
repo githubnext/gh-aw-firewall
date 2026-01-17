@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, MIN_REGULAR_UID } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -44,6 +44,127 @@ describe('docker-manager', () => {
     it('should handle /32 (single host) networks', () => {
       expect(subnetsOverlap('192.168.1.1/32', '192.168.1.1/32')).toBe(true);
       expect(subnetsOverlap('192.168.1.1/32', '192.168.1.2/32')).toBe(false);
+    });
+  });
+
+  describe('validateIdNotInSystemRange', () => {
+    it('should return 1000 for system UIDs (0-999)', () => {
+      expect(validateIdNotInSystemRange(0)).toBe('1000');
+      expect(validateIdNotInSystemRange(1)).toBe('1000');
+      expect(validateIdNotInSystemRange(13)).toBe('1000'); // proxy user
+      expect(validateIdNotInSystemRange(999)).toBe('1000');
+    });
+
+    it('should return the UID as-is for regular users (>= 1000)', () => {
+      expect(validateIdNotInSystemRange(1000)).toBe('1000');
+      expect(validateIdNotInSystemRange(1001)).toBe('1001');
+      expect(validateIdNotInSystemRange(65534)).toBe('65534'); // nobody user on some systems
+    });
+  });
+
+  describe('getSafeHostUid', () => {
+    const originalGetuid = process.getuid;
+    const originalSudoUid = process.env.SUDO_UID;
+
+    afterEach(() => {
+      process.getuid = originalGetuid;
+      if (originalSudoUid !== undefined) {
+        process.env.SUDO_UID = originalSudoUid;
+      } else {
+        delete process.env.SUDO_UID;
+      }
+    });
+
+    it('should return 1000 when SUDO_UID is a system UID', () => {
+      process.getuid = () => 0; // Running as root
+      process.env.SUDO_UID = '13'; // proxy user
+      expect(getSafeHostUid()).toBe('1000');
+    });
+
+    it('should return SUDO_UID when it is a regular user UID', () => {
+      process.getuid = () => 0; // Running as root
+      process.env.SUDO_UID = '1001';
+      expect(getSafeHostUid()).toBe('1001');
+    });
+
+    it('should return 1000 when SUDO_UID is 0', () => {
+      process.getuid = () => 0; // Running as root
+      process.env.SUDO_UID = '0';
+      expect(getSafeHostUid()).toBe('1000');
+    });
+
+    it('should return 1000 when running as root without SUDO_UID', () => {
+      process.getuid = () => 0;
+      delete process.env.SUDO_UID;
+      expect(getSafeHostUid()).toBe('1000');
+    });
+
+    it('should return 1000 for non-root system UID', () => {
+      process.getuid = () => 13; // proxy user
+      delete process.env.SUDO_UID;
+      expect(getSafeHostUid()).toBe('1000');
+    });
+
+    it('should return the UID when running as regular user', () => {
+      process.getuid = () => 1001;
+      delete process.env.SUDO_UID;
+      expect(getSafeHostUid()).toBe('1001');
+    });
+  });
+
+  describe('getSafeHostGid', () => {
+    const originalGetgid = process.getgid;
+    const originalSudoGid = process.env.SUDO_GID;
+
+    afterEach(() => {
+      process.getgid = originalGetgid;
+      if (originalSudoGid !== undefined) {
+        process.env.SUDO_GID = originalSudoGid;
+      } else {
+        delete process.env.SUDO_GID;
+      }
+    });
+
+    it('should return 1000 when SUDO_GID is a system GID', () => {
+      process.getgid = () => 0; // Running as root
+      process.env.SUDO_GID = '13'; // proxy group
+      expect(getSafeHostGid()).toBe('1000');
+    });
+
+    it('should return SUDO_GID when it is a regular user GID', () => {
+      process.getgid = () => 0; // Running as root
+      process.env.SUDO_GID = '1001';
+      expect(getSafeHostGid()).toBe('1001');
+    });
+
+    it('should return 1000 when SUDO_GID is 0', () => {
+      process.getgid = () => 0; // Running as root
+      process.env.SUDO_GID = '0';
+      expect(getSafeHostGid()).toBe('1000');
+    });
+
+    it('should return 1000 when running as root without SUDO_GID', () => {
+      process.getgid = () => 0;
+      delete process.env.SUDO_GID;
+      expect(getSafeHostGid()).toBe('1000');
+    });
+
+    it('should return 1000 for non-root system GID', () => {
+      process.getgid = () => 13; // proxy group
+      delete process.env.SUDO_GID;
+      expect(getSafeHostGid()).toBe('1000');
+    });
+
+    it('should return the GID when running as regular user', () => {
+      process.getgid = () => 1001;
+      delete process.env.SUDO_GID;
+      expect(getSafeHostGid()).toBe('1001');
+    });
+  });
+
+  describe('MIN_REGULAR_UID constant', () => {
+    it('should be 1000 (standard Linux regular user UID threshold)', () => {
+      expect(MIN_REGULAR_UID).toBe(1000);
     });
   });
 
