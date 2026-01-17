@@ -158,3 +158,64 @@ jobs:
             /tmp/awf-agent-logs-*/
             /tmp/squid-logs-*/
           retention-days: 7
+
+  test-ipv6:
+    name: IPv6 Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Pre-test cleanup
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Run IPv6 tests
+        id: run-tests
+        run: |
+          sudo -E npm run test:integration -- ipv6.test.ts 2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Clean npm cache
+        if: always()
+        run: |
+          sudo npm cache clean --force
+          sudo rm -rf ~/.npm/_npx
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          npx tsx scripts/ci/generate-test-summary.ts "ipv6.test.ts" "IPv6 Tests" test-output.log
+
+      - name: Check test results
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Post-test cleanup
+        if: always()
+        run: sudo ./scripts/ci/cleanup.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ipv6-test-logs
+          path: |
+            /tmp/*-test.log
+            /tmp/awf-*/
+            /tmp/awf-agent-logs-*/
+            /tmp/squid-logs-*/
+          retention-days: 7
