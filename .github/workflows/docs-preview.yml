@@ -9,9 +9,6 @@ on:
       - '.github/workflows/docs-preview.yml'
   pull_request_target:
     types: [closed]
-    paths:
-      - 'docs-site/**'
-      - 'docs/**'
 
 permissions:
   contents: read
@@ -30,7 +27,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout
+      - name: Checkout PR source code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
       - name: Setup Node.js
@@ -119,7 +116,7 @@ jobs:
             2. Extract the zip file
             3. Open \`index.html\` in your browser, or serve locally with:
                \`\`\`bash
-               npx serve ./dist
+               npx serve .
                \`\`\`
             
             </details>
