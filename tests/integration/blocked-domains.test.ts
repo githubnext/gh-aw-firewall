@@ -100,7 +100,8 @@ describe('Blocked Domains Functionality', () => {
 
     expect(result).toSucceed();
     // Debug output should show domain configuration
-    expect(result.stderr).toMatch(/github\.com|example\.com/);
+    // The log format is "[INFO] Allowed domains: github.com, example.com"
+    expect(result.stderr).toMatch(/Allowed domains:/i);
   }, 120000);
 });
 

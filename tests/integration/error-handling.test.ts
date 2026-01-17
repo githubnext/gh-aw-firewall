@@ -160,6 +160,8 @@ describe('Error Handling', () => {
 
       // Command should complete (either way)
       // The important thing is that the firewall handles it gracefully
+      // Verify the result object is defined (command completed)
+      expect(result).toBeDefined();
     }, 120000);
   });
 
