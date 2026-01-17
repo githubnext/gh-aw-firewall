@@ -70,6 +70,13 @@ export function isWildcardPattern(domain: string): boolean {
 }
 
 /**
+ * Regex pattern for matching valid domain name characters.
+ * Uses character class instead of .* to prevent catastrophic backtracking (ReDoS).
+ * Per RFC 1035, valid domain characters are: letters, digits, hyphens, and dots.
+ */
+const DOMAIN_CHAR_PATTERN = '[a-zA-Z0-9.-]*';
+
+/**
  * Convert a wildcard pattern to a Squid-compatible regex pattern
  *
  * @param pattern - Domain pattern with asterisk wildcards
@@ -77,7 +84,7 @@ export function isWildcardPattern(domain: string): boolean {
  * @throws Error if pattern is invalid
  *
  * Conversion rules:
- * - `*` becomes `.*` (match any characters)
+ * - `*` becomes `[a-zA-Z0-9.-]*` (match valid domain characters, safe from ReDoS)
  * - `.` becomes `\.` (literal dot)
  * - Other regex metacharacters are escaped
  * - Result is anchored with `^` and `$`
@@ -92,7 +99,8 @@ export function wildcardToRegex(pattern: string): string {
 
     switch (char) {
       case '*':
-        regex += '.*';
+        // Use character class instead of .* to prevent catastrophic backtracking
+        regex += DOMAIN_CHAR_PATTERN;
         break;
       case '.':
         regex += '\\.';
@@ -257,6 +265,9 @@ export function parseDomainList(domains: string[]): ParsedDomainList {
  * - Pattern 'http' only covers domain with 'http' protocol
  * - Pattern 'https' only covers domain with 'https' protocol
  *
+ * Security: Input length is validated before regex matching to prevent
+ * potential ReDoS attacks with extremely long inputs.
+ *
  * @param domainEntry - Plain domain entry with protocol to check
  * @param patterns - Array of wildcard patterns with their regex and protocol
  * @returns true if the domain is fully covered by a pattern
@@ -265,6 +276,13 @@ export function isDomainMatchedByPattern(
   domainEntry: PlainDomainEntry,
   patterns: DomainPattern[]
 ): boolean {
+  // Defense in depth: Limit domain length to prevent potential ReDoS
+  // RFC 1035 limits domain names to 253 characters, add buffer for edge cases
+  const MAX_DOMAIN_LENGTH = 512;
+  if (domainEntry.domain.length > MAX_DOMAIN_LENGTH) {
+    return false;
+  }
+
   for (const pattern of patterns) {
     try {
       // Use case-insensitive matching (DNS is case-insensitive)
