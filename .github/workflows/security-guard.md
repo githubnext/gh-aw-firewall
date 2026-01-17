@@ -53,10 +53,6 @@ This repository implements a **network firewall for AI agents** that provides L7
    - Wildcard pattern security (prevents overly broad patterns)
    - Protocol prefix handling
 
-6. **Docker wrapper** (`containers/agent/docker-wrapper.sh`)
-   - Intercepts docker commands to enforce network restrictions
-   - Injects proxy configuration into spawned containers
-
 ## Your Task
 
 Analyze PR #${{ github.event.pull_request.number }} in repository ${{ github.repository }}.

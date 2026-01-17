@@ -118,21 +118,6 @@ if [ "${AWF_SSL_BUMP_ENABLED}" = "true" ]; then
   fi
 fi
 
-# Setup Docker socket permissions if Docker socket is mounted
-# This allows MCP servers that run as Docker containers to work
-# Store DOCKER_GID once to avoid redundant stat calls
-DOCKER_GID=""
-if [ -S /var/run/docker.sock ]; then
-  echo "[entrypoint] Configuring Docker socket access..."
-  # Get the GID of the docker socket (store once)
-  DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
-  # Create docker group with same GID as host's docker socket
-  if ! getent group docker > /dev/null 2>&1; then
-    groupadd -g "$DOCKER_GID" docker || true
-  fi
-  echo "[entrypoint] Docker socket configured (GID: $DOCKER_GID)"
-fi
-
 # Setup iptables rules
 /usr/local/bin/setup-iptables.sh
 
@@ -145,24 +130,6 @@ echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
 echo "[entrypoint] Network information:"
 echo "[entrypoint]   IP address: $(hostname -I)"
 echo "[entrypoint]   Hostname: $(hostname)"
-
-# Add awfuser to docker group for Docker socket access
-# This must be done after the docker group is created
-# Security note: This grants awfuser access to the Docker daemon, which provides
-# significant privileges. To disable this for untrusted workloads, set DISABLE_DOCKER_ACCESS=true
-if [ "${DISABLE_DOCKER_ACCESS}" = "true" ]; then
-  if [ -S /var/run/docker.sock ]; then
-    echo "[entrypoint] Docker socket detected, but DISABLE_DOCKER_ACCESS is set to 'true'. Skipping docker group addition for awfuser."
-  fi
-else
-  if [ -S /var/run/docker.sock ] && [ -n "$DOCKER_GID" ]; then
-    if getent group docker > /dev/null 2>&1; then
-      usermod -aG docker awfuser 2>/dev/null || true
-      echo "[entrypoint] Added awfuser to docker group (GID: $DOCKER_GID)"
-      echo "[entrypoint] NOTE: awfuser has Docker socket access. Set DISABLE_DOCKER_ACCESS=true to prevent this."
-    fi
-  fi
-fi
 
 # Configure git safe directories for awfuser
 # Use runuser instead of su to avoid PAM session issues

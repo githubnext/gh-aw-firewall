@@ -212,7 +212,6 @@ Mount host directories into container. Format: `host_path:container_path[:ro|rw]
 **Default mounts:**
 - Host filesystem at `/host` (read-only)
 - User home directory (read-write)
-- Docker socket at `/var/run/docker.sock`
 
 ### `--container-workdir <dir>`
 
@@ -423,10 +422,10 @@ awf logs summary --format pretty
 #### Example Output (Markdown)
 
 ```markdown
-### Firewall Activity
-
 <details>
-<summary>150 requests | 145 allowed | 5 blocked | 12 unique domains</summary>
+<summary>Firewall Activity</summary>
+
+▼ 150 requests | 145 allowed | 5 blocked | 12 unique domains
 
 | Domain | Allowed | Denied |
 |--------|---------|--------|

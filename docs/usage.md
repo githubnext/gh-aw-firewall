@@ -42,23 +42,6 @@ sudo awf \
   'curl https://api.github.com'
 ```
 
-### Docker-in-Docker Example
-
-The firewall enforces domain filtering on spawned containers:
-
-```bash
-# Allowed - api.github.com is in the allowlist
-sudo awf \
-  --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
-
-# Blocked - api.github.com NOT in the allowlist
-sudo awf \
-  --allow-domains registry-1.docker.io,auth.docker.io \
-  'docker run --rm curlimages/curl -fsS https://api.github.com/zen'
-# Returns: curl: (22) The requested URL returned error: 403
-```
-
 ### With GitHub Copilot CLI
 
 ```bash
@@ -432,46 +415,6 @@ sudo awf --allow-domains echo.websocket.events "wscat -c wss://echo.websocket.ev
 
 # Install tools first or use available ones (curl, git, nodejs, npm)
 sudo awf --allow-domains github.com "npm install -g wscat && wscat -c wss://echo.websocket.events"
-```
-
-### Docker --network host is Blocked
-
-```bash
-# --network host bypasses firewall and is blocked
-sudo awf --allow-domains github.com \
-  "docker run --rm --network host curlimages/curl https://example.com"  # ✗ fails
-# Error: --network host is not allowed (bypasses firewall)
-
-# Use default network (awf-net is injected automatically)
-sudo awf --allow-domains example.com \
-  "docker run --rm curlimages/curl https://example.com"  # ✓ works
-```
-
-### Docker --add-host is Blocked (DNS Poisoning Protection)
-
-```bash
-# --add-host can map whitelisted domains to unauthorized IPs (DNS poisoning attack)
-ip=$(getent hosts example.com | awk '{print $1}' | head -1)
-sudo awf --allow-domains github.com \
-  "docker run --rm --add-host github.com:$ip curlimages/curl https://github.com"  # ✗ fails
-# Error: --add-host is not allowed (enables DNS poisoning)
-
-# Without --add-host, DNS resolution is legitimate
-sudo awf --allow-domains github.com \
-  "docker run --rm curlimages/curl https://github.com"  # ✓ works
-```
-
-### Docker --privileged is Blocked (Security Bypass Protection)
-
-```bash
-# --privileged grants unrestricted access and can disable firewall rules
-sudo awf --allow-domains github.com \
-  "docker run --rm --privileged curlimages/curl https://example.com"  # ✗ fails
-# Error: --privileged is not allowed (bypasses all security)
-
-# Use containers without privileged mode
-sudo awf --allow-domains example.com \
-  "docker run --rm curlimages/curl https://example.com"  # ✓ works
 ```
 
 ## IP-Based Access

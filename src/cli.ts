@@ -362,7 +362,7 @@ program
   )
   .option(
     '--env-all',
-    'Pass all host environment variables to container (excludes system vars like PATH, DOCKER_HOST)',
+    'Pass all host environment variables to container (excludes system vars like PATH)',
     false
   )
   .option(
@@ -390,6 +390,12 @@ program
     'Security warning: When combined with --allow-domains host.docker.internal, ' +
     'containers can access ANY service on the host machine.',
     false
+  )
+  .option(
+    '--allow-host-ports <ports>',
+    'Comma-separated list of ports or port ranges to allow when using --enable-host-access. ' +
+    'By default, only ports 80 and 443 are allowed. ' +
+    'Example: --allow-host-ports 3000 or --allow-host-ports 3000,8080 or --allow-host-ports 3000-3010,8000-8090'
   )
   .option(
     '--ssl-bump',
@@ -620,6 +626,7 @@ program
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
       enableHostAccess: options.enableHostAccess,
+      allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
     };
@@ -628,6 +635,12 @@ program
     if (config.envAll) {
       logger.warn('⚠️  Using --env-all: All host environment variables will be passed to container');
       logger.warn('   This may expose sensitive credentials if logs or configs are shared');
+    }
+
+    // Warn if --allow-host-ports is used without --enable-host-access
+    if (config.allowHostPorts && !config.enableHostAccess) {
+      logger.error('❌ --allow-host-ports requires --enable-host-access to be set');
+      process.exit(1);
     }
 
     // Warn if --enable-host-access is used with host.docker.internal in allowed domains

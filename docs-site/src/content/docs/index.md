@@ -3,7 +3,7 @@ title: Agentic Workflow Firewall
 description: Network firewall for AI agents with domain whitelisting - control egress HTTP/HTTPS traffic using Squid proxy and Docker containers.
 ---
 
-A network firewall designed specifically for AI agents and agentic workflows. Control which domains your AI agents can access while maintaining full filesystem access and Docker-in-Docker capabilities.
+A network firewall designed specifically for AI agents and agentic workflows. Control which domains your AI agents can access while maintaining full filesystem access in a containerized environment.
 
 :::tip[Part of GitHub Next]
 This project is part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). Learn more on the [GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
@@ -16,7 +16,6 @@ When AI agents like GitHub Copilot CLI run with access to tools and MCP servers,
 **Key Capabilities:**
 - **Domain Allowlist & Blocklist**: Allow specific domains and block exceptions with wildcard pattern support
 - **URL Path Filtering**: Restrict access to specific URL paths with [SSL Bump](/gh-aw-firewall/reference/ssl-bump/)
-- **Docker-in-Docker Enforcement**: Spawned containers inherit firewall restrictions
 - **Host-Level Protection**: Uses iptables DOCKER-USER chain for defense-in-depth
 - **Zero Trust**: Block all traffic by default, allow only what you explicitly permit
 - **Full Auditability**: Comprehensive logging of all allowed and blocked traffic
@@ -126,18 +125,6 @@ sudo awf \
     --prompt "Search arXiv for papers on AI safety"
 ```
 
-### Docker-in-Docker
-
-Spawned containers automatically inherit firewall restrictions:
-
-```bash
-sudo awf \
-  --allow-domains api.github.com,registry-1.docker.io,auth.docker.io \
-  -- docker run --rm curlimages/curl -fsS https://api.github.com/zen
-```
-
-The spawned container's network traffic is also filtered through the firewall.
-
 ## How It Works
 
 The firewall uses a containerized architecture with three security layers:
@@ -153,7 +140,6 @@ The firewall uses a containerized architecture with three security layers:
 │  ┌──────────────────────────────┐       │
 │  │ Copilot Container            │       │
 │  │ • Full filesystem access     │       │
-│  │ • Docker-in-Docker support   │       │
 │  │ • iptables NAT redirection   │       │
 │  └──────────┬───────────────────┘       │
 │             │ All HTTP/HTTPS             │
@@ -240,8 +226,6 @@ Works with wildcards: `https://*.secure.example.com`
 The firewall uses Docker's **DOCKER-USER iptables chain** to enforce rules at the host level. This means:
 
 - All containers on the firewall network are subject to filtering
-- Spawned containers cannot bypass the firewall
-- Protection works even with Docker-in-Docker
 - No container-level configuration needed
 
 ### Comprehensive Logging

