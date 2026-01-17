@@ -22,7 +22,13 @@ const DANGEROUS_PORTS = [
   3306,  // MySQL
   3389,  // RDP (Windows Remote Desktop)
   5432,  // PostgreSQL
+  5984,  // CouchDB
   6379,  // Redis
+  6984,  // CouchDB (SSL)
+  8086,  // InfluxDB HTTP API
+  8088,  // InfluxDB RPC
+  9200,  // Elasticsearch HTTP API
+  9300,  // Elasticsearch transport
   27017, // MongoDB
   27018, // MongoDB sharding
   28017, // MongoDB web interface

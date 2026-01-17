@@ -1110,7 +1110,7 @@ describe('Port validation in generateSquidConfig', () => {
         domains: ['github.com'],
         port: 3128,
         enableHostAccess: true,
-        allowHostPorts: '3000-3010,8000-8090',
+        allowHostPorts: '3000-3010,7000-7090',
       });
     }).not.toThrow();
   });
@@ -1227,6 +1227,72 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
     }).toThrow('Port 27017 is blocked for security reasons');
   });
 
+  it('should reject CouchDB port 5984', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '5984',
+      });
+    }).toThrow('Port 5984 is blocked for security reasons');
+  });
+
+  it('should reject CouchDB SSL port 6984', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '6984',
+      });
+    }).toThrow('Port 6984 is blocked for security reasons');
+  });
+
+  it('should reject Elasticsearch HTTP port 9200', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '9200',
+      });
+    }).toThrow('Port 9200 is blocked for security reasons');
+  });
+
+  it('should reject Elasticsearch transport port 9300', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '9300',
+      });
+    }).toThrow('Port 9300 is blocked for security reasons');
+  });
+
+  it('should reject InfluxDB HTTP port 8086', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8086',
+      });
+    }).toThrow('Port 8086 is blocked for security reasons');
+  });
+
+  it('should reject InfluxDB RPC port 8088', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8088',
+      });
+    }).toThrow('Port 8088 is blocked for security reasons');
+  });
+
   it('should reject port range containing SSH (20-25)', () => {
     expect(() => {
       generateSquidConfig({
@@ -1260,6 +1326,17 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
     }).toThrow('Port range 5400-5500 includes dangerous port 5432');
   });
 
+  it('should reject port range containing InfluxDB (8080-8090)', () => {
+    expect(() => {
+      generateSquidConfig({
+        domains: ['github.com'],
+        port: 3128,
+        enableHostAccess: true,
+        allowHostPorts: '8080-8090',
+      });
+    }).toThrow('Port range 8080-8090 includes dangerous port 8086');
+  });
+
   it('should reject multiple ports including a dangerous one', () => {
     expect(() => {
       generateSquidConfig({
@@ -1288,7 +1365,7 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
         domains: ['github.com'],
         port: 3128,
         enableHostAccess: true,
-        allowHostPorts: '8000-8100',
+        allowHostPorts: '7000-7100',
       });
     }).not.toThrow();
   });
