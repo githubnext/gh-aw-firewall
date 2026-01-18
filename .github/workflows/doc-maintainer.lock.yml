@@ -447,81 +447,23 @@ jobs:
           - MCP configuration changes
           - Security guidance updates
           
-          ## Priority Documentation Files
+          ## Documentation Files
           
-          Focus on these files in order of priority:
-          
-          1. `/docs/architecture.md` - Container and network architecture
-          2. `/docs/usage.md` - CLI usage and examples
-          3. `README.md` - Overview and quick start
-          4. `AGENTS.md` - Agent development guidelines
-          5. `/docs/logging_quickref.md` - Logging configuration
-          6. `/docs/security.md` - Security documentation
-          7. `/docs/troubleshooting.md` - Troubleshooting guides
-          8. `/docs/environment.md` - Environment configuration
-          9. `/docs/egress-filtering.md` - Egress filtering details
-          10. `/docs/github_actions.md` - GitHub Actions integration
+          Explore all documentation files in the `/docs/` directory and all `*.md` files in the repository root. The agent should discover and review these files to identify what needs updating.
           
           ## Task Steps
           
           ### 1. Gather Recent Changes (Past 7 Days)
           
-          Use git commands to analyze commits from the past 7 days:
-          
-          ```bash
-          # List commits from the past 7 days
-          git log --oneline --since="7 days ago"
-          
-          # See which files changed
-          git log --since="7 days ago" --name-only --pretty=format:""
-          
-          # Get detailed changes for key source files
-          git log --since="7 days ago" -p -- src/
-          git log --since="7 days ago" -p -- containers/
-          ```
-          
-          Focus on changes to:
-          - `src/*.ts` - Core TypeScript implementation
-          - `containers/**` - Docker container configurations
-          - `.github/workflows/*.md` - Workflow definitions
-          - `package.json` - Dependencies and scripts
+          Use git commands to analyze commits from the past 7 days and identify which files changed.
           
           ### 2. Identify Documentation Gaps
           
-          Compare code changes with current documentation:
-          
-          1. **Architecture Changes**:
-             - Docker container configuration changes → Update `/docs/architecture.md`
-             - Network topology changes → Update network diagrams and descriptions
-             - iptables rule changes → Update security documentation
-          
-          2. **CLI Changes**:
-             - New flags or options in `src/cli.ts` → Update `/docs/usage.md` and `README.md`
-             - Environment variable changes → Update `/docs/environment.md`
-             - Exit code changes → Update troubleshooting docs
-          
-          3. **MCP Configuration**:
-             - Changes to MCP server handling → Update `AGENTS.md` MCP sections
-             - Environment variable requirements → Update configuration examples
-          
-          4. **Security Updates**:
-             - Capability changes → Update `/docs/security.md`
-             - Firewall rule changes → Update egress filtering docs
+          Compare code changes with current documentation and identify what needs to be updated.
           
           ### 3. Review Current Documentation
           
-          Read the current state of documentation files:
-          
-          ```bash
-          # List all documentation files
-          find docs -name '*.md' -type f
-          
-          # Read key files
-          cat README.md
-          cat AGENTS.md
-          cat docs/architecture.md
-          cat docs/usage.md
-          ```
+          Read the current state of documentation files in `/docs/` and root `*.md` files.
           
           ### 4. Verify Code Examples
           
@@ -718,38 +660,13 @@ jobs:
         # Copilot CLI tool arguments (sorted):
         # --allow-tool github
         # --allow-tool safeoutputs
-        # --allow-tool shell(cat *)
-        # --allow-tool shell(cat)
-        # --allow-tool shell(date)
-        # --allow-tool shell(echo)
-        # --allow-tool shell(find . -name '*.md':*)
-        # --allow-tool shell(git add:*)
-        # --allow-tool shell(git branch:*)
-        # --allow-tool shell(git checkout:*)
-        # --allow-tool shell(git commit:*)
-        # --allow-tool shell(git diff:*)
-        # --allow-tool shell(git log:*)
-        # --allow-tool shell(git merge:*)
-        # --allow-tool shell(git rm:*)
-        # --allow-tool shell(git show:*)
-        # --allow-tool shell(git status)
-        # --allow-tool shell(git switch:*)
-        # --allow-tool shell(grep -r:*)
-        # --allow-tool shell(grep)
-        # --allow-tool shell(head)
-        # --allow-tool shell(ls)
-        # --allow-tool shell(pwd)
-        # --allow-tool shell(sort)
-        # --allow-tool shell(tail)
-        # --allow-tool shell(uniq)
-        # --allow-tool shell(wc)
-        # --allow-tool shell(yq)
+        # --allow-tool shell
         # --allow-tool write
         timeout-minutes: 15
         run: |
           set -o pipefail
           sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
-            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-tool github --allow-tool safeoutputs --allow-tool 'shell(cat *)' --allow-tool 'shell(cat)' --allow-tool 'shell(date)' --allow-tool 'shell(echo)' --allow-tool 'shell(find . -name '\''*.md'\'':*)' --allow-tool 'shell(git add:*)' --allow-tool 'shell(git branch:*)' --allow-tool 'shell(git checkout:*)' --allow-tool 'shell(git commit:*)' --allow-tool 'shell(git diff:*)' --allow-tool 'shell(git log:*)' --allow-tool 'shell(git merge:*)' --allow-tool 'shell(git rm:*)' --allow-tool 'shell(git show:*)' --allow-tool 'shell(git status)' --allow-tool 'shell(git switch:*)' --allow-tool 'shell(grep -r:*)' --allow-tool 'shell(grep)' --allow-tool 'shell(head)' --allow-tool 'shell(ls)' --allow-tool 'shell(pwd)' --allow-tool 'shell(sort)' --allow-tool 'shell(tail)' --allow-tool 'shell(uniq)' --allow-tool 'shell(wc)' --allow-tool 'shell(yq)' --allow-tool write --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
+            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-tool github --allow-tool safeoutputs --allow-tool shell --allow-tool write --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE

@@ -15,12 +15,6 @@ tools:
     toolsets: [default]
   edit:
   bash:
-    - "git log:*"
-    - "git diff:*"
-    - "git show:*"
-    - "find . -name '*.md':*"
-    - "cat *"
-    - "grep -r:*"
 safe-outputs:
   create-pull-request:
     title-prefix: "[docs] "
@@ -46,81 +40,23 @@ This repository is a security-critical firewall for GitHub Copilot CLI. Accurate
 - MCP configuration changes
 - Security guidance updates
 
-## Priority Documentation Files
+## Documentation Files
 
-Focus on these files in order of priority:
-
-1. `/docs/architecture.md` - Container and network architecture
-2. `/docs/usage.md` - CLI usage and examples
-3. `README.md` - Overview and quick start
-4. `AGENTS.md` - Agent development guidelines
-5. `/docs/logging_quickref.md` - Logging configuration
-6. `/docs/security.md` - Security documentation
-7. `/docs/troubleshooting.md` - Troubleshooting guides
-8. `/docs/environment.md` - Environment configuration
-9. `/docs/egress-filtering.md` - Egress filtering details
-10. `/docs/github_actions.md` - GitHub Actions integration
+Explore all documentation files in the `/docs/` directory and all `*.md` files in the repository root. The agent should discover and review these files to identify what needs updating.
 
 ## Task Steps
 
 ### 1. Gather Recent Changes (Past 7 Days)
 
-Use git commands to analyze commits from the past 7 days:
-
-```bash
-# List commits from the past 7 days
-git log --oneline --since="7 days ago"
-
-# See which files changed
-git log --since="7 days ago" --name-only --pretty=format:""
-
-# Get detailed changes for key source files
-git log --since="7 days ago" -p -- src/
-git log --since="7 days ago" -p -- containers/
-```
-
-Focus on changes to:
-- `src/*.ts` - Core TypeScript implementation
-- `containers/**` - Docker container configurations
-- `.github/workflows/*.md` - Workflow definitions
-- `package.json` - Dependencies and scripts
+Use git commands to analyze commits from the past 7 days and identify which files changed.
 
 ### 2. Identify Documentation Gaps
 
-Compare code changes with current documentation:
-
-1. **Architecture Changes**:
-   - Docker container configuration changes → Update `/docs/architecture.md`
-   - Network topology changes → Update network diagrams and descriptions
-   - iptables rule changes → Update security documentation
-
-2. **CLI Changes**:
-   - New flags or options in `src/cli.ts` → Update `/docs/usage.md` and `README.md`
-   - Environment variable changes → Update `/docs/environment.md`
-   - Exit code changes → Update troubleshooting docs
-
-3. **MCP Configuration**:
-   - Changes to MCP server handling → Update `AGENTS.md` MCP sections
-   - Environment variable requirements → Update configuration examples
-
-4. **Security Updates**:
-   - Capability changes → Update `/docs/security.md`
-   - Firewall rule changes → Update egress filtering docs
+Compare code changes with current documentation and identify what needs to be updated.
 
 ### 3. Review Current Documentation
 
-Read the current state of documentation files:
-
-```bash
-# List all documentation files
-find docs -name '*.md' -type f
-
-# Read key files
-cat README.md
-cat AGENTS.md
-cat docs/architecture.md
-cat docs/usage.md
-```
+Read the current state of documentation files in `/docs/` and root `*.md` files.
 
 ### 4. Verify Code Examples
 
