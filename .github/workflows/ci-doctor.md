@@ -20,7 +20,7 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 permissions:
   contents: read
   actions: read
-  issues: read
+  issues: write
   pull-requests: read
 
 imports:
