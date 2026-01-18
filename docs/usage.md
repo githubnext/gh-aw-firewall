@@ -17,6 +17,8 @@ Options:
   --ssl-bump                 Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
                              Example: https://github.com/githubnext/*,https://api.github.com/repos/*
+  --memory-limit <limit>     Memory limit for the agent container (default: 2g)
+                             Examples: 512m, 1g, 2g, 4g, 8g
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
@@ -341,6 +343,52 @@ SSL Bump requires intercepting HTTPS traffic:
 - Traffic is re-encrypted between proxy and destination
 
 For more details, see [SSL Bump documentation](ssl-bump.md).
+
+## Resource Limits
+
+The firewall applies resource limits to the agent container to prevent DoS attacks in shared environments.
+
+### Memory Limit
+
+Use `--memory-limit` to control the maximum memory available to the agent container:
+
+```bash
+# Use default 2GB (sufficient for most commands)
+sudo awf --allow-domains github.com -- curl https://api.github.com
+
+# AI agent workloads may need more memory
+sudo awf --memory-limit 4g --allow-domains api.openai.com -- \
+  'npx @github/copilot --prompt "analyze large codebase"'
+
+# Large codebase analysis
+sudo awf --memory-limit 8g --allow-domains github.com -- \
+  'copilot --prompt "refactor entire project"'
+
+# Conservative limit for untrusted code
+sudo awf --memory-limit 1g --allow-domains registry.npmjs.org -- npm install
+```
+
+**Default limits:**
+- Memory: 2g (configurable via `--memory-limit`)
+- Swap: Same as memory limit (no swap)
+- Processes: 1000 (pids_limit)
+- CPU: Default shares (1024)
+
+**Valid memory limit formats:**
+- Gigabytes: `1g`, `2g`, `4g`, `8g`
+- Megabytes: `512m`, `1024m`, `2048m`
+- Minimum: `64m`
+
+### Default Resource Configuration
+
+The agent container runs with these default limits:
+
+| Resource | Default | Notes |
+|----------|---------|-------|
+| Memory | 2g | Configurable via `--memory-limit` |
+| Swap | Same as memory | Prevents swap thrashing |
+| PIDs | 1000 | Prevents fork bombs |
+| CPU shares | 1024 | Default priority |
 
 ## Limitations
 

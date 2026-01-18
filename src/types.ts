@@ -308,6 +308,20 @@ export interface WrapperConfig {
    * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Memory limit for the agent container
+   *
+   * Maximum amount of memory the container can use. Prevents DoS attacks
+   * via memory exhaustion in shared environments. Accepts values with unit
+   * suffix (e.g., '512m', '1g', '2g', '4g').
+   *
+   * @default '2g'
+   * @example '1g' (for conservative limit with untrusted code)
+   * @example '4g' (for AI agent workloads)
+   * @example '8g' (for large codebase analysis)
+   */
+  memoryLimit?: string;
 }
 
 /**

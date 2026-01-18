@@ -127,6 +127,62 @@ export function parseDnsServers(input: string): string[] {
 }
 
 /**
+ * Default memory limit for the agent container
+ */
+export const DEFAULT_MEMORY_LIMIT = '2g';
+
+/**
+ * Validates and parses a memory limit string
+ * @param input - Memory limit string (e.g., '512m', '1g', '2g', '4g')
+ * @returns The validated memory limit string
+ * @throws Error if the format is invalid
+ */
+export function parseMemoryLimit(input: string): string {
+  // Validate format: positive integer followed by unit suffix (m, g, k, b)
+  // Docker accepts formats like: 512m, 1g, 2g, 4g, 1024k, 536870912 (bytes)
+  const memoryRegex = /^(\d+)([kmgb])?$/i;
+  const match = input.toLowerCase().match(memoryRegex);
+
+  if (!match) {
+    throw new Error(
+      `Invalid memory limit format: ${input}. ` +
+      `Expected format: <number>[k|m|g] (e.g., 512m, 1g, 2g, 4g)`
+    );
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2] || 'b';
+
+  if (value <= 0) {
+    throw new Error('Memory limit must be a positive number');
+  }
+
+  // Validate minimum memory (at least 64MB)
+  let bytes: number;
+  switch (unit) {
+    case 'k':
+      bytes = value * 1024;
+      break;
+    case 'm':
+      bytes = value * 1024 * 1024;
+      break;
+    case 'g':
+      bytes = value * 1024 * 1024 * 1024;
+      break;
+    default:
+      bytes = value;
+  }
+
+  const minBytes = 64 * 1024 * 1024; // 64MB minimum
+  if (bytes < minBytes) {
+    throw new Error(`Memory limit must be at least 64m (got ${input})`);
+  }
+
+  // Return normalized format (keep original format for Docker)
+  return input.toLowerCase();
+}
+
+/**
  * Escapes a shell argument by wrapping it in single quotes and escaping any single quotes within it
  * @param arg - Argument to escape
  * @returns Escaped argument safe for shell execution
@@ -398,6 +454,11 @@ program
     'Example: --allow-host-ports 3000 or --allow-host-ports 3000,8080 or --allow-host-ports 3000-3010,8000-8090'
   )
   .option(
+    '--memory-limit <limit>',
+    'Memory limit for the agent container (e.g., 512m, 1g, 2g, 4g). Default: 2g',
+    '2g'
+  )
+  .option(
     '--ssl-bump',
     'Enable SSL Bump for HTTPS content inspection (allows URL path filtering for HTTPS)',
     false
@@ -555,6 +616,15 @@ program
       process.exit(1);
     }
 
+    // Parse and validate memory limit
+    let memoryLimit: string;
+    try {
+      memoryLimit = parseMemoryLimit(options.memoryLimit);
+    } catch (error) {
+      logger.error(`Invalid memory limit: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+
     // Parse --allow-urls for SSL Bump mode
     let allowedUrls: string[] | undefined;
     if (options.allowUrls) {
@@ -629,6 +699,7 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
+      memoryLimit,
     };
 
     // Warn if --env-all is used
