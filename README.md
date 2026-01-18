@@ -9,6 +9,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
+- **DNS-over-HTTPS**: Optional encrypted DNS queries to prevent DNS MITM attacks
 
 ## Requirements
 
@@ -121,6 +122,7 @@ sudo awf --help
 
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
+- [DNS-over-HTTPS](docs/dns-over-https.md) — encrypted DNS queries for enhanced security
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how

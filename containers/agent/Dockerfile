@@ -23,6 +23,16 @@ RUN apt-get update && \
     npx --version || (echo "ERROR: npx not found" && exit 1) && \
     rm -rf /var/lib/apt/lists/*
 
+# Install cloudflared for DNS-over-HTTPS support
+# cloudflared is used as a local DoH proxy to encrypt DNS queries
+RUN curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | gpg --dearmor -o /usr/share/keyrings/cloudflare-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" > /etc/apt/sources.list.d/cloudflared.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cloudflared && \
+    rm -rf /var/lib/apt/lists/* && \
+    # Verify cloudflared was installed correctly
+    cloudflared --version || (echo "ERROR: cloudflared not installed correctly" && exit 1)
+
 # Create non-root user with UID/GID matching host user
 # This allows the user command to run with appropriate permissions
 # and prevents file ownership issues with mounted volumes
