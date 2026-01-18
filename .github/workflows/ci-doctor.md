@@ -4,6 +4,8 @@ description: Automated CI failure investigator that analyzes logs, identifies ro
 
 on:
   workflow_run:
+    # NOTE: GitHub Actions doesn't support wildcards for workflow_run.
+    # When adding new workflows, add them to this list to monitor for failures.
     workflows:
       - "Build Verification"
       - "CI/CD Pipelines and Integration Tests Gap Assessment"
