@@ -643,9 +643,9 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains dstdomain');
-      expect(result).not.toContain('dstdom_regex');
-      expect(result).toContain('http_access deny !allowed_domains');
+      // allowed_domains_regex should not be present (only IP blocking uses dstdom_regex)
       expect(result).not.toContain('allowed_domains_regex');
+      expect(result).toContain('http_access deny !allowed_domains');
     });
 
     it('should handle only pattern domains', () => {
@@ -1372,5 +1372,72 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
         allowHostPorts: '7000-7100',
       });
     }).not.toThrow();
+  });
+});
+
+describe('IP Address Blocking (Security)', () => {
+  const defaultPort = 3128;
+
+  it('should include ACL to block direct IPv4 connections', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl dest_is_ipv4 dstdom_regex');
+    expect(result).toContain('http_access deny dest_is_ipv4');
+  });
+
+  it('should include ACL to block direct IPv6 connections', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl dest_is_ipv6 dstdom_regex');
+    expect(result).toContain('http_access deny dest_is_ipv6');
+  });
+
+  it('should include security comment explaining IP blocking', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('Block direct IP address connections');
+    expect(result).toContain('Prevents bypassing domain-based filtering');
+  });
+
+  it('should place IP blocking rules before domain filtering', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    const ipv4DenyIndex = result.indexOf('http_access deny dest_is_ipv4');
+    const domainDenyIndex = result.indexOf('http_access deny !allowed_domains');
+    expect(ipv4DenyIndex).toBeLessThan(domainDenyIndex);
+  });
+
+  it('should use bounded regex pattern for IPv4 detection', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    // Pattern should use bounded quantifiers {1,3} not unbounded +
+    // This prevents potential ReDoS attacks with extremely long inputs
+    expect(result).toContain('[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}');
+    expect(result).not.toMatch(/dest_is_ipv4.*\[0-9\]\+/);
+  });
+
+  it('should detect IPv6 addresses by presence of colon', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    // IPv6 addresses always contain colons, domains cannot contain colons
+    expect(result).toMatch(/acl dest_is_ipv6 dstdom_regex\s*:/);
   });
 });
