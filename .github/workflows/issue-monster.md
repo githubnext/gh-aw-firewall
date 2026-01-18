@@ -238,6 +238,7 @@ jobs:
 
 safe-outputs:
   assign-to-agent:
+    max: 3
     name: "copilot"
   add-comment:
     max: 3
