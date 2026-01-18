@@ -5,6 +5,7 @@ import { isIPv6 } from 'net';
 const NETWORK_NAME = 'awf-net';
 const CHAIN_NAME = 'FW_WRAPPER';
 const CHAIN_NAME_V6 = 'FW_WRAPPER_V6';
+const NAT_CHAIN_NAME = 'FW_WRAPPER_NAT';
 const NETWORK_SUBNET = '172.30.0.0/24';
 
 // Cache for ip6tables availability check (only checked once per run)
@@ -149,6 +150,109 @@ async function setupIpv6Chain(bridgeName: string): Promise<void> {
       '-j', CHAIN_NAME_V6,
     ]);
   }
+}
+
+/**
+ * Sets up NAT PREROUTING chain to redirect HTTP/HTTPS traffic to Squid proxy.
+ * This implements transparent proxy at the host level, ensuring that ALL containers
+ * on the awf-net network have their HTTP/HTTPS traffic redirected to Squid,
+ * regardless of whether they respect HTTP_PROXY environment variables.
+ * 
+ * This is critical for security: child containers that ignore proxy settings
+ * will still have their traffic proxied through Squid for domain filtering.
+ * 
+ * @param bridgeName - Bridge interface name to filter traffic on
+ * @param squidIp - IP address of the Squid proxy
+ * @param squidPort - Port number of the Squid proxy
+ */
+async function setupNatChain(bridgeName: string, squidIp: string, squidPort: number): Promise<void> {
+  logger.debug(`Setting up NAT chain '${NAT_CHAIN_NAME}' for transparent proxy...`);
+
+  // Clean up existing NAT chain if it exists
+  try {
+    const { exitCode } = await execa('iptables', ['-t', 'nat', '-L', NAT_CHAIN_NAME, '-n'], { reject: false });
+    if (exitCode === 0) {
+      logger.debug(`NAT chain '${NAT_CHAIN_NAME}' already exists, cleaning up...`);
+
+      // Remove references from PREROUTING
+      const { stdout } = await execa('iptables', [
+        '-t', 'nat', '-L', 'PREROUTING', '-n', '--line-numbers',
+      ], { reject: false });
+
+      const lines = stdout.split('\n');
+      const lineNumbers: number[] = [];
+      for (const line of lines) {
+        if (line.includes(NAT_CHAIN_NAME)) {
+          const match = line.match(/^(\d+)/);
+          if (match) {
+            lineNumbers.push(parseInt(match[1], 10));
+          }
+        }
+      }
+
+      // Delete rules in reverse order to maintain line numbers
+      for (const lineNum of lineNumbers.reverse()) {
+        await execa('iptables', ['-t', 'nat', '-D', 'PREROUTING', lineNum.toString()], { reject: false });
+      }
+
+      // Flush and delete the chain
+      await execa('iptables', ['-t', 'nat', '-F', NAT_CHAIN_NAME], { reject: false });
+      await execa('iptables', ['-t', 'nat', '-X', NAT_CHAIN_NAME], { reject: false });
+    }
+  } catch (error) {
+    logger.debug('Error during NAT chain cleanup:', error);
+  }
+
+  // Create the NAT chain
+  await execa('iptables', ['-t', 'nat', '-N', NAT_CHAIN_NAME]);
+
+  // Rule 1: Skip traffic from Squid proxy itself (avoid redirect loop)
+  // Squid needs to connect directly to the internet
+  await execa('iptables', [
+    '-t', 'nat', '-A', NAT_CHAIN_NAME,
+    '-s', squidIp,
+    '-j', 'RETURN',
+  ]);
+
+  // Rule 2: Skip traffic destined for Squid (already going to proxy)
+  await execa('iptables', [
+    '-t', 'nat', '-A', NAT_CHAIN_NAME,
+    '-d', squidIp,
+    '-j', 'RETURN',
+  ]);
+
+  // Rule 3: Redirect HTTP (port 80) traffic to Squid
+  await execa('iptables', [
+    '-t', 'nat', '-A', NAT_CHAIN_NAME,
+    '-p', 'tcp', '--dport', '80',
+    '-j', 'DNAT', '--to-destination', `${squidIp}:${squidPort}`,
+  ]);
+
+  // Rule 4: Redirect HTTPS (port 443) traffic to Squid
+  await execa('iptables', [
+    '-t', 'nat', '-A', NAT_CHAIN_NAME,
+    '-p', 'tcp', '--dport', '443',
+    '-j', 'DNAT', '--to-destination', `${squidIp}:${squidPort}`,
+  ]);
+
+  // Insert rule in PREROUTING that jumps to our NAT chain for traffic FROM the firewall bridge
+  // Note: We use -i (input interface) to match traffic coming from containers on the bridge
+  const { stdout: existingRules } = await execa('iptables', [
+    '-t', 'nat', '-L', 'PREROUTING', '-n', '--line-numbers',
+  ], { reject: false });
+
+  if (!existingRules.includes(NAT_CHAIN_NAME)) {
+    logger.debug(`Inserting rule in PREROUTING to jump to ${NAT_CHAIN_NAME} for bridge ${bridgeName}...`);
+    await execa('iptables', [
+      '-t', 'nat', '-I', 'PREROUTING', '1',
+      '-i', bridgeName,
+      '-j', NAT_CHAIN_NAME,
+    ]);
+  } else {
+    logger.debug(`Rule for ${NAT_CHAIN_NAME} already exists in PREROUTING`);
+  }
+
+  logger.debug('NAT transparent proxy rules configured');
 }
 
 /**
@@ -497,6 +601,11 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     logger.debug(`Rule for bridge ${bridgeName} already exists in DOCKER-USER`);
   }
 
+  // Set up NAT chain for transparent proxy redirection
+  // This ensures ALL containers on the network have HTTP/HTTPS traffic redirected to Squid,
+  // regardless of whether they respect HTTP_PROXY environment variables
+  await setupNatChain(bridgeName, squidIp, squidPort);
+
   logger.success('Host-level iptables rules configured successfully');
 
   // Show the rules for debugging
@@ -511,6 +620,12 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     '-t', 'filter', '-L', CHAIN_NAME, '-n', '-v',
   ]);
   logger.debug(fwWrapperRules);
+
+  logger.debug(`${NAT_CHAIN_NAME} chain (NAT table):`);
+  const { stdout: natRules } = await execa('iptables', [
+    '-t', 'nat', '-L', NAT_CHAIN_NAME, '-n', '-v',
+  ]);
+  logger.debug(natRules);
 }
 
 /**
@@ -555,7 +670,40 @@ export async function cleanupHostIptables(): Promise<void> {
     await execa('iptables', ['-t', 'filter', '-F', CHAIN_NAME], { reject: false });
     await execa('iptables', ['-t', 'filter', '-X', CHAIN_NAME], { reject: false });
 
-    logger.debug('IPv4 iptables rules cleaned up');
+    logger.debug('IPv4 filter rules cleaned up');
+
+    // Clean up NAT chain for transparent proxy
+    if (bridgeName) {
+      // Find and remove the rule that jumps to our NAT chain from PREROUTING
+      const { stdout: natStdout } = await execa('iptables', [
+        '-t', 'nat', '-L', 'PREROUTING', '-n', '--line-numbers',
+      ], { reject: false });
+
+      const natLines = natStdout.split('\n');
+      const natLineNumbers: number[] = [];
+      for (const line of natLines) {
+        if (line.includes(NAT_CHAIN_NAME)) {
+          const match = line.match(/^(\d+)/);
+          if (match) {
+            natLineNumbers.push(parseInt(match[1], 10));
+          }
+        }
+      }
+
+      // Delete rules in reverse order
+      for (const lineNum of natLineNumbers.reverse()) {
+        logger.debug(`Removing rule ${lineNum} from PREROUTING (NAT)`);
+        await execa('iptables', [
+          '-t', 'nat', '-D', 'PREROUTING', lineNum.toString(),
+        ], { reject: false });
+      }
+    }
+
+    // Flush and delete our custom NAT chain
+    await execa('iptables', ['-t', 'nat', '-F', NAT_CHAIN_NAME], { reject: false });
+    await execa('iptables', ['-t', 'nat', '-X', NAT_CHAIN_NAME], { reject: false });
+
+    logger.debug('NAT chain cleaned up');
 
     // Clean up IPv6 rules (only if ip6tables is available)
     const ip6tablesAvailable = await isIp6tablesAvailable();

@@ -222,6 +222,44 @@ describe('host-iptables', () => {
         '-i', 'fw-bridge',
         '-j', 'FW_WRAPPER',
       ]);
+
+      // Verify NAT chain creation for transparent proxy
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'nat', '-N', 'FW_WRAPPER_NAT']);
+
+      // Verify NAT rules skip traffic from Squid (avoid loop)
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'nat', '-A', 'FW_WRAPPER_NAT',
+        '-s', '172.30.0.10',
+        '-j', 'RETURN',
+      ]);
+
+      // Verify NAT rules skip traffic to Squid (already proxied)
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'nat', '-A', 'FW_WRAPPER_NAT',
+        '-d', '172.30.0.10',
+        '-j', 'RETURN',
+      ]);
+
+      // Verify HTTP DNAT rule
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'nat', '-A', 'FW_WRAPPER_NAT',
+        '-p', 'tcp', '--dport', '80',
+        '-j', 'DNAT', '--to-destination', '172.30.0.10:3128',
+      ]);
+
+      // Verify HTTPS DNAT rule
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'nat', '-A', 'FW_WRAPPER_NAT',
+        '-p', 'tcp', '--dport', '443',
+        '-j', 'DNAT', '--to-destination', '172.30.0.10:3128',
+      ]);
+
+      // Verify jump from PREROUTING to FW_WRAPPER_NAT
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'nat', '-I', 'PREROUTING', '1',
+        '-i', 'fw-bridge',
+        '-j', 'FW_WRAPPER_NAT',
+      ]);
     });
 
     it('should cleanup existing chain before creating new one', async () => {
@@ -530,9 +568,13 @@ describe('host-iptables', () => {
 
       await cleanupHostIptables();
 
-      // Verify IPv4 chain cleanup operations
+      // Verify IPv4 filter chain cleanup operations
       expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'filter', '-F', 'FW_WRAPPER'], { reject: false });
       expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'filter', '-X', 'FW_WRAPPER'], { reject: false });
+
+      // Verify NAT chain cleanup operations
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'nat', '-F', 'FW_WRAPPER_NAT'], { reject: false });
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', ['-t', 'nat', '-X', 'FW_WRAPPER_NAT'], { reject: false });
 
       // Verify IPv6 chain cleanup operations
       expect(mockedExeca).toHaveBeenCalledWith('ip6tables', ['-t', 'filter', '-F', 'FW_WRAPPER_V6'], { reject: false });
