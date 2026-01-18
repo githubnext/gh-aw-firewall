@@ -32,6 +32,7 @@ sandbox:
 steps:
   - name: Build AWF from local source
     run: |
+      set -e
       cd $GITHUB_WORKSPACE
       npm ci
       npm run build
