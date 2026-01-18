@@ -328,11 +328,29 @@ describe('docker-manager', () => {
       // Verify no-new-privileges is enabled to prevent privilege escalation
       expect(agent.security_opt).toContain('no-new-privileges:true');
 
-      // Verify resource limits
-      expect(agent.mem_limit).toBe('4g');
-      expect(agent.memswap_limit).toBe('4g');
+      // Verify resource limits (default memory limit is 2g)
+      expect(agent.mem_limit).toBe('2g');
+      expect(agent.memswap_limit).toBe('2g');
       expect(agent.pids_limit).toBe(1000);
       expect(agent.cpu_shares).toBe(1024);
+    });
+
+    it('should use custom memory limit when specified', () => {
+      const configWithMemoryLimit = { ...mockConfig, memoryLimit: '8g' };
+      const result = generateDockerCompose(configWithMemoryLimit, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.mem_limit).toBe('8g');
+      expect(agent.memswap_limit).toBe('8g');
+    });
+
+    it('should use default 2g when memory limit not specified', () => {
+      // mockConfig doesn't have memoryLimit set
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.mem_limit).toBe('2g');
+      expect(agent.memswap_limit).toBe('2g');
     });
 
     it('should disable TTY by default to prevent ANSI escape sequences', () => {
