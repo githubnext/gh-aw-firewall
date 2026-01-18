@@ -9,6 +9,7 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
 engine: copilot
 network:
   allowed:
@@ -19,22 +20,13 @@ tools:
   agentic-workflows:
   edit:
   bash:
-    - "npm test*"
-    - "npm run*"
-    - "npx*"
-    - "cat*"
-    - "head*"
-    - "tail*"
-    - "grep*"
-    - "find*"
-    - "wc*"
+    - "*"
   github:
     toolsets: [default, pull_requests]
 safe-outputs:
   create-pull-request:
     title-prefix: "[coverage] "
     labels: [testing, ai-generated]
-    max: 1
 timeout-minutes: 20
 ---
 
