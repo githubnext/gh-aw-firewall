@@ -1,4 +1,4 @@
-import { generateSquidConfig } from './squid-config';
+import { generateSquidConfig, DLP_PATTERNS } from './squid-config';
 import { SquidConfig } from './types';
 
 // Pattern constant for the safer domain character class (matches the implementation)
@@ -1372,5 +1372,203 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
         allowHostPorts: '7000-7100',
       });
     }).not.toThrow();
+  });
+});
+
+describe('DLP (Data Loss Prevention) Mode', () => {
+  const defaultPort = 3128;
+
+  it('should add DLP configuration when enableDlp is true', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('# DLP mode enabled');
+    expect(result).toContain('# DLP (Data Loss Prevention) Configuration');
+    expect(result).toContain('acl dlp_sensitive_');
+    expect(result).toContain('http_access deny dlp_sensitive_');
+  });
+
+  it('should not add DLP configuration when enableDlp is false', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: false,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('# DLP mode enabled');
+    expect(result).not.toContain('# DLP (Data Loss Prevention) Configuration');
+  });
+
+  it('should not add DLP configuration when enableDlp is undefined', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('# DLP mode enabled');
+    expect(result).not.toContain('# DLP (Data Loss Prevention) Configuration');
+  });
+
+  it('should include GitHub token pattern', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain(DLP_PATTERNS.githubToken);
+  });
+
+  it('should include GitHub PAT token pattern', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain(DLP_PATTERNS.githubPatToken);
+  });
+
+  it('should include OpenAI API key pattern', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain(DLP_PATTERNS.openaiKey);
+  });
+
+  it('should include AWS access key pattern', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain(DLP_PATTERNS.awsAccessKey);
+  });
+
+  it('should include generic API key patterns', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain(DLP_PATTERNS.genericApiKey);
+    expect(result).toContain(DLP_PATTERNS.genericToken);
+    expect(result).toContain(DLP_PATTERNS.genericSecret);
+  });
+
+  it('should use url_regex ACL type for DLP patterns', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toMatch(/acl dlp_sensitive_\d+ url_regex -i/);
+  });
+
+  it('should place DLP deny rules before domain allow rules', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+    };
+    const result = generateSquidConfig(config);
+    const dlpDenyIndex = result.indexOf('http_access deny dlp_sensitive_');
+    const domainDenyIndex = result.indexOf('http_access deny !allowed_domains');
+    expect(dlpDenyIndex).toBeLessThan(domainDenyIndex);
+  });
+
+  it('should work with both DLP and SSL Bump enabled', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: defaultPort,
+      enableDlp: true,
+      sslBump: true,
+      caFiles: {
+        certPath: '/path/to/cert.pem',
+        keyPath: '/path/to/key.pem',
+      },
+      sslDbPath: '/path/to/ssl_db',
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('# DLP mode enabled');
+    expect(result).toContain('# SSL Bump mode enabled');
+    expect(result).toContain('# DLP (Data Loss Prevention) Configuration');
+  });
+});
+
+describe('DLP_PATTERNS', () => {
+  describe('GitHub token patterns', () => {
+    it('should match ghp_ personal access tokens', () => {
+      const pattern = new RegExp(DLP_PATTERNS.githubToken);
+      expect(pattern.test('ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true);
+      expect(pattern.test('ghp_ABCDEFGHIJ1234567890abcdefghijklmnop')).toBe(true);
+    });
+
+    it('should match gho_ OAuth tokens', () => {
+      const pattern = new RegExp(DLP_PATTERNS.githubToken);
+      expect(pattern.test('gho_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true);
+    });
+
+    it('should match ghs_ server tokens', () => {
+      const pattern = new RegExp(DLP_PATTERNS.githubToken);
+      expect(pattern.test('ghs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true);
+    });
+
+    it('should match ghr_ refresh tokens', () => {
+      const pattern = new RegExp(DLP_PATTERNS.githubToken);
+      expect(pattern.test('ghr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true);
+    });
+
+    it('should match github_pat_ fine-grained tokens', () => {
+      const pattern = new RegExp(DLP_PATTERNS.githubPatToken);
+      expect(pattern.test('github_pat_1234567890ABCDEFGHIJkl_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789')).toBe(true);
+    });
+  });
+
+  describe('OpenAI API key pattern', () => {
+    it('should match sk- prefixed keys', () => {
+      const pattern = new RegExp(DLP_PATTERNS.openaiKey);
+      expect(pattern.test('sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true);
+    });
+  });
+
+  describe('AWS credential pattern', () => {
+    it('should match AKIA prefixed access keys', () => {
+      const pattern = new RegExp(DLP_PATTERNS.awsAccessKey);
+      expect(pattern.test('AKIAIOSFODNN7EXAMPLE')).toBe(true);
+      expect(pattern.test('AKIA1234567890ABCDEF')).toBe(true);
+    });
+  });
+
+  describe('Generic patterns', () => {
+    it('should match api_key=value in URLs', () => {
+      const pattern = new RegExp(DLP_PATTERNS.genericApiKey, 'i');
+      expect(pattern.test('api_key=1234567890abcdef')).toBe(true);
+      expect(pattern.test('api-key=1234567890abcdef')).toBe(true);
+      expect(pattern.test('apiKey=1234567890abcdef')).toBe(true);
+      expect(pattern.test('apikey=1234567890abcdef')).toBe(true);
+    });
+
+    it('should match token=value in URLs', () => {
+      const pattern = new RegExp(DLP_PATTERNS.genericToken, 'i');
+      expect(pattern.test('token=1234567890abcdef')).toBe(true);
+      expect(pattern.test('access_token=1234567890abcdef')).toBe(true);
+      expect(pattern.test('auth_token=1234567890abcdef')).toBe(true);
+    });
+
+    it('should match secret=value in URLs', () => {
+      const pattern = new RegExp(DLP_PATTERNS.genericSecret, 'i');
+      expect(pattern.test('secret=1234567890abcdef')).toBe(true);
+      expect(pattern.test('client_secret=1234567890abcdef')).toBe(true);
+    });
   });
 });
