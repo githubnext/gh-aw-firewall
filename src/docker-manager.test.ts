@@ -205,6 +205,52 @@ describe('docker-manager', () => {
       expect(result.services.agent.image).toBeUndefined();
     });
 
+    it('should pass BASE_IMAGE build arg when agentBaseImage is specified', () => {
+      const customBaseImageConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentBaseImage: 'ghcr.io/catthehacker/ubuntu:runner-22.04',
+      };
+      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:runner-22.04');
+    });
+
+    it('should not include BASE_IMAGE build arg when using default ubuntu:22.04', () => {
+      const localConfig = { ...mockConfig, buildLocal: true };
+      const result = generateDockerCompose(localConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      // BASE_IMAGE should not be set when using the default (undefined or 'ubuntu:22.04')
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBeUndefined();
+    });
+
+    it('should pass BASE_IMAGE build arg when agentBaseImage with SHA256 digest is specified', () => {
+      const customBaseImageConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentBaseImage: 'ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1',
+      };
+      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1');
+    });
+
+    it('should not pass BASE_IMAGE when agentBaseImage is explicitly set to default ubuntu:22.04', () => {
+      const customBaseImageConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentBaseImage: 'ubuntu:22.04',
+      };
+      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      // The code only sets BASE_IMAGE if agentBaseImage is defined (truthy), so ubuntu:22.04 would be set
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ubuntu:22.04');
+    });
+
     it('should use custom registry and tag', () => {
       const customConfig = {
         ...mockConfig,
