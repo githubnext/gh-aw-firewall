@@ -2,6 +2,8 @@
 name: Issue Monster
 description: The Cookie Monster of issues - assigns issues to Copilot agents one at a time
 on:
+  issues:
+    types: [opened]
   workflow_dispatch:
   schedule: every 1h
   skip-if-match:
