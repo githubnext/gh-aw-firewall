@@ -24,8 +24,19 @@ network:
     - github
     - playwright
 sandbox:
+  agent:
+    id: awf
+    command: "sudo -E node ${GITHUB_WORKSPACE}/dist/cli.js"
   mcp:
     container: "ghcr.io/githubnext/gh-aw-mcpg"
+steps:
+  - name: Build AWF from local source
+    run: |
+      cd $GITHUB_WORKSPACE
+      npm ci
+      npm run build
+      echo "AWF built successfully from local source"
+      node dist/cli.js --version
 tools:
   cache-memory: true
   github:
