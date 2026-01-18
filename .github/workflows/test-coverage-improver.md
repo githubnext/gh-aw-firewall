@@ -25,6 +25,12 @@ tools:
   github:
     toolsets: [default]
   bash:
+    - "npm ci"
+    - "npm run:*"
+    - "cat:*"
+    - "ls:*"
+    - "head:*"
+    - "tail:*"
 
 safe-outputs:
   create-pull-request:
