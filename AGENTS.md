@@ -219,6 +219,8 @@ The codebase follows a modular architecture with clear separation of concerns:
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - `NET_ADMIN` capability required for iptables setup during initialization
 - **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
+- **Seccomp Profile:** Uses deny-by-default syscall filtering (`containers/agent/seccomp-profile.json`). Only syscalls required for normal operation (Node.js, curl, git, npm) are allowed; dangerous syscalls like `ptrace`, `mount`, `kexec_load`, and namespace manipulation are blocked.
+- **Dropped Capabilities:** `NET_RAW`, `SYS_PTRACE`, `SYS_MODULE`, `SYS_RAWIO`, `MKNOD` to reduce attack surface
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
   2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
