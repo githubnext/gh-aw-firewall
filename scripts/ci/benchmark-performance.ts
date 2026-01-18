@@ -62,6 +62,18 @@ const METRICS = {
   'docker-network-creation': { target: 2000, critical: 5000, unit: 'ms' },
 };
 
+// Fallback values for when real measurements can't be taken
+// These represent typical expected values for the AWF system
+const FALLBACK_VALUES = {
+  HTTP_LATENCY_MIN_MS: 10,
+  HTTP_LATENCY_RANGE_MS: 30,
+  IPTABLES_MIN_MS: 2,
+  IPTABLES_RANGE_MS: 5,
+  MEMORY_ESTIMATION_RATIO: 0.1,  // Estimate AWF uses ~10% of used memory when containers aren't running
+  MEMORY_MAX_FALLBACK_MB: 200,   // Maximum fallback memory estimate
+  MEMORY_DEFAULT_MB: 150,        // Default memory when no other info available
+};
+
 function calculateStats(values: number[]): {
   mean: number;
   median: number;
@@ -78,7 +90,13 @@ function calculateStats(values: number[]): {
   const sum = sorted.reduce((acc, v) => acc + v, 0);
 
   const mean = sum / sorted.length;
-  const median = sorted[Math.floor(sorted.length / 2)];
+  
+  // Correct median calculation for even-length arrays
+  const midIndex = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? (sorted[midIndex - 1] + sorted[midIndex]) / 2
+    : sorted[midIndex];
+    
   const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? sorted[sorted.length - 1];
   const p99 = sorted[Math.floor(sorted.length * 0.99)] ?? sorted[sorted.length - 1];
   const min = sorted[0];
@@ -251,8 +269,11 @@ function benchmarkSquidHttpLatency(iterations: number): number[] {
   } catch {
     console.log('Note: Squid container not running, simulating HTTP latency measurement');
     // Return simulated values for when Squid isn't running
+    // Uses deterministic pattern based on iteration index for reproducibility
     for (let i = 0; i < iterations; i++) {
-      values.push(Math.random() * 30 + 10); // Simulated 10-40ms
+      const base = FALLBACK_VALUES.HTTP_LATENCY_MIN_MS;
+      const variation = (i / iterations) * FALLBACK_VALUES.HTTP_LATENCY_RANGE_MS;
+      values.push(base + variation);
     }
     return values;
   }
@@ -320,8 +341,10 @@ function benchmarkIptablesOverhead(iterations: number): number[] {
       const duration = Date.now() - start;
       values.push(duration);
     } catch {
-      // If iptables isn't available, use simulated values
-      values.push(Math.random() * 5 + 2); // Simulated 2-7ms
+      // If iptables isn't available, use deterministic fallback values
+      const base = FALLBACK_VALUES.IPTABLES_MIN_MS;
+      const variation = (i / iterations) * FALLBACK_VALUES.IPTABLES_RANGE_MS;
+      values.push(base + variation);
     }
   }
 
@@ -364,11 +387,12 @@ function benchmarkMemoryFootprint(): number[] {
     const freeMemMB = os.freemem() / (1024 * 1024);
     const usedMemMB = totalMemMB - freeMemMB;
     // Estimate AWF footprint as a small portion of used memory
-    values.push(Math.min(usedMemMB * 0.1, 200));
+    const estimatedMB = usedMemMB * FALLBACK_VALUES.MEMORY_ESTIMATION_RATIO;
+    values.push(Math.min(estimatedMB, FALLBACK_VALUES.MEMORY_MAX_FALLBACK_MB));
   }
 
   // Return multiple samples for consistency
-  const baseValue = values[0] ?? 150;
+  const baseValue = values[0] ?? FALLBACK_VALUES.MEMORY_DEFAULT_MB;
   return [baseValue, baseValue * 0.95, baseValue * 1.05, baseValue * 0.98, baseValue * 1.02];
 }
 
@@ -427,7 +451,13 @@ function generateMarkdownReport(report: BenchmarkReport): string {
 
   for (const metric of report.metrics) {
     const statusEmoji = metric.status === 'pass' ? '✅' : metric.status === 'warn' ? '⚠️' : '❌';
-    md += `| ${metric.name} | ${metric.median.toFixed(1)}${metric.unit} | ${metric.mean.toFixed(1)}${metric.unit} | ${metric.p95.toFixed(1)}${metric.unit} | ${metric.p99.toFixed(1)}${metric.unit} | <${metric.target}${metric.unit} | >${metric.critical}${metric.unit} | ${statusEmoji} |\n`;
+    const medianStr = `${metric.median.toFixed(1)}${metric.unit}`;
+    const meanStr = `${metric.mean.toFixed(1)}${metric.unit}`;
+    const p95Str = `${metric.p95.toFixed(1)}${metric.unit}`;
+    const p99Str = `${metric.p99.toFixed(1)}${metric.unit}`;
+    const targetStr = `<${metric.target}${metric.unit}`;
+    const criticalStr = `>${metric.critical}${metric.unit}`;
+    md += `| ${metric.name} | ${medianStr} | ${meanStr} | ${p95Str} | ${p99Str} | ${targetStr} | ${criticalStr} | ${statusEmoji} |\n`;
   }
 
   md += '\n';
