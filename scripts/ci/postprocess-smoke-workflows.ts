@@ -9,6 +9,9 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/smoke-claude.lock.yml'),
 ];
 
+// Matches the install step with captured indentation:
+// - "Install awf binary" step at any indent level
+// - run command invoking install_awf_binary.sh with a version
 const installStepRegex =
   /^(\s*)- name: Install awf binary\n\1\s*run: bash \/opt\/gh-aw\/actions\/install_awf_binary\.sh v[0-9.]+\n/m;
 const installStepRegexGlobal = new RegExp(installStepRegex.source, 'gm');
@@ -27,6 +30,18 @@ function buildLocalInstallSteps(indent: string): string {
     `${runIndent}run: |`,
     `${scriptIndent}WORKSPACE_PATH="${'${GITHUB_WORKSPACE:-$(pwd)}'}"`,
     `${scriptIndent}NODE_BIN="$(command -v node)"`,
+    `${scriptIndent}if [ ! -d "$WORKSPACE_PATH" ]; then`,
+    `${scriptIndent}  echo "Workspace path not found: $WORKSPACE_PATH"`,
+    `${scriptIndent}  exit 1`,
+    `${scriptIndent}fi`,
+    `${scriptIndent}if [ ! -x "$NODE_BIN" ]; then`,
+    `${scriptIndent}  echo "Node binary not found: $NODE_BIN"`,
+    `${scriptIndent}  exit 1`,
+    `${scriptIndent}fi`,
+    `${scriptIndent}if [ ! -d "/usr/local/bin" ]; then`,
+    `${scriptIndent}  echo "/usr/local/bin is missing"`,
+    `${scriptIndent}  exit 1`,
+    `${scriptIndent}fi`,
     `${scriptIndent}sudo tee /usr/local/bin/awf > /dev/null <<EOF`,
     `${scriptIndent}#!/bin/bash`,
     `${scriptIndent}exec "${'${NODE_BIN}'}" "${'${WORKSPACE_PATH}'}/dist/cli.js" "\\$@"`,
