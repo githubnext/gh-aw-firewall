@@ -6,6 +6,12 @@
 # will chroot into /host (where the host filesystem is mounted read-only) and
 # execute the command there.
 #
+# Security context:
+# - The /host mount is read-only, preventing modification of host files
+# - The container has dropped NET_ADMIN capability before user code runs
+# - The firewall restricts network access to whitelisted domains
+# - The user runs as non-root after privilege drop
+#
 # Usage: isolate.sh <command> [args...]
 #
 # Examples:
@@ -17,6 +23,12 @@ set -e
 if [ $# -eq 0 ]; then
   echo "[isolate] Error: No command specified" >&2
   echo "[isolate] Usage: isolate.sh <command> [args...]" >&2
+  exit 1
+fi
+
+# Verify /host exists and is a directory (indicates host filesystem is mounted)
+if [ ! -d "/host" ]; then
+  echo "[isolate] Error: /host directory not found. Host filesystem not mounted." >&2
   exit 1
 fi
 
