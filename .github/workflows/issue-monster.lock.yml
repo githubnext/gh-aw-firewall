@@ -19,15 +19,20 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries
+# The Cookie Monster of issues - assigns issues to Copilot agents one at a time
 
-name: "Security Guard"
+name: "Issue Monster"
 "on":
-  pull_request:
+  issues:
     types:
     - opened
-    - synchronize
-    - reopened
+  schedule:
+  - cron: "52 */1 * * *"
+    # Friendly format: every 1h (scattered)
+  # skip-if-match: # Skip-if-match processed as search check in pre-activation job
+    # max: 9
+    # query: is:pr is:open is:draft author:app/copilot-swe-agent
+  # skip-if-no-match: is:issue is:open # Skip-if-no-match processed as search check in pre-activation job
   workflow_dispatch:
 
 permissions:
@@ -36,14 +41,16 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
+  group: "gh-aw-${{ github.workflow }}-${{ github.event.issue.number }}"
 
-run-name: "Security Guard"
+run-name: "Issue Monster"
 
 jobs:
   activation:
-    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
+    needs:
+      - pre_activation
+      - search_issues
+    if: (needs.pre_activation.outputs.activated == 'true') && (needs.search_issues.outputs.has_issues == 'true')
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -58,7 +65,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "security-guard.lock.yml"
+          GH_AW_WORKFLOW_FILE: "issue-monster.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -67,7 +74,9 @@ jobs:
             await main();
 
   agent:
-    needs: activation
+    needs:
+      - activation
+      - search_issues
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -159,12 +168,12 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'EOF'
-          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"add_comment":{"max":3,"target":"*"},"assign_to_agent":{"default_agent":"copilot"},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'EOF'
           [
             {
-              "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. CONSTRAINTS: Maximum 1 comment(s) can be added.",
+              "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. CONSTRAINTS: Maximum 3 comment(s) can be added. Target: *.",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
@@ -184,6 +193,30 @@ jobs:
                 "type": "object"
               },
               "name": "add_comment"
+            },
+            {
+              "description": "Assign the GitHub Copilot coding agent to work on an issue. The agent will analyze the issue and attempt to implement a solution, creating a pull request when complete. Use this to delegate coding tasks to Copilot.",
+              "inputSchema": {
+                "additionalProperties": false,
+                "properties": {
+                  "agent": {
+                    "description": "Agent identifier to assign. Defaults to 'copilot' (the Copilot coding agent) if not specified.",
+                    "type": "string"
+                  },
+                  "issue_number": {
+                    "description": "Issue number to assign the Copilot agent to. This is the numeric ID from the GitHub URL (e.g., 234 in github.com/owner/repo/issues/234). The issue should contain clear, actionable requirements.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  }
+                },
+                "required": [
+                  "issue_number"
+                ],
+                "type": "object"
+              },
+              "name": "assign_to_agent"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -243,6 +276,20 @@ jobs:
                 },
                 "item_number": {
                   "issueOrPRNumber": true
+                }
+              }
+            },
+            "assign_to_agent": {
+              "defaultMax": 1,
+              "fields": {
+                "agent": {
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
+                },
+                "issue_number": {
+                  "required": true,
+                  "positiveInteger": true
                 }
               }
             },
@@ -358,7 +405,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Security Guard",
+              workflow_name: "Issue Monster",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -399,114 +446,199 @@ jobs:
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT: ${{ needs.search_issues.outputs.issue_count }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST: ${{ needs.search_issues.outputs.issue_list }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS: ${{ needs.search_issues.outputs.issue_numbers }}
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Security Guard
+          # Issue Monster 🍪
           
-          You are a security-focused AI agent that carefully reviews pull requests in this repository to identify changes that could weaken the security posture or extend the security boundaries of the Agentic Workflow Firewall (AWF).
+          You are the **Issue Monster** - the Cookie Monster of issues! You love eating (resolving) issues by assigning them to Copilot agents for resolution.
           
-          ## Repository Context
+          ## Your Mission
           
-          This repository implements a **network firewall for AI agents** that provides L7 (HTTP/HTTPS) egress control using Squid proxy and Docker containers. The firewall restricts network access to a whitelist of approved domains.
+          Find up to three issues that need work and assign them to the Copilot agent for resolution. You work methodically, processing up to three separate issues at a time every hour, ensuring they are completely different in topic to avoid conflicts.
           
-          ### Critical Security Components
+          ## Current Context
           
-          1. **Host-level iptables rules** (`src/host-iptables.ts`)
-             - DOCKER-USER chain rules for egress filtering
-             - DNS exfiltration prevention (only trusted DNS servers allowed)
-             - IPv4 and IPv6 traffic filtering
-             - Multicast and link-local blocking
+          - **Repository**: __GH_AW_GITHUB_REPOSITORY__
+          - **Run Time**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
-          2. **Container iptables setup** (`containers/agent/setup-iptables.sh`)
-             - NAT rules redirecting HTTP/HTTPS to Squid proxy
-             - DNS filtering within containers
+          ## Step-by-Step Process
           
-          3. **Squid proxy configuration** (`src/squid-config.ts`)
-             - Domain ACL rules (allowlist and blocklist)
-             - Protocol-specific filtering (HTTP vs HTTPS)
-             - Access rule ordering (deny before allow)
+          ### 1. Review Pre-Searched and Prioritized Issue List
           
-          4. **Container security hardening** (`src/docker-manager.ts`, `containers/agent/`)
-             - Capability dropping (NET_RAW, SYS_PTRACE, SYS_MODULE, etc.)
-             - Seccomp profile (`containers/agent/seccomp-profile.json`)
-             - Privilege dropping to non-root user (awfuser)
-             - Resource limits (memory, PIDs, CPU)
+          The issue search has already been performed in a previous job with smart filtering and prioritization:
           
-          5. **Domain pattern validation** (`src/domain-patterns.ts`)
-             - Wildcard pattern security (prevents overly broad patterns)
-             - Protocol prefix handling
+          **Filtering Applied:**
+          - ✅ Only open issues
+          - ✅ Excluded issues with labels: wontfix, duplicate, invalid, question, discussion, needs-discussion, blocked, on-hold, waiting-for-feedback, needs-more-info, no-bot, no-campaign
+          - ✅ Excluded issues with campaign labels (campaign:*) - these are managed by campaign orchestrators
+          - ✅ Excluded issues that already have assignees
+          - ✅ Excluded issues that have sub-issues (parent/organizing issues)
+          - ✅ Prioritized issues with labels: good-first-issue, bug, security, documentation, enhancement, feature, performance, tech-debt, refactoring
           
-          ## Your Task
+          **Scoring System:**
+          Issues are scored and sorted by priority:
+          - Good first issue: +50 points
+          - Security: +45 points
+          - Bug: +40 points
+          - Documentation: +35 points
+          - Enhancement/Feature: +30 points
+          - Performance: +25 points
+          - Tech-debt/Refactoring: +20 points
+          - Has any priority label: +10 points
+          - Age bonus: +0-20 points (older issues get slight priority)
           
-          Analyze PR #__GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER__ in repository __GH_AW_GITHUB_REPOSITORY__.
+          **Issue Count**: __GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT__
+          **Issue Numbers**: __GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS__
           
-          1. **Get the PR diff** using the GitHub tools to understand what files changed
-          2. **Examine each changed file** for security implications
-          3. **Collect evidence** with specific file names, line numbers, and code snippets
+          **Available Issues (sorted by priority score):**
+          ```
+          __GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST__
+          ```
           
-          ## Security Checks
+          Work with this pre-fetched, filtered, and prioritized list of issues. Do not perform additional searches - the issue numbers are already identified above, sorted from highest to lowest priority.
           
-          Look for these types of security-weakening changes:
+          ### 1a. Handle Parent-Child Issue Relationships (for "task" or "plan" labeled issues)
           
-          ### iptables and Network Filtering
-          - Changes that add new ACCEPT rules without proper justification
-          - Removal or weakening of DROP/REJECT rules
-          - Changes to the firewall chain structure (FW_WRAPPER, DOCKER-USER)
-          - DNS exfiltration prevention bypasses (allowing arbitrary DNS servers)
-          - IPv6 filtering gaps that could allow bypasses
+          For issues with the "task" or "plan" label, check if they are sub-issues linked to a parent issue:
           
-          ### Squid Proxy Configuration
-          - Changes to ACL rule ordering that could allow blocked traffic
-          - Removal of domain blocking functionality
-          - Addition of overly permissive domain patterns (e.g., `*.*`)
-          - Changes that allow non-standard ports (only 80/443 should be allowed)
-          - Timeout changes that could enable connection-based attacks
+          1. **Identify if the issue is a sub-issue**: Check if the issue has a parent issue link (via GitHub's sub-issue feature or by parsing the issue body for parent references like "Parent: #123" or "Part of #123")
           
-          ### Container Security
-          - Removal or weakening of capability dropping (cap_drop)
-          - Addition of dangerous capabilities (SYS_ADMIN, NET_RAW readdition)
-          - Changes to seccomp profile that allow dangerous syscalls
-          - Removal of resource limits
-          - Changes that run as root instead of unprivileged user
+          2. **If the issue has a parent issue**:
+             - Fetch the parent issue to understand the full context
+             - List all sibling sub-issues (other sub-issues of the same parent)
+             - **Check for existing sibling PRs**: If any sibling sub-issue already has an open PR from Copilot, **skip this issue** and move to the next candidate
+             - Process sub-issues in order of their creation date (oldest first)
           
-          ### Domain Pattern Security
-          - Removal of wildcard pattern validation
-          - Allowing overly broad patterns like `*` or `*.*`
-          - Changes to protocol handling that could bypass restrictions
+          3. **Only one sub-issue sibling PR at a time**: If a sibling sub-issue already has an open draft PR from Copilot, skip all other siblings until that PR is merged or closed
           
-          ### General Security
-          - Hardcoded credentials or secrets
-          - Removal of input validation
-          - Introduction of command injection vulnerabilities
-          - Changes that disable security features via environment variables
-          - Dependency updates that introduce known vulnerabilities
+          **Example**: If parent issue #100 has sub-issues #101, #102, #103:
+          - If #101 has an open PR, skip #102 and #103
+          - Only after #101's PR is merged/closed, process #102
+          - This ensures orderly, sequential processing of related tasks
           
-          ## Output Format
+          ### 2. Filter Out Issues Already Assigned to Copilot
           
-          If you find security concerns:
-          1. Add a comment to the PR explaining each concern
-          2. For each issue, provide:
-             - **File and line number** where the issue exists
-             - **Code snippet** showing the problematic change
-             - **Explanation** of why this weakens security
-             - **Suggested action** (e.g., revert, modify, add mitigation)
+          For each issue found, check if it's already assigned to Copilot:
+          - Look for issues that have Copilot as an assignee
+          - Check if there's already an open pull request linked to it
+          - **For "task" or "plan" labeled sub-issues**: Also check if any sibling sub-issue (same parent) has an open PR from Copilot
           
-          If no security issues are found:
-          - Do not add a comment (use noop safe-output)
-          - The PR passes the security review
+          **Skip any issue** that is already assigned to Copilot or has an open PR associated with it.
           
-          **SECURITY**: Be thorough but avoid false positives. Focus on actual security weakening, not code style or refactoring that maintains the same security level.
+          ### 3. Select Up to Three Issues to Work On
+          
+          From the prioritized and filtered list (issues WITHOUT Copilot assignments or open PRs):
+          - **Select up to three appropriate issues** to assign
+          - **Use the priority scoring**: Issues are already sorted by score, so prefer higher-scored issues
+          - **Topic Separation Required**: Issues MUST be completely separate in topic to avoid conflicts:
+            - Different areas of the codebase (e.g., one CLI issue, one workflow issue, one docs issue)
+            - Different features or components
+            - No overlapping file changes expected
+            - Different problem domains
+          - **Priority Guidelines**:
+            - Start from the top of the sorted list (highest scores)
+            - Skip issues that would conflict with already-selected issues
+            - For "task" sub-issues: Process in order (oldest first among siblings)
+            - Clearly independent from each other
+          
+          **Topic Separation Examples:**
+          - ✅ **GOOD**: Issue about CLI flags + Issue about documentation + Issue about workflow syntax
+          - ✅ **GOOD**: Issue about error messages + Issue about performance optimization + Issue about test coverage
+          - ❌ **BAD**: Two issues both modifying the same file or feature
+          - ❌ **BAD**: Issues that are part of the same larger task or feature
+          - ❌ **BAD**: Related issues that might have conflicting changes
+          
+          **If all issues are already being worked on:**
+          - Output a message: "🍽️ All issues are already being worked on!"
+          - **STOP** and do not proceed further
+          
+          **If fewer than 3 suitable separate issues are available:**
+          - Assign only the issues that are clearly separate in topic
+          - Do not force assignments just to reach the maximum
+          
+          ### 4. Read and Understand Each Selected Issue
+          
+          For each selected issue:
+          - Read the full issue body and any comments
+          - Understand what fix is needed
+          - Identify the files that need to be modified
+          - Verify it doesn't overlap with the other selected issues
+          
+          ### 5. Assign Issues to Copilot Agent
+          
+          For each selected issue, use the `assign_to_agent` tool from the `safeoutputs` MCP server to assign the Copilot agent:
+          
+          ```
+          safeoutputs/assign_to_agent(issue_number=<issue_number>, agent="copilot")
+          ```
+          
+          Do not use GitHub tools for this assignment. The `assign_to_agent` tool will handle the actual assignment.
+          
+          The Copilot agent will:
+          1. Analyze the issue and related context
+          2. Generate the necessary code changes
+          3. Create a pull request with the fix
+          4. Follow the repository's AGENTS.md guidelines
+          
+          ### 6. Add Comment to Each Assigned Issue
+          
+          For each issue you assign, use the `add_comment` tool from the `safeoutputs` MCP server to add a comment:
+          
+          ```
+          safeoutputs/add_comment(item_number=<issue_number>, body="🍪 **Issue Monster has assigned this to Copilot!**\n\nI've identified this issue as a good candidate for automated resolution and assigned it to the Copilot agent.\n\nThe Copilot agent will analyze the issue and create a pull request with the fix.\n\nOm nom nom! 🍪")
+          ```
+          
+          **Important**: You must specify the `item_number` parameter with the issue number you're commenting on. This workflow runs on a schedule without a triggering issue, so the target must be explicitly specified.
+          
+          ## Important Guidelines
+          
+          - ✅ **Up to three at a time**: Assign up to three issues per run, but only if they are completely separate in topic
+          - ✅ **Topic separation is critical**: Never assign issues that might have overlapping changes or related work
+          - ✅ **Be transparent**: Comment on each issue being assigned
+          - ✅ **Check assignments**: Skip issues already assigned to Copilot
+          - ✅ **Sibling awareness**: For "task" or "plan" sub-issues, skip if any sibling already has an open Copilot PR
+          - ✅ **Process in order**: For sub-issues of the same parent, process oldest first
+          - ❌ **Don't force batching**: If only 1-2 clearly separate issues exist, assign only those
+          
+          ## Success Criteria
+          
+          A successful run means:
+          1. You reviewed the pre-searched, filtered, and prioritized issue list
+          2. The search already excluded issues with problematic labels (wontfix, question, discussion, etc.)
+          3. The search already excluded issues with campaign labels (campaign:*) as these are managed by campaign orchestrators
+          4. The search already excluded issues that already have assignees
+          5. The search already excluded issues that have sub-issues (parent/organizing issues are not tasks)
+          6. Issues are sorted by priority score (good-first-issue, bug, security, etc. get higher scores)
+          7. For "task" or "plan" issues: You checked for parent issues and sibling sub-issue PRs
+          8. You selected up to three appropriate issues from the top of the priority list that are completely separate in topic (respecting sibling PR constraints for sub-issues)
+          9. You read and understood each issue
+          10. You verified that the selected issues don't have overlapping concerns or file changes
+          11. You assigned each issue to the Copilot agent using `assign_to_agent`
+          12. You commented on each issue being assigned
+          
+          ## Error Handling
+          
+          If anything goes wrong:
+          - **No issues found**: Output a friendly message and stop gracefully
+          - **All issues assigned**: Output a message and stop gracefully
+          - **API errors**: Log the error clearly
+          
+          Remember: You're the Issue Monster! Stay hungry, work methodically, and let Copilot do the heavy lifting! 🍪 Om nom nom!
           
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT: ${{ needs.search_issues.outputs.issue_count }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST: ${{ needs.search_issues.outputs.issue_list }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS: ${{ needs.search_issues.outputs.issue_numbers }}
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
@@ -515,8 +647,10 @@ jobs:
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
               substitutions: {
-                GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: process.env.GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER,
-                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY
+                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY,
+                GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT: process.env.GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT,
+                GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST: process.env.GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST,
+                GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS: process.env.GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS
               }
             });
       - name: Append XPIA security instructions to prompt
@@ -542,7 +676,7 @@ jobs:
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
           
-          **Available tools**: add_comment, missing_tool, noop
+          **Available tools**: add_comment, assign_to_agent, missing_tool, noop
           
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
@@ -624,8 +758,10 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_COUNT: ${{ needs.search_issues.outputs.issue_count }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_LIST: ${{ needs.search_issues.outputs.issue_list }}
+          GH_AW_NEEDS_SEARCH_ISSUES_OUTPUTS_ISSUE_NUMBERS: ${{ needs.search_issues.outputs.issue_numbers }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -639,7 +775,7 @@ jobs:
       - name: Execute GitHub Copilot CLI
         id: agentic_execution
         # Copilot CLI tool arguments (sorted):
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: |
           set -o pipefail
           sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
@@ -807,7 +943,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Issue Monster"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -820,7 +956,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Issue Monster"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -836,9 +972,10 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Issue Monster"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
+          GH_AW_SAFE_OUTPUT_MESSAGES: "{\"footer\":\"\\u003e 🍪 *Om nom nom by [{workflow_name}]({run_url})*\",\"runStarted\":\"🍪 ISSUE! ISSUE! [{workflow_name}]({run_url}) hungry for issues on this {event_type}! Om nom nom...\",\"runSuccess\":\"🍪 YUMMY! [{workflow_name}]({run_url}) ate the issues! That was DELICIOUS! Me want MORE! 😋\",\"runFailure\":\"🍪 Aww... [{workflow_name}]({run_url}) {status}. No cookie for monster today... 😢\"}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -880,8 +1017,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Security Guard"
-          WORKFLOW_DESCRIPTION: "Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries"
+          WORKFLOW_NAME: "Issue Monster"
+          WORKFLOW_DESCRIPTION: "The Cookie Monster of issues - assigns issues to Copilot agents one at a time"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -998,6 +1135,54 @@ jobs:
           path: /tmp/gh-aw/threat-detection/detection.log
           if-no-files-found: ignore
 
+  pre_activation:
+    runs-on: ubuntu-slim
+    outputs:
+      activated: ${{ ((steps.check_membership.outputs.is_team_member == 'true') && (steps.check_skip_if_match.outputs.skip_check_ok == 'true')) && (steps.check_skip_if_no_match.outputs.skip_no_match_check_ok == 'true') }}
+    steps:
+      - name: Setup Scripts
+        uses: githubnext/gh-aw/actions/setup@v0.36.0
+        with:
+          destination: /opt/gh-aw/actions
+      - name: Check team membership for workflow
+        id: check_membership
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_REQUIRED_ROLES: admin,maintainer,write
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
+            await main();
+      - name: Check skip-if-match query
+        id: check_skip_if_match
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_SKIP_QUERY: "is:pr is:open is:draft author:app/copilot-swe-agent"
+          GH_AW_WORKFLOW_NAME: "Issue Monster"
+          GH_AW_SKIP_MAX_MATCHES: "9"
+        with:
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_skip_if_match.cjs');
+            await main();
+      - name: Check skip-if-no-match query
+        id: check_skip_if_no_match
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_SKIP_QUERY: "is:issue is:open"
+          GH_AW_WORKFLOW_NAME: "Issue Monster"
+          GH_AW_SKIP_MIN_MATCHES: "1"
+        with:
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_skip_if_no_match.cjs');
+            await main();
+
   safe_outputs:
     needs:
       - agent
@@ -1012,9 +1197,11 @@ jobs:
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "security-guard"
-      GH_AW_WORKFLOW_NAME: "Security Guard"
+      GH_AW_SAFE_OUTPUT_MESSAGES: "{\"footer\":\"\\u003e 🍪 *Om nom nom by [{workflow_name}]({run_url})*\",\"runStarted\":\"🍪 ISSUE! ISSUE! [{workflow_name}]({run_url}) hungry for issues on this {event_type}! Om nom nom...\",\"runSuccess\":\"🍪 YUMMY! [{workflow_name}]({run_url}) ate the issues! That was DELICIOUS! Me want MORE! 😋\",\"runFailure\":\"🍪 Aww... [{workflow_name}]({run_url}) {status}. No cookie for monster today... 😢\"}"
+      GH_AW_WORKFLOW_ID: "issue-monster"
+      GH_AW_WORKFLOW_NAME: "Issue Monster"
     outputs:
+      assign_to_agent_assigned: ${{ steps.assign_to_agent.outputs.assigned }}
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
@@ -1038,7 +1225,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":3,\"target\":\"*\"}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1046,4 +1233,228 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
+      - name: Assign To Agent
+        id: assign_to_agent
+        if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'assign_to_agent'))
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+        with:
+          github-token: ${{ secrets.GH_AW_AGENT_TOKEN }}
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/assign_to_agent.cjs');
+            await main();
+
+  search_issues:
+    needs: pre_activation
+    if: needs.pre_activation.outputs.activated == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+
+    outputs:
+      has_issues: ${{ steps.search.outputs.has_issues }}
+      issue_count: ${{ steps.search.outputs.issue_count }}
+      issue_list: ${{ steps.search.outputs.issue_list }}
+      issue_numbers: ${{ steps.search.outputs.issue_numbers }}
+    steps:
+      - name: Search for candidate issues
+        id: search
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            try {
+              // Labels that indicate an issue should NOT be auto-assigned
+              const excludeLabels = [
+                'wontfix',
+                'duplicate',
+                'invalid',
+                'question',
+                'discussion',
+                'needs-discussion',
+                'blocked',
+                'on-hold',
+                'waiting-for-feedback',
+                'needs-more-info',
+                'no-bot',
+                'no-campaign'
+              ];
+
+              // Labels that indicate an issue is a GOOD candidate for auto-assignment
+              const priorityLabels = [
+                'good first issue',
+                'good-first-issue',
+                'bug',
+                'enhancement',
+                'feature',
+                'documentation',
+                'tech-debt',
+                'refactoring',
+                'performance',
+                'security'
+              ];
+
+              // Search for open issues without excluded labels
+              const query = `is:issue is:open repo:${owner}/${repo} -label:"${excludeLabels.join('" -label:"')}"`;
+              core.info(`Searching: ${query}`);
+              const response = await github.rest.search.issuesAndPullRequests({
+                q: query,
+                per_page: 100,
+                sort: 'created',
+                order: 'desc'
+              });
+              core.info(`Found ${response.data.total_count} total issues matching basic criteria`);
+
+              // Fetch full details for each issue to get labels, assignees, and sub-issues
+              const issuesWithDetails = await Promise.all(
+                response.data.items.map(async (issue) => {
+                  const fullIssue = await github.rest.issues.get({
+                    owner,
+                    repo,
+                    issue_number: issue.number
+                  });
+
+                  // Check if this issue has sub-issues using GraphQL
+                  let subIssuesCount = 0;
+                  try {
+                    const subIssuesQuery = `
+                      query($owner: String!, $repo: String!, $number: Int!) {
+                        repository(owner: $owner, name: $repo) {
+                          issue(number: $number) {
+                            subIssues {
+                              totalCount
+                            }
+                          }
+                        }
+                      }
+                    `;
+                    const subIssuesResult = await github.graphql(subIssuesQuery, {
+                      owner,
+                      repo,
+                      number: issue.number
+                    });
+                    subIssuesCount = subIssuesResult?.repository?.issue?.subIssues?.totalCount || 0;
+                  } catch (error) {
+                    // If GraphQL query fails, continue with 0 sub-issues
+                    core.warning(`Could not check sub-issues for #${issue.number}: ${error.message}`);
+                  }
+
+                  return {
+                    ...fullIssue.data,
+                    subIssuesCount
+                  };
+                })
+              );
+
+              // Filter and score issues
+              const scoredIssues = issuesWithDetails
+                .filter(issue => {
+                  // Exclude issues that already have assignees
+                  if (issue.assignees && issue.assignees.length > 0) {
+                    core.info(`Skipping #${issue.number}: already has assignees`);
+                    return false;
+                  }
+
+                  // Exclude issues with excluded labels (double check)
+                  const issueLabels = issue.labels.map(l => l.name.toLowerCase());
+                  if (issueLabels.some(label => excludeLabels.map(l => l.toLowerCase()).includes(label))) {
+                    core.info(`Skipping #${issue.number}: has excluded label`);
+                    return false;
+                  }
+
+                  // Exclude issues with campaign labels (campaign:*)
+                  // Campaign items are managed by campaign orchestrators
+                  if (issueLabels.some(label => label.startsWith('campaign:'))) {
+                    core.info(`Skipping #${issue.number}: has campaign label (managed by campaign orchestrator)`);
+                    return false;
+                  }
+
+                  // Exclude issues that have sub-issues (parent/organizing issues)
+                  if (issue.subIssuesCount > 0) {
+                    core.info(`Skipping #${issue.number}: has ${issue.subIssuesCount} sub-issue(s) - parent issues are used for organizing, not tasks`);
+                    return false;
+                  }
+
+                  return true;
+                })
+                .map(issue => {
+                  const issueLabels = issue.labels.map(l => l.name.toLowerCase());
+                  let score = 0;
+
+                  // Score based on priority labels (higher score = higher priority)
+                  if (issueLabels.includes('good first issue') || issueLabels.includes('good-first-issue')) {
+                    score += 50;
+                  }
+                  if (issueLabels.includes('bug')) {
+                    score += 40;
+                  }
+                  if (issueLabels.includes('security')) {
+                    score += 45;
+                  }
+                  if (issueLabels.includes('documentation')) {
+                    score += 35;
+                  }
+                  if (issueLabels.includes('enhancement') || issueLabels.includes('feature')) {
+                    score += 30;
+                  }
+                  if (issueLabels.includes('performance')) {
+                    score += 25;
+                  }
+                  if (issueLabels.includes('tech-debt') || issueLabels.includes('refactoring')) {
+                    score += 20;
+                  }
+
+                  // Bonus for issues with clear labels (any priority label)
+                  if (issueLabels.some(label => priorityLabels.map(l => l.toLowerCase()).includes(label))) {
+                    score += 10;
+                  }
+
+                  // Age bonus: older issues get slight priority (days old / 10)
+                  const ageInDays = Math.floor((Date.now() - new Date(issue.created_at)) / (1000 * 60 * 60 * 24));
+                  score += Math.min(ageInDays / 10, 20); // Cap age bonus at 20 points
+
+                  return {
+                    number: issue.number,
+                    title: issue.title,
+                    labels: issue.labels.map(l => l.name),
+                    created_at: issue.created_at,
+                    score
+                  };
+                })
+                .sort((a, b) => b.score - a.score); // Sort by score descending
+
+              // Format output
+              const issueList = scoredIssues.map(i => {
+                const labelStr = i.labels.length > 0 ? ` [${i.labels.join(', ')}]` : '';
+                return `#${i.number}: ${i.title}${labelStr} (score: ${i.score.toFixed(1)})`;
+              }).join('\n');
+
+              const issueNumbers = scoredIssues.map(i => i.number).join(',');
+
+              core.info(`Total candidate issues after filtering: ${scoredIssues.length}`);
+              if (scoredIssues.length > 0) {
+                core.info(`Top candidates:\n${issueList.split('\n').slice(0, 10).join('\n')}`);
+              }
+
+              core.setOutput('issue_count', scoredIssues.length);
+              core.setOutput('issue_numbers', issueNumbers);
+              core.setOutput('issue_list', issueList);
+
+              if (scoredIssues.length === 0) {
+                core.info('🍽️ No suitable candidate issues - the plate is empty!');
+                core.setOutput('has_issues', 'false');
+              } else {
+                core.setOutput('has_issues', 'true');
+              }
+            } catch (error) {
+              core.error(`Error searching for issues: ${error.message}`);
+              core.setOutput('issue_count', 0);
+              core.setOutput('issue_numbers', '');
+              core.setOutput('issue_list', '');
+              core.setOutput('has_issues', 'false');
+            }
 

@@ -4,19 +4,44 @@ TypeScript-based integration tests for the awf (Agentic Workflow Firewall) CLI.
 
 ## Overview
 
-This directory contains integration tests that verify firewall behavior across multiple scenarios:
+This directory contains comprehensive integration tests that verify firewall behavior across multiple scenarios. Currently includes **17 integration test files** covering:
 
-- **Volume Mounts Tests** (`integration/volume-mounts.test.ts`) - Custom volume mount functionality
-- **Container Workdir Tests** (`integration/container-workdir.test.ts`) - Container working directory handling
-- **Docker Warning Tests** (`integration/docker-warning.test.ts`) - Docker warning functionality
-- **No Docker Tests** (`integration/no-docker.test.ts`) - Testing without Docker available
+### Core Functionality
+- **Basic Firewall Functionality** (`basic-firewall.test.ts`) - Domain whitelisting, subdomain matching, exit code propagation
+- **Exit Code Propagation** (`exit-code-propagation.test.ts`) - Comprehensive exit code handling tests
+- **Container Working Directory** (`container-workdir.test.ts`) - Container workdir configuration
+
+### Domain & Pattern Matching
+- **Blocked Domains** (`blocked-domains.test.ts`) - Domain blocking and precedence
+- **Wildcard Patterns** (`wildcard-patterns.test.ts`) - Wildcard pattern matching (*.domain.com)
+
+### Security
+- **Network Security** (`network-security.test.ts`) - Capability restrictions, bypass prevention, SSRF protection
+- **Robustness Tests** (`robustness.test.ts`) - Edge cases, protocol handling, security corners
+
+### Configuration
+- **DNS Servers** (`dns-servers.test.ts`) - DNS server configuration and resolution
+- **Environment Variables** (`environment-variables.test.ts`) - Environment variable passing
+- **Volume Mounts** (`volume-mounts.test.ts`) - Volume mount configuration
+
+### Protocol & Network
+- **Protocol Support** (`protocol-support.test.ts`) - HTTP/HTTPS, HTTP/2, IPv4/IPv6
+- **Git Operations** (`git-operations.test.ts`) - Git clone, fetch, ls-remote
+
+### Error Handling & Logging
+- **Error Handling** (`error-handling.test.ts`) - Network errors, command failures, recovery
+- **Log Commands** (`log-commands.test.ts`) - Log parsing and analysis
+
+### Integration Testing
+- **Claude Code** (`claude-code.test.ts`) - Claude Code CLI integration
+- **No Docker** (`no-docker.test.ts`) - Docker-in-Docker removal verification
+- **Docker Warning** (`docker-warning.test.ts`) - Docker command warning messages
 
 ## Smoke Tests
 
 The firewall is tested via agentic workflow smoke tests that run through the actual firewall:
 
 - **Smoke Claude** (`.github/workflows/smoke-claude.md`) - Claude engine validation
-- **Smoke Codex** (`.github/workflows/smoke-codex.md`) - Codex engine validation  
 - **Smoke Copilot** (`.github/workflows/smoke-copilot.md`) - Copilot engine validation
 
 These smoke tests use the locally built firewall and validate:
@@ -29,20 +54,34 @@ These smoke tests use the locally built firewall and validate:
 
 ```
 tests/
-├── integration/          # Integration test suites
-│   ├── volume-mounts.test.ts
+├── integration/              # Integration test suites (17 files)
+│   ├── basic-firewall.test.ts
+│   ├── blocked-domains.test.ts
+│   ├── claude-code.test.ts
 │   ├── container-workdir.test.ts
+│   ├── dns-servers.test.ts
 │   ├── docker-warning.test.ts
-│   └── no-docker.test.ts
-├── fixtures/             # Reusable test utilities
-│   ├── cleanup.ts        # Docker resource cleanup
-│   ├── awf-runner.ts     # Execute awf commands
-│   ├── docker-helper.ts  # Docker operations
-│   ├── log-parser.ts     # Parse Squid/iptables logs
-│   └── assertions.ts     # Custom Jest matchers
+│   ├── environment-variables.test.ts
+│   ├── error-handling.test.ts
+│   ├── exit-code-propagation.test.ts
+│   ├── git-operations.test.ts
+│   ├── log-commands.test.ts
+│   ├── network-security.test.ts
+│   ├── no-docker.test.ts
+│   ├── protocol-support.test.ts
+│   ├── robustness.test.ts
+│   ├── volume-mounts.test.ts
+│   └── wildcard-patterns.test.ts
+├── fixtures/                 # Reusable test utilities
+│   ├── cleanup.ts            # Docker resource cleanup
+│   ├── awf-runner.ts         # Execute awf commands
+│   ├── docker-helper.ts      # Docker operations
+│   ├── log-parser.ts         # Parse Squid/iptables logs
+│   └── assertions.ts         # Custom Jest matchers
 ├── setup/
-│   └── jest.integration.config.js  # Jest configuration
-└── README.md             # This file
+│   ├── jest.integration.config.js  # Jest configuration
+│   └── jest.setup.ts               # Test setup
+└── README.md                 # This file
 ```
 
 ## Running Tests
@@ -224,15 +263,41 @@ Key considerations:
 - Cleanup runs before and after tests to prevent resource leaks
 - Artifacts (logs, reports) are collected on failure
 
-## Smoke Tests
+## Test Suite
 
-Comprehensive firewall testing is done via agentic workflow smoke tests:
+The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
 
-- `.github/workflows/smoke-claude.md` - Claude engine smoke tests
-- `.github/workflows/smoke-codex.md` - Codex engine smoke tests
-- `.github/workflows/smoke-copilot.md` - Copilot engine smoke tests
+**Integration test files (17 total):**
+| Category | Test File | Description |
+|----------|-----------|-------------|
+| Core | `basic-firewall.test.ts` | Domain whitelisting, connectivity |
+| Core | `exit-code-propagation.test.ts` | Exit code handling |
+| Core | `container-workdir.test.ts` | Container working directory |
+| Domains | `blocked-domains.test.ts` | Domain blocking |
+| Domains | `wildcard-patterns.test.ts` | Wildcard matching |
+| Security | `network-security.test.ts` | Capability restrictions, SSRF |
+| Security | `robustness.test.ts` | Edge cases, bypass prevention |
+| Config | `dns-servers.test.ts` | DNS configuration |
+| Config | `environment-variables.test.ts` | Environment variables |
+| Config | `volume-mounts.test.ts` | Volume mounts |
+| Protocol | `protocol-support.test.ts` | HTTP/HTTPS, HTTP/2 |
+| Protocol | `git-operations.test.ts` | Git over HTTPS |
+| Errors | `error-handling.test.ts` | Error scenarios |
+| Logging | `log-commands.test.ts` | Log parsing |
+| Integration | `claude-code.test.ts` | Claude Code CLI |
+| Integration | `no-docker.test.ts` | Docker removal |
+| Integration | `docker-warning.test.ts` | Docker warnings |
 
-These smoke tests build and test the firewall locally, validating end-to-end functionality.
+**Smoke test workflows:**
+- `.github/workflows/smoke-claude.md` - Claude engine validation (uses locally built firewall)
+- `.github/workflows/smoke-codex.md` - Codex engine validation (uses locally built firewall)
+- `.github/workflows/smoke-copilot.md` - Copilot engine validation (uses locally built firewall)
+
+**CI workflow:**
+- All tests run with `sudo -E` for iptables manipulation
+- Tests run serially to avoid Docker resource conflicts
+- Automatic cleanup before and after test runs
+- Test logs uploaded as artifacts on failure
 
 ## Troubleshooting
 
@@ -267,21 +332,89 @@ docker pull alpine:latest
 docker pull dannydirect/tinyproxy:latest
 ```
 
-## Test Suite
+## Testing Patterns and Best Practices
 
-The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
+### 1. Test Structure
 
-**Integration test suites:**
-- `tests/integration/volume-mounts.test.ts` - Custom volume mount functionality
-- `tests/integration/container-workdir.test.ts` - Container working directory handling
+Each test file follows a consistent structure:
 
-**Smoke test workflows:**
-- `.github/workflows/smoke-claude.md` - Claude engine validation (uses locally built firewall)
-- `.github/workflows/smoke-codex.md` - Codex engine validation (uses locally built firewall)
-- `.github/workflows/smoke-copilot.md` - Copilot engine validation (uses locally built firewall)
+```typescript
+/// <reference path="../jest-custom-matchers.d.ts" />
 
-**CI workflow:**
-- All tests run with `sudo -E` for iptables manipulation
-- Tests run serially to avoid Docker resource conflicts
-- Automatic cleanup before and after test runs
-- Test logs uploaded as artifacts on failure
+import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
+import { createRunner, AwfRunner } from '../fixtures/awf-runner';
+import { cleanup } from '../fixtures/cleanup';
+
+describe('Feature Name', () => {
+  let runner: AwfRunner;
+
+  beforeAll(async () => {
+    await cleanup(false);  // Clean up before tests
+    runner = createRunner();
+  });
+
+  afterAll(async () => {
+    await cleanup(false);  // Clean up after tests
+  });
+
+  test('should do something', async () => {
+    const result = await runner.runWithSudo('command', {
+      allowDomains: ['github.com'],
+      logLevel: 'debug',
+      timeout: 60000,
+    });
+
+    expect(result).toSucceed();
+  }, 120000);  // Set individual test timeout
+});
+```
+
+### 2. Use Custom Matchers
+
+```typescript
+// Check success/failure
+expect(result).toSucceed();
+expect(result).toFail();
+
+// Check specific exit code
+expect(result).toExitWithCode(0);
+expect(result).toExitWithCode(42);
+
+// Check timeout
+expect(result).toTimeout();
+```
+
+### 3. Handle Timeouts
+
+- Set reasonable timeouts for each test (typically 120000ms for integration tests)
+- Use `--max-time` with curl to prevent indefinite hangs
+- Set `timeout` in runner options
+
+### 4. Clean Up Resources
+
+- Always run `cleanup(false)` in `beforeAll` and `afterAll`
+- Use `keepContainers: true` only when needed for log inspection
+- Clean up manually created files in `afterEach`
+
+### 5. Avoid Flaky Tests
+
+- Use explicit timeouts with network commands
+- Don't depend on timing-sensitive conditions
+- Use `|| true` or error handling for expected failures
+- Test for specific exit codes, not just success/failure
+
+### 6. Group Related Tests
+
+```typescript
+describe('Feature Category', () => {
+  describe('Subsection A', () => {
+    test('scenario 1', ...);
+    test('scenario 2', ...);
+  });
+
+  describe('Subsection B', () => {
+    test('scenario 3', ...);
+    test('scenario 4', ...);
+  });
+});
+```

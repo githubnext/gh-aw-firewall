@@ -19,15 +19,16 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries
+# Daily documentation review and sync with code changes from the past 7 days
 
-name: "Security Guard"
+name: "Documentation Maintainer"
 "on":
-  pull_request:
-    types:
-    - opened
-    - synchronize
-    - reopened
+  schedule:
+  - cron: "15 19 * * *"
+    # Friendly format: daily (scattered)
+  # skip-if-match: # Skip-if-match processed as search check in pre-activation job
+    # max: 1
+    # query: is:pr is:open in:title "[docs]"
   workflow_dispatch:
 
 permissions:
@@ -36,14 +37,14 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
+  group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Security Guard"
+run-name: "Documentation Maintainer"
 
 jobs:
   activation:
-    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
+    needs: pre_activation
+    if: needs.pre_activation.outputs.activated == 'true'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -58,7 +59,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "security-guard.lock.yml"
+          GH_AW_WORKFLOW_FILE: "doc-maintainer.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -73,6 +74,8 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       GH_AW_MCP_LOG_DIR: /tmp/gh-aw/mcp-logs/safeoutputs
       GH_AW_SAFE_OUTPUTS: /tmp/gh-aw/safeoutputs/outputs.jsonl
@@ -159,31 +162,42 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'EOF'
-          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"create_pull_request":{},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'EOF'
           [
             {
-              "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. CONSTRAINTS: Maximum 1 comment(s) can be added.",
+              "description": "Create a new GitHub pull request to propose code changes. Use this after making file edits to submit them for review and merging. The PR will be created from the current branch with your committed changes. For code review comments on an existing PR, use create_pull_request_review_comment instead. CONSTRAINTS: Maximum 1 pull request(s) can be created. Reviewers [copilot] will be assigned.",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
                   "body": {
-                    "description": "Comment content in Markdown. Provide helpful, relevant information that adds value to the conversation.",
+                    "description": "Detailed PR description in Markdown. Include what changes were made, why, testing notes, and any breaking changes. Do NOT repeat the title as a heading.",
                     "type": "string"
                   },
-                  "item_number": {
-                    "description": "The issue, pull request, or discussion number to comment on. This is the numeric ID from the GitHub URL (e.g., 123 in github.com/owner/repo/issues/123). Must be a valid existing item in the repository. Required.",
-                    "type": "number"
+                  "branch": {
+                    "description": "Source branch name containing the changes. If omitted, uses the current working branch.",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "description": "Labels to categorize the PR (e.g., 'enhancement', 'bugfix'). Labels must exist in the repository.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "description": "Concise PR title describing the changes. Follow repository conventions (e.g., conventional commits). The title appears as the main heading.",
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "body",
-                  "item_number"
+                  "title",
+                  "body"
                 ],
                 "type": "object"
               },
-              "name": "add_comment"
+              "name": "create_pull_request"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -232,7 +246,7 @@ jobs:
           EOF
           cat > /opt/gh-aw/safeoutputs/validation.json << 'EOF'
           {
-            "add_comment": {
+            "create_pull_request": {
               "defaultMax": 1,
               "fields": {
                 "body": {
@@ -241,8 +255,23 @@ jobs:
                   "sanitize": true,
                   "maxLength": 65000
                 },
-                "item_number": {
-                  "issueOrPRNumber": true
+                "branch": {
+                  "required": true,
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 256
+                },
+                "labels": {
+                  "type": "array",
+                  "itemType": "string",
+                  "itemSanitize": true,
+                  "itemMaxLength": 128
+                },
+                "title": {
+                  "required": true,
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
                 }
               }
             },
@@ -358,7 +387,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Security Guard",
+              workflow_name: "Documentation Maintainer",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -399,126 +428,118 @@ jobs:
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Security Guard
+          # Documentation Maintainer
           
-          You are a security-focused AI agent that carefully reviews pull requests in this repository to identify changes that could weaken the security posture or extend the security boundaries of the Agentic Workflow Firewall (AWF).
+          You are an AI agent responsible for keeping documentation synchronized with code changes in the gh-aw-firewall repository.
           
-          ## Repository Context
+          ## Your Mission
           
-          This repository implements a **network firewall for AI agents** that provides L7 (HTTP/HTTPS) egress control using Squid proxy and Docker containers. The firewall restricts network access to a whitelist of approved domains.
+          Review git commits from the past 7 days, identify documentation that has drifted out of sync with code, and create a PR with the necessary updates.
           
-          ### Critical Security Components
+          ## Context
           
-          1. **Host-level iptables rules** (`src/host-iptables.ts`)
-             - DOCKER-USER chain rules for egress filtering
-             - DNS exfiltration prevention (only trusted DNS servers allowed)
-             - IPv4 and IPv6 traffic filtering
-             - Multicast and link-local blocking
+          This repository is a security-critical firewall for GitHub Copilot CLI. Accurate documentation is essential for safe usage. The documentation frequently drifts out of sync with code changes, especially:
+          - Architecture changes (Docker, containers, networking, iptables)
+          - CLI flag additions and modifications
+          - MCP configuration changes
+          - Security guidance updates
           
-          2. **Container iptables setup** (`containers/agent/setup-iptables.sh`)
-             - NAT rules redirecting HTTP/HTTPS to Squid proxy
-             - DNS filtering within containers
+          ## Documentation Files
           
-          3. **Squid proxy configuration** (`src/squid-config.ts`)
-             - Domain ACL rules (allowlist and blocklist)
-             - Protocol-specific filtering (HTTP vs HTTPS)
-             - Access rule ordering (deny before allow)
+          Explore all documentation files in the `/docs/` directory and all `*.md` files in the repository root. The agent should discover and review these files to identify what needs updating.
           
-          4. **Container security hardening** (`src/docker-manager.ts`, `containers/agent/`)
-             - Capability dropping (NET_RAW, SYS_PTRACE, SYS_MODULE, etc.)
-             - Seccomp profile (`containers/agent/seccomp-profile.json`)
-             - Privilege dropping to non-root user (awfuser)
-             - Resource limits (memory, PIDs, CPU)
+          ## Task Steps
           
-          5. **Domain pattern validation** (`src/domain-patterns.ts`)
-             - Wildcard pattern security (prevents overly broad patterns)
-             - Protocol prefix handling
+          ### 1. Gather Recent Changes (Past 7 Days)
           
-          ## Your Task
+          Use git commands to analyze commits from the past 7 days and identify which files changed.
           
-          Analyze PR #__GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER__ in repository __GH_AW_GITHUB_REPOSITORY__.
+          ### 2. Identify Documentation Gaps
           
-          1. **Get the PR diff** using the GitHub tools to understand what files changed
-          2. **Examine each changed file** for security implications
-          3. **Collect evidence** with specific file names, line numbers, and code snippets
+          Compare code changes with current documentation and identify what needs to be updated.
           
-          ## Security Checks
+          ### 3. Review Current Documentation
           
-          Look for these types of security-weakening changes:
+          Read the current state of documentation files in `/docs/` and root `*.md` files.
           
-          ### iptables and Network Filtering
-          - Changes that add new ACCEPT rules without proper justification
-          - Removal or weakening of DROP/REJECT rules
-          - Changes to the firewall chain structure (FW_WRAPPER, DOCKER-USER)
-          - DNS exfiltration prevention bypasses (allowing arbitrary DNS servers)
-          - IPv6 filtering gaps that could allow bypasses
+          ### 4. Verify Code Examples
           
-          ### Squid Proxy Configuration
-          - Changes to ACL rule ordering that could allow blocked traffic
-          - Removal of domain blocking functionality
-          - Addition of overly permissive domain patterns (e.g., `*.*`)
-          - Changes that allow non-standard ports (only 80/443 should be allowed)
-          - Timeout changes that could enable connection-based attacks
+          For any code examples in documentation:
+          - Check that CLI commands use the correct flags
+          - Verify environment variable names match the code
+          - Ensure Docker configuration examples are current
+          - Validate that file paths referenced in examples exist
           
-          ### Container Security
-          - Removal or weakening of capability dropping (cap_drop)
-          - Addition of dangerous capabilities (SYS_ADMIN, NET_RAW readdition)
-          - Changes to seccomp profile that allow dangerous syscalls
-          - Removal of resource limits
-          - Changes that run as root instead of unprivileged user
+          ### 5. Make Documentation Updates
           
-          ### Domain Pattern Security
-          - Removal of wildcard pattern validation
-          - Allowing overly broad patterns like `*` or `*.*`
-          - Changes to protocol handling that could bypass restrictions
+          Use the edit tool to update documentation files:
           
-          ### General Security
-          - Hardcoded credentials or secrets
-          - Removal of input validation
-          - Introduction of command injection vulnerabilities
-          - Changes that disable security features via environment variables
-          - Dependency updates that introduce known vulnerabilities
+          - **Add missing documentation** for new features
+          - **Update outdated content** that no longer matches code
+          - **Fix broken examples** with correct syntax
+          - **Update version numbers** if applicable
+          - **Add deprecation notices** for removed features
           
-          ## Output Format
+          Keep updates:
+          - Minimal and focused
+          - Consistent with existing style
+          - Clear and accurate
           
-          If you find security concerns:
-          1. Add a comment to the PR explaining each concern
-          2. For each issue, provide:
-             - **File and line number** where the issue exists
-             - **Code snippet** showing the problematic change
-             - **Explanation** of why this weakens security
-             - **Suggested action** (e.g., revert, modify, add mitigation)
+          ### 6. Create Pull Request
           
-          If no security issues are found:
-          - Do not add a comment (use noop safe-output)
-          - The PR passes the security review
+          After making updates, the safe-outputs system will automatically create a PR. Include in your changes:
           
-          **SECURITY**: Be thorough but avoid false positives. Focus on actual security weakening, not code style or refactoring that maintains the same security level.
+          **PR Description Format**:
+          ```markdown
+          ## Documentation Sync - [Date Range]
+          
+          This PR synchronizes documentation with code changes from the past 7 days.
+          
+          ### Changes Made
+          
+          - Updated `file.md`: Description of change
+          - Fixed example in `file.md`: What was wrong and how it was fixed
+          
+          ### Code Changes Referenced
+          
+          - Commit `abc1234`: Brief description
+          - Commit `def5678`: Brief description
+          
+          ### Verification
+          
+          - [ ] Code examples tested/verified
+          - [ ] Links checked
+          - [ ] Consistent with existing style
+          ```
+          
+          ## Guidelines
+          
+          - **Be Conservative**: Only update what is clearly out of sync
+          - **Be Accurate**: Verify all changes against the actual code
+          - **Be Minimal**: Make the smallest changes necessary
+          - **Be Consistent**: Match the existing documentation style
+          - **Document Sources**: Reference the commits that triggered updates
+          
+          ## Edge Cases
+          
+          - **No relevant changes**: If there are no code changes affecting documentation, exit gracefully without creating a PR
+          - **Already synced**: If documentation is already up-to-date, exit gracefully
+          - **Complex changes**: For significant architectural changes, document what you can and note areas needing human review
+          
+          ## Success Criteria
+          
+          A successful run means:
+          1. You reviewed all commits from the past 7 days
+          2. You identified documentation that is out of sync with code
+          3. You updated the relevant documentation files
+          4. You verified code examples are correct
+          5. You created a PR with clear descriptions of changes
+          6. The PR is labeled with `documentation` and `ai-generated`
           
           PROMPT_EOF
-      - name: Substitute placeholders
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
-        with:
-          script: |
-            const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
-            // Call the substitution function
-            return await substitutePlaceholders({
-              file: process.env.GH_AW_PROMPT,
-              substitutions: {
-                GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: process.env.GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER,
-                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY
-              }
-            });
       - name: Append XPIA security instructions to prompt
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -542,7 +563,7 @@ jobs:
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
           
-          **Available tools**: add_comment, missing_tool, noop
+          **Available tools**: create_pull_request, missing_tool, noop
           
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
@@ -624,8 +645,6 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -639,11 +658,15 @@ jobs:
       - name: Execute GitHub Copilot CLI
         id: agentic_execution
         # Copilot CLI tool arguments (sorted):
-        timeout-minutes: 10
+        # --allow-tool github
+        # --allow-tool safeoutputs
+        # --allow-tool shell
+        # --allow-tool write
+        timeout-minutes: 15
         run: |
           set -o pipefail
           sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
-            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
+            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-tool github --allow-tool safeoutputs --allow-tool shell --allow-tool write --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
@@ -755,6 +778,7 @@ jobs:
             /tmp/gh-aw/mcp-logs/
             /tmp/gh-aw/sandbox/firewall/logs/
             /tmp/gh-aw/agent-stdio.log
+            /tmp/gh-aw/aw.patch
           if-no-files-found: ignore
 
   conclusion:
@@ -807,7 +831,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Documentation Maintainer"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -820,7 +844,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Documentation Maintainer"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -836,7 +860,7 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Documentation Maintainer"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
         with:
@@ -852,6 +876,8 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -880,8 +906,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Security Guard"
-          WORKFLOW_DESCRIPTION: "Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries"
+          WORKFLOW_NAME: "Documentation Maintainer"
+          WORKFLOW_DESCRIPTION: "Daily documentation review and sync with code changes from the past 7 days"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -998,22 +1024,57 @@ jobs:
           path: /tmp/gh-aw/threat-detection/detection.log
           if-no-files-found: ignore
 
+  pre_activation:
+    runs-on: ubuntu-slim
+    outputs:
+      activated: ${{ (steps.check_membership.outputs.is_team_member == 'true') && (steps.check_skip_if_match.outputs.skip_check_ok == 'true') }}
+    steps:
+      - name: Setup Scripts
+        uses: githubnext/gh-aw/actions/setup@v0.36.0
+        with:
+          destination: /opt/gh-aw/actions
+      - name: Check team membership for workflow
+        id: check_membership
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_REQUIRED_ROLES: admin,maintainer,write
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
+            await main();
+      - name: Check skip-if-match query
+        id: check_skip_if_match
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_SKIP_QUERY: "is:pr is:open in:title \"[docs]\""
+          GH_AW_WORKFLOW_NAME: "Documentation Maintainer"
+          GH_AW_SKIP_MAX_MATCHES: "1"
+        with:
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_skip_if_match.cjs');
+            await main();
+
   safe_outputs:
     needs:
+      - activation
       - agent
       - detection
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.detection.outputs.success == 'true')
     runs-on: ubuntu-slim
     permissions:
-      contents: read
-      discussions: write
+      contents: write
       issues: write
       pull-requests: write
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "security-guard"
-      GH_AW_WORKFLOW_NAME: "Security Guard"
+      GH_AW_WORKFLOW_ID: "doc-maintainer"
+      GH_AW_WORKFLOW_NAME: "Documentation Maintainer"
     outputs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
@@ -1033,12 +1094,37 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs/
           find "/tmp/gh-aw/safeoutputs/" -type f -print
           echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/safeoutputs/agent_output.json" >> "$GITHUB_ENV"
+      - name: Download patch artifact
+        continue-on-error: true
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: agent-artifacts
+          path: /tmp/gh-aw/
+      - name: Checkout repository
+        if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          token: ${{ github.token }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Configure Git credentials
+        if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
+        env:
+          REPO_NAME: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          # Re-authenticate git with GitHub token
+          SERVER_URL_STRIPPED="${SERVER_URL#https://}"
+          git remote set-url origin "https://x-access-token:${{ github.token }}@${SERVER_URL_STRIPPED}/${REPO_NAME}.git"
+          echo "Git configured with standard GitHub Actions identity"
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"base_branch\":\"${{ github.ref_name }}\",\"max\":1,\"max_patch_size\":1024}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |

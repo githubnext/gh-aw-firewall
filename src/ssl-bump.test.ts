@@ -1,5 +1,8 @@
 import { parseUrlPatterns } from './ssl-bump';
 
+// Pattern constant for the safer URL character class (matches the implementation)
+const URL_CHAR_PATTERN = '[^\\s]*';
+
 describe('SSL Bump', () => {
   describe('parseUrlPatterns', () => {
     it('should escape regex special characters except wildcards', () => {
@@ -7,14 +10,14 @@ describe('SSL Bump', () => {
       expect(patterns).toEqual(['^https://github\\.com/user$']);
     });
 
-    it('should convert * wildcard to .* regex', () => {
+    it('should convert * wildcard to safe regex pattern', () => {
       const patterns = parseUrlPatterns(['https://github.com/githubnext/*']);
-      expect(patterns).toEqual(['^https://github\\.com/githubnext/.*']);
+      expect(patterns).toEqual([`^https://github\\.com/githubnext/${URL_CHAR_PATTERN}`]);
     });
 
     it('should handle multiple wildcards', () => {
       const patterns = parseUrlPatterns(['https://api-*.example.com/*']);
-      expect(patterns).toEqual(['^https://api-.*\\.example\\.com/.*']);
+      expect(patterns).toEqual([`^https://api-${URL_CHAR_PATTERN}\\.example\\.com/${URL_CHAR_PATTERN}`]);
     });
 
     it('should remove trailing slash for consistency', () => {
@@ -43,8 +46,8 @@ describe('SSL Bump', () => {
         'https://api.example.com/v1/*',
       ]);
       expect(patterns).toHaveLength(2);
-      expect(patterns[0]).toBe('^https://github\\.com/githubnext/.*');
-      expect(patterns[1]).toBe('^https://api\\.example\\.com/v1/.*');
+      expect(patterns[0]).toBe(`^https://github\\.com/githubnext/${URL_CHAR_PATTERN}`);
+      expect(patterns[1]).toBe(`^https://api\\.example\\.com/v1/${URL_CHAR_PATTERN}`);
     });
 
     it('should handle empty array', () => {
@@ -60,8 +63,8 @@ describe('SSL Bump', () => {
 
     it('should not add end anchor for wildcard patterns', () => {
       const patterns = parseUrlPatterns(['https://github.com/*']);
-      // Should only have start anchor for patterns ending with .*
-      expect(patterns[0]).toBe('^https://github\\.com/.*');
+      // Should only have start anchor for patterns ending with the URL char pattern
+      expect(patterns[0]).toBe(`^https://github\\.com/${URL_CHAR_PATTERN}`);
       expect(patterns[0]).not.toContain('$');
     });
   });

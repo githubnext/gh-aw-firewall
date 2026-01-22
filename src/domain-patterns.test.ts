@@ -94,33 +94,36 @@ describe('isWildcardPattern', () => {
   });
 });
 
+// Pattern constant for the safer domain character class (matches the implementation)
+const DOMAIN_CHAR_PATTERN = '[a-zA-Z0-9.-]*';
+
 describe('wildcardToRegex', () => {
   describe('basic conversions', () => {
     it('should convert leading wildcard pattern', () => {
-      expect(wildcardToRegex('*.github.com')).toBe('^.*\\.github\\.com$');
+      expect(wildcardToRegex('*.github.com')).toBe(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
     });
 
     it('should convert middle wildcard pattern', () => {
-      expect(wildcardToRegex('api-*.example.com')).toBe('^api-.*\\.example\\.com$');
+      expect(wildcardToRegex('api-*.example.com')).toBe(`^api-${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
     });
 
     it('should convert trailing wildcard pattern', () => {
-      expect(wildcardToRegex('api.*')).toBe('^api\\..*$');
+      expect(wildcardToRegex('api.*')).toBe(`^api\\.${DOMAIN_CHAR_PATTERN}$`);
     });
 
     it('should handle multiple wildcards', () => {
-      expect(wildcardToRegex('*-api-*.example.com')).toBe('^.*-api-.*\\.example\\.com$');
+      expect(wildcardToRegex('*-api-*.example.com')).toBe(`^${DOMAIN_CHAR_PATTERN}-api-${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
     });
   });
 
   describe('escaping', () => {
     it('should escape dots in domain', () => {
-      expect(wildcardToRegex('*.co.uk')).toBe('^.*\\.co\\.uk$');
+      expect(wildcardToRegex('*.co.uk')).toBe(`^${DOMAIN_CHAR_PATTERN}\\.co\\.uk$`);
     });
 
     it('should escape regex metacharacters', () => {
       // These are unlikely in domains but should be handled safely
-      expect(wildcardToRegex('api+*.example.com')).toBe('^api\\+.*\\.example\\.com$');
+      expect(wildcardToRegex('api+*.example.com')).toBe(`^api\\+${DOMAIN_CHAR_PATTERN}\\.example\\.com$`);
       expect(wildcardToRegex('api[1].example.com')).toBe('^api\\[1\\]\\.example\\.com$');
     });
   });
@@ -271,7 +274,7 @@ describe('parseDomainList', () => {
 
   it('should convert patterns to regex', () => {
     const result = parseDomainList(['*.github.com']);
-    expect(result.patterns[0].regex).toBe('^.*\\.github\\.com$');
+    expect(result.patterns[0].regex).toBe(`^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`);
   });
 
   it('should handle all plain domains', () => {
@@ -328,8 +331,8 @@ describe('parseDomainList', () => {
     it('should handle protocol-prefixed wildcard patterns', () => {
       const result = parseDomainList(['http://*.example.com', 'https://*.secure.com']);
       expect(result.patterns).toEqual([
-        { original: '*.example.com', regex: '^.*\\.example\\.com$', protocol: 'http' },
-        { original: '*.secure.com', regex: '^.*\\.secure\\.com$', protocol: 'https' },
+        { original: '*.example.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.example\\.com$`, protocol: 'http' },
+        { original: '*.secure.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.secure\\.com$`, protocol: 'https' },
       ]);
     });
 
@@ -345,20 +348,20 @@ describe('parseDomainList', () => {
 
 describe('isDomainMatchedByPattern', () => {
   it('should match domain against leading wildcard', () => {
-    const patterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'both' as const }];
+    const patterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'both' as const }];
     expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, patterns)).toBe(true);
     expect(isDomainMatchedByPattern({ domain: 'raw.github.com', protocol: 'both' }, patterns)).toBe(true);
   });
 
   it('should not match domain that does not fit pattern', () => {
-    const patterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'both' as const }];
+    const patterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'both' as const }];
     expect(isDomainMatchedByPattern({ domain: 'github.com', protocol: 'both' }, patterns)).toBe(false);
     expect(isDomainMatchedByPattern({ domain: 'gitlab.com', protocol: 'both' }, patterns)).toBe(false);
     expect(isDomainMatchedByPattern({ domain: 'notgithub.com', protocol: 'both' }, patterns)).toBe(false);
   });
 
   it('should match against middle wildcard', () => {
-    const patterns = [{ original: 'api-*.example.com', regex: '^api-.*\\.example\\.com$', protocol: 'both' as const }];
+    const patterns = [{ original: 'api-*.example.com', regex: `^api-${DOMAIN_CHAR_PATTERN}\\.example\\.com$`, protocol: 'both' as const }];
     expect(isDomainMatchedByPattern({ domain: 'api-v1.example.com', protocol: 'both' }, patterns)).toBe(true);
     expect(isDomainMatchedByPattern({ domain: 'api-test.example.com', protocol: 'both' }, patterns)).toBe(true);
     expect(isDomainMatchedByPattern({ domain: 'api.example.com', protocol: 'both' }, patterns)).toBe(false);
@@ -366,8 +369,8 @@ describe('isDomainMatchedByPattern', () => {
 
   it('should match against any pattern in list', () => {
     const patterns = [
-      { original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'both' as const },
-      { original: '*.gitlab.com', regex: '^.*\\.gitlab\\.com$', protocol: 'both' as const },
+      { original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'both' as const },
+      { original: '*.gitlab.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.gitlab\\.com$`, protocol: 'both' as const },
     ];
     expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, patterns)).toBe(true);
     expect(isDomainMatchedByPattern({ domain: 'api.gitlab.com', protocol: 'both' }, patterns)).toBe(true);
@@ -375,7 +378,7 @@ describe('isDomainMatchedByPattern', () => {
   });
 
   it('should be case-insensitive', () => {
-    const patterns = [{ original: '*.GitHub.com', regex: '^.*\\.GitHub\\.com$', protocol: 'both' as const }];
+    const patterns = [{ original: '*.GitHub.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.GitHub\\.com$`, protocol: 'both' as const }];
     expect(isDomainMatchedByPattern({ domain: 'API.GITHUB.COM', protocol: 'both' }, patterns)).toBe(true);
     expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, patterns)).toBe(true);
   });
@@ -384,32 +387,38 @@ describe('isDomainMatchedByPattern', () => {
     expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, [])).toBe(false);
   });
 
+  it('should return false for excessively long domains (ReDoS protection)', () => {
+    const patterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'both' as const }];
+    const longDomain = 'a'.repeat(600) + '.github.com';
+    expect(isDomainMatchedByPattern({ domain: longDomain, protocol: 'both' }, patterns)).toBe(false);
+  });
+
   describe('protocol compatibility', () => {
     it('should match when pattern has "both" protocol', () => {
-      const patterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'both' as const }];
+      const patterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'both' as const }];
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'http' }, patterns)).toBe(true);
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'https' }, patterns)).toBe(true);
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, patterns)).toBe(true);
     });
 
     it('should not fully cover "both" domain with single protocol pattern', () => {
-      const httpPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'http' as const }];
-      const httpsPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'https' as const }];
+      const httpPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'http' as const }];
+      const httpsPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'https' as const }];
       // A domain that needs "both" cannot be fully covered by a single-protocol pattern
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, httpPatterns)).toBe(false);
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'both' }, httpsPatterns)).toBe(false);
     });
 
     it('should match when protocols match exactly', () => {
-      const httpPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'http' as const }];
-      const httpsPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'https' as const }];
+      const httpPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'http' as const }];
+      const httpsPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'https' as const }];
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'http' }, httpPatterns)).toBe(true);
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'https' }, httpsPatterns)).toBe(true);
     });
 
     it('should not match when protocols do not match', () => {
-      const httpPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'http' as const }];
-      const httpsPatterns = [{ original: '*.github.com', regex: '^.*\\.github\\.com$', protocol: 'https' as const }];
+      const httpPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'http' as const }];
+      const httpsPatterns = [{ original: '*.github.com', regex: `^${DOMAIN_CHAR_PATTERN}\\.github\\.com$`, protocol: 'https' as const }];
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'https' }, httpPatterns)).toBe(false);
       expect(isDomainMatchedByPattern({ domain: 'api.github.com', protocol: 'http' }, httpsPatterns)).toBe(false);
     });

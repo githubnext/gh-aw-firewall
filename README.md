@@ -10,6 +10,14 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 
+## Requirements
+
+- **Docker**: 20.10+ with Docker Compose v2
+- **Node.js**: 18+ (for building from source)
+- **OS**: Ubuntu 22.04+ or compatible Linux distribution
+
+See [Compatibility](docs/compatibility.md) for full details on supported versions and tested configurations.
+
 ## Get started fast
 
 - **Prerequisite:** Docker is running
@@ -117,6 +125,7 @@ sudo awf --help
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
+- [Compatibility](docs/compatibility.md) — supported Node.js, OS, and Docker versions
 - [Troubleshooting](docs/troubleshooting.md) — common issues and fixes
 - [Image verification](docs/image-verification.md) — cosign signature verification
 

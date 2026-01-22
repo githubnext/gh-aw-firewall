@@ -12,41 +12,70 @@ const SQUID_PORT = 3128;
 const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
- * Gets the host user's UID, with fallback to 1000 if unavailable or root (0).
- * When running with sudo, uses SUDO_UID to get the actual user's UID.
+ * Minimum UID/GID value for regular users.
+ * UIDs 0-999 are reserved for system users on most Linux distributions.
  */
-function getSafeHostUid(): string {
+export const MIN_REGULAR_UID = 1000;
+
+/**
+ * Validates that a UID/GID value is safe for use (not in system range).
+ * Returns the value if valid, or the default (1000) if in system range.
+ * @internal Exported for testing
+ */
+export function validateIdNotInSystemRange(id: number): string {
+  // Reject system UIDs/GIDs (0-999) - use default unprivileged user instead
+  if (id < MIN_REGULAR_UID) {
+    return MIN_REGULAR_UID.toString();
+  }
+  return id.toString();
+}
+
+/**
+ * Gets the host user's UID, with fallback to 1000 if unavailable, root (0),
+ * or in the system UID range (0-999).
+ * When running with sudo, uses SUDO_UID to get the actual user's UID.
+ * @internal Exported for testing
+ */
+export function getSafeHostUid(): string {
   const uid = process.getuid?.();
   
   // When running as root (sudo), try to get the original user's UID
   if (!uid || uid === 0) {
     const sudoUid = process.env.SUDO_UID;
-    if (sudoUid && sudoUid !== '0') {
-      return sudoUid;
+    if (sudoUid) {
+      const parsedUid = parseInt(sudoUid, 10);
+      if (!isNaN(parsedUid)) {
+        return validateIdNotInSystemRange(parsedUid);
+      }
     }
-    return '1000';
+    return MIN_REGULAR_UID.toString();
   }
   
-  return uid.toString();
+  return validateIdNotInSystemRange(uid);
 }
 
 /**
- * Gets the host user's GID, with fallback to 1000 if unavailable or root (0).
+ * Gets the host user's GID, with fallback to 1000 if unavailable, root (0),
+ * or in the system GID range (0-999).
  * When running with sudo, uses SUDO_GID to get the actual user's GID.
+ * @internal Exported for testing
  */
-function getSafeHostGid(): string {
+export function getSafeHostGid(): string {
   const gid = process.getgid?.();
   
   // When running as root (sudo), try to get the original user's GID
   if (!gid || gid === 0) {
     const sudoGid = process.env.SUDO_GID;
-    if (sudoGid && sudoGid !== '0') {
-      return sudoGid;
+    if (sudoGid) {
+      const parsedGid = parseInt(sudoGid, 10);
+      if (!isNaN(parsedGid)) {
+        return validateIdNotInSystemRange(parsedGid);
+      }
     }
-    return '1000';
+    return MIN_REGULAR_UID.toString();
   }
   
-  return gid.toString();
+  return validateIdNotInSystemRange(gid);
 }
 
 /**

@@ -197,6 +197,40 @@ CI checks include:
 4. Coverage report generation
 5. Coverage threshold validation
 
+### Test Parallelization Strategy
+
+The project uses a multi-level parallelization strategy to optimize CI time:
+
+#### Unit Tests (Jest Workers)
+- Unit tests run in parallel using Jest's worker pool
+- Configuration: `maxWorkers: '50%'` uses half of available CPU cores
+- Tests are isolated and have no shared state, making them safe to parallelize
+- Run time: ~6-8 seconds for 549 tests
+
+#### Integration Tests (GitHub Actions Matrix)
+- Integration tests run in separate GitHub Actions runners using a matrix strategy
+- Each test file runs in its own isolated environment to avoid Docker conflicts
+- Test files run in parallel across multiple runners:
+  - `basic-firewall.test.ts` - Core firewall functionality
+  - `robustness.test.ts` - Comprehensive edge cases
+  - `volume-mounts.test.ts` - Volume mount functionality
+  - `container-workdir.test.ts` - Working directory configuration
+  - `no-docker.test.ts` - Docker-in-Docker removal verification
+
+**Why Integration Tests Can't Use Jest Workers:**
+- Integration tests use Docker containers that share network resources
+- Running multiple tests simultaneously would cause:
+  - Docker network subnet pool exhaustion
+  - Container name conflicts
+  - Port binding conflicts
+- The `maxWorkers: 1` setting in `jest.integration.config.js` ensures sequential execution within each runner
+
+**Benefits of Matrix Strategy:**
+- Each test file runs on a dedicated runner (full isolation)
+- All test files run in parallel (reduces wall-clock time)
+- `fail-fast: false` ensures all tests complete even if one fails
+- Individual test artifacts are captured for failed tests
+
 ## Debugging Tests
 
 ### Running Tests in Debug Mode

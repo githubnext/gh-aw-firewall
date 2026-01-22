@@ -19,31 +19,33 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries
+# Daily advisor that analyzes the repository for opportunities to add, enhance, or improve agentic workflows based on Pelis Agent Factory patterns
+#
+# Resolved workflow manifest:
+#   Imports:
+#     - shared/mcp-pagination.md
 
-name: "Security Guard"
+name: "Pelis Agent Factory Advisor"
 "on":
-  pull_request:
-    types:
-    - opened
-    - synchronize
-    - reopened
+  schedule:
+  - cron: "49 20 * * *"
+    # Friendly format: daily (scattered)
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
+  discussions: read
   issues: read
   pull-requests: read
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-  cancel-in-progress: true
+  group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Security Guard"
+run-name: "Pelis Agent Factory Advisor"
 
 jobs:
   activation:
-    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -58,7 +60,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "security-guard.lock.yml"
+          GH_AW_WORKFLOW_FILE: "pelis-agent-factory-advisor.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -70,9 +72,13 @@ jobs:
     needs: activation
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+      discussions: read
       issues: read
       pull-requests: read
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       GH_AW_MCP_LOG_DIR: /tmp/gh-aw/mcp-logs/safeoutputs
       GH_AW_SAFE_OUTPUTS: /tmp/gh-aw/safeoutputs/outputs.jsonl
@@ -94,6 +100,17 @@ jobs:
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      # Cache memory file share configuration from frontmatter processed below
+      - name: Create cache-memory directory
+        run: bash /opt/gh-aw/actions/create_cache_memory_dir.sh
+      - name: Restore cache memory file share data
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          key: memory-${{ github.workflow }}-${{ github.run_id }}
+          path: /tmp/gh-aw/cache-memory
+          restore-keys: |
+            memory-${{ github.workflow }}-
+            memory-
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}
@@ -153,37 +170,54 @@ jobs:
             await determineAutomaticLockdown(github, context, core);
       - name: Downloading container images
         run: bash /opt/gh-aw/actions/download_docker_images.sh ghcr.io/github/github-mcp-server:v0.27.0
+      - name: Install gh-aw extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if gh-aw extension is already installed
+          if gh extension list | grep -q "githubnext/gh-aw"; then
+            echo "gh-aw extension already installed, upgrading..."
+            gh extension upgrade gh-aw || true
+          else
+            echo "Installing gh-aw extension..."
+            gh extension install githubnext/gh-aw
+          fi
+          gh aw --version
       - name: Write Safe Outputs Config
         run: |
           mkdir -p /opt/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'EOF'
-          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"create_discussion":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'EOF'
           [
             {
-              "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. CONSTRAINTS: Maximum 1 comment(s) can be added.",
+              "description": "Create a GitHub discussion for announcements, Q\u0026A, reports, status updates, or community conversations. Use this for content that benefits from threaded replies, doesn't require task tracking, or serves as documentation. For actionable work items that need assignment and status tracking, use create_issue instead. CONSTRAINTS: Maximum 1 discussion(s) can be created. Title will be prefixed with \"[Pelis Agent Factory Advisor] \". Discussions will be created in category \"General\".",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
                   "body": {
-                    "description": "Comment content in Markdown. Provide helpful, relevant information that adds value to the conversation.",
+                    "description": "Discussion content in Markdown. Do NOT repeat the title as a heading since it already appears as the discussion's h1. Include all relevant context, findings, or questions.",
                     "type": "string"
                   },
-                  "item_number": {
-                    "description": "The issue, pull request, or discussion number to comment on. This is the numeric ID from the GitHub URL (e.g., 123 in github.com/owner/repo/issues/123). Must be a valid existing item in the repository. Required.",
-                    "type": "number"
+                  "category": {
+                    "description": "Discussion category by name (e.g., 'General'), slug (e.g., 'general'), or ID. If omitted, uses the first available category. Category must exist in the repository.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Concise discussion title summarizing the topic. The title appears as the main heading, so keep it brief and descriptive.",
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "body",
-                  "item_number"
+                  "title",
+                  "body"
                 ],
                 "type": "object"
               },
-              "name": "add_comment"
+              "name": "create_discussion"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -232,7 +266,7 @@ jobs:
           EOF
           cat > /opt/gh-aw/safeoutputs/validation.json << 'EOF'
           {
-            "add_comment": {
+            "create_discussion": {
               "defaultMax": 1,
               "fields": {
                 "body": {
@@ -241,8 +275,20 @@ jobs:
                   "sanitize": true,
                   "maxLength": 65000
                 },
-                "item_number": {
-                  "issueOrPRNumber": true
+                "category": {
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
+                },
+                "repo": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "title": {
+                  "required": true,
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 128
                 }
               }
             },
@@ -286,12 +332,22 @@ jobs:
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
           GITHUB_MCP_LOCKDOWN: ${{ steps.determine-automatic-lockdown.outputs.lockdown == 'true' && '1' || '0' }}
           GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/gh-aw/mcp-config
           mkdir -p /home/runner/.copilot
           cat > /home/runner/.copilot/mcp-config.json << EOF
           {
             "mcpServers": {
+              "agentic_workflows": {
+                "type": "local",
+                "command": "gh",
+                "args": ["aw", "mcp-server"],
+                "tools": ["*"],
+                "env": {
+                  "GITHUB_TOKEN": "\${GITHUB_TOKEN}"
+                }
+              },
               "github": {
                 "type": "local",
                 "command": "docker",
@@ -306,7 +362,7 @@ jobs:
                   "-e",
                   "GITHUB_LOCKDOWN_MODE=$GITHUB_MCP_LOCKDOWN",
                   "-e",
-                  "GITHUB_TOOLSETS=context,repos,issues,pull_requests",
+                  "GITHUB_TOOLSETS=context,repos,issues,pull_requests,actions",
                   "ghcr.io/github/github-mcp-server:v0.27.0"
                 ],
                 "tools": ["*"],
@@ -358,7 +414,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Security Guard",
+              workflow_name: "Pelis Agent Factory Advisor",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -372,7 +428,7 @@ jobs:
               event_name: context.eventName,
               staged: false,
               network_mode: "defaults",
-              allowed_domains: [],
+              allowed_domains: ["github","githubnext.github.io"],
               firewall_enabled: true,
               awf_version: "v0.8.2",
               steps: {
@@ -399,126 +455,348 @@ jobs:
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Security Guard
+          ## MCP Response Size Limits
           
-          You are a security-focused AI agent that carefully reviews pull requests in this repository to identify changes that could weaken the security posture or extend the security boundaries of the Agentic Workflow Firewall (AWF).
+          MCP tool responses have a **25,000 token limit**. When GitHub API responses exceed this limit, workflows must retry with pagination parameters, wasting turns and tokens.
           
-          ## Repository Context
+          ### Common Scenarios
           
-          This repository implements a **network firewall for AI agents** that provides L7 (HTTP/HTTPS) egress control using Squid proxy and Docker containers. The firewall restricts network access to a whitelist of approved domains.
+          **Problem**: Fetching large result sets without pagination
+          - `list_pull_requests` with many PRs (75,897 tokens in one case)
+          - `pull_request_read` with large diff/comments (31,675 tokens observed)
+          - `search_issues`, `search_code` with many results
           
-          ### Critical Security Components
+          **Solution**: Use proactive pagination to stay under token limits
           
-          1. **Host-level iptables rules** (`src/host-iptables.ts`)
-             - DOCKER-USER chain rules for egress filtering
-             - DNS exfiltration prevention (only trusted DNS servers allowed)
-             - IPv4 and IPv6 traffic filtering
-             - Multicast and link-local blocking
+          ### Pagination Best Practices
           
-          2. **Container iptables setup** (`containers/agent/setup-iptables.sh`)
-             - NAT rules redirecting HTTP/HTTPS to Squid proxy
-             - DNS filtering within containers
+          #### 1. Use `perPage` Parameter
           
-          3. **Squid proxy configuration** (`src/squid-config.ts`)
-             - Domain ACL rules (allowlist and blocklist)
-             - Protocol-specific filtering (HTTP vs HTTPS)
-             - Access rule ordering (deny before allow)
+          Limit results per request to prevent oversized responses:
           
-          4. **Container security hardening** (`src/docker-manager.ts`, `containers/agent/`)
-             - Capability dropping (NET_RAW, SYS_PTRACE, SYS_MODULE, etc.)
-             - Seccomp profile (`containers/agent/seccomp-profile.json`)
-             - Privilege dropping to non-root user (awfuser)
-             - Resource limits (memory, PIDs, CPU)
+          ```bash
+          # Good: Fetch PRs in small batches
+          list_pull_requests --perPage 10
           
-          5. **Domain pattern validation** (`src/domain-patterns.ts`)
-             - Wildcard pattern security (prevents overly broad patterns)
-             - Protocol prefix handling
+          # Good: Get issue with limited comments
+          issue_read --method get_comments --perPage 20
           
-          ## Your Task
+          # Bad: Default pagination may return too much data
+          list_pull_requests  # May exceed 25k tokens
+          ```
           
-          Analyze PR #__GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER__ in repository __GH_AW_GITHUB_REPOSITORY__.
+          #### 2. Common `perPage` Values
           
-          1. **Get the PR diff** using the GitHub tools to understand what files changed
-          2. **Examine each changed file** for security implications
-          3. **Collect evidence** with specific file names, line numbers, and code snippets
+          - **10-20**: For detailed items (PRs with diffs, issues with comments)
+          - **50-100**: For simpler list operations (commits, branches, labels)
+          - **1-5**: For exploratory queries or schema discovery
           
-          ## Security Checks
+          #### 3. Handle Pagination Loops
           
-          Look for these types of security-weakening changes:
+          When you need all results:
           
-          ### iptables and Network Filtering
-          - Changes that add new ACCEPT rules without proper justification
-          - Removal or weakening of DROP/REJECT rules
-          - Changes to the firewall chain structure (FW_WRAPPER, DOCKER-USER)
-          - DNS exfiltration prevention bypasses (allowing arbitrary DNS servers)
-          - IPv6 filtering gaps that could allow bypasses
+          ```bash
+          # Step 1: Fetch first page
+          result=$(list_pull_requests --perPage 20 --page 1)
           
-          ### Squid Proxy Configuration
-          - Changes to ACL rule ordering that could allow blocked traffic
-          - Removal of domain blocking functionality
-          - Addition of overly permissive domain patterns (e.g., `*.*`)
-          - Changes that allow non-standard ports (only 80/443 should be allowed)
-          - Timeout changes that could enable connection-based attacks
+          # Step 2: Check if more pages exist
+          # Most list operations return metadata about total count or next page
           
-          ### Container Security
-          - Removal or weakening of capability dropping (cap_drop)
-          - Addition of dangerous capabilities (SYS_ADMIN, NET_RAW readdition)
-          - Changes to seccomp profile that allow dangerous syscalls
-          - Removal of resource limits
-          - Changes that run as root instead of unprivileged user
+          # Step 3: Fetch subsequent pages if needed
+          result=$(list_pull_requests --perPage 20 --page 2)
+          ```
           
-          ### Domain Pattern Security
-          - Removal of wildcard pattern validation
-          - Allowing overly broad patterns like `*` or `*.*`
-          - Changes to protocol handling that could bypass restrictions
+          ### Tool-Specific Guidance
           
-          ### General Security
-          - Hardcoded credentials or secrets
-          - Removal of input validation
-          - Introduction of command injection vulnerabilities
-          - Changes that disable security features via environment variables
-          - Dependency updates that introduce known vulnerabilities
+          #### Pull Requests
+          
+          ```bash
+          # Fetch recent PRs in small batches
+          list_pull_requests --state all --perPage 10 --sort updated --direction desc
+          
+          # Get PR details without full diff/comments
+          pull_request_read --method get --pullNumber 123
+          
+          # Get PR files separately if needed
+          pull_request_read --method get_files --pullNumber 123 --perPage 30
+          ```
+          
+          #### Issues
+          
+          ```bash
+          # List issues with pagination
+          list_issues --perPage 20 --page 1
+          
+          # Get issue comments in batches
+          issue_read --method get_comments --issue_number 123 --perPage 20
+          ```
+          
+          #### Code Search
+          
+          ```bash
+          # Search with limited results
+          search_code --query "function language:go" --perPage 10
+          ```
+          
+          ### Error Messages to Watch For
+          
+          If you see these errors, add pagination:
+          
+          - `MCP tool "list_pull_requests" response (75897 tokens) exceeds maximum allowed tokens (25000)`
+          - `MCP tool "pull_request_read" response (31675 tokens) exceeds maximum allowed tokens (25000)`
+          - `Response too large for tool [tool_name]`
+          
+          ### Performance Tips
+          
+          1. **Start small**: Use `perPage: 10` initially, increase if needed
+          2. **Fetch incrementally**: Get overview first, then details for specific items
+          3. **Avoid wildcards**: Don't fetch all data when you need specific items
+          4. **Use filters**: Combine `perPage` with state/label/date filters to reduce results
+          
+          ### Example Workflow Pattern
+          
+          ```markdown
+          # Analyze Recent Pull Requests
+          
+          1. Fetch 10 most recent PRs (stay under token limit)
+          2. For each PR, get summary without full diff
+          3. If detailed analysis needed, fetch files for specific PR separately
+          4. Process results incrementally rather than loading everything at once
+          ```
+          
+          This proactive approach eliminates retry loops and reduces token consumption.
+          
+          # Pelis Agent Factory Advisor
+          
+          You are an expert advisor on agentic workflows, specializing in patterns and best practices from the Pelis Agent Factory. Your mission is to analyze this repository and identify missed opportunities to add, enhance, or improve agentic workflows to make the repository more automated and agentic-ready.
+          
+          ## Phase 1: Learn Pelis Agent Factory Patterns
+          
+          ### Step 1.1: Crawl the Pelis Agent Factory Documentation Site
+          
+          **IMPORTANT**: You must thoroughly crawl and read the Pelis Agent Factory documentation site to understand the common patterns and best practices for agentic workflows.
+          
+          Start from the main blog post and explore ALL linked pages:
+          - Start at: https://githubnext.github.io/gh-aw/blog/2026-01-12-welcome-to-pelis-agent-factory/
+          - Use `web-fetch` to retrieve each page
+          - Follow ALL internal links to other pages on the site
+          - Read the documentation sections, guides, and examples
+          - Pay special attention to:
+            - Workflow patterns and templates
+            - Best practices for agentic automation
+            - Common use cases and implementations
+            - Integration patterns with GitHub
+            - Safe outputs and permissions models
+            - Caching and state management
+          
+          ### Step 1.2: Explore the Agentics Repository
+          
+          Clone knowledge from the agentics repository to understand reference implementations:
+          - Repository: https://github.com/githubnext/agentics
+          - Use the GitHub tools to explore the repository structure
+          - Read key workflow files and configurations
+          - Understand the patterns used in that repository
+          - Note any interesting automation patterns that could apply here
+          
+          ### Step 1.3: Document Learned Patterns
+          
+          In your cache-memory, document:
+          - Key patterns you discovered
+          - Best practices that stood out
+          - Interesting workflow configurations
+          - Reusable templates or approaches
+          
+          ## Phase 2: Analyze This Repository
+          
+          ### Step 2.1: Inventory Current Agentic Workflows
+          
+          Use the `agentic-workflows` tool to get the status of all workflow files:
+          
+          ```bash
+          # List all workflow files
+          ls -la .github/workflows/
+          
+          # Find all agentic workflow definitions (*.md files in workflows)
+          find .github/workflows -name "*.md" -type f
+          ```
+          
+          For each agentic workflow found:
+          - Understand its purpose
+          - Review its configuration (triggers, permissions, tools)
+          - Assess its effectiveness
+          - Identify potential improvements
+          
+          ### Step 2.2: Analyze Repository Structure
+          
+          Examine the repository to understand what could benefit from automation:
+          
+          ```bash
+          # Understand the project structure
+          ls -la
+          
+          # Check for documentation
+          ls -la docs/ 2>/dev/null || echo "No docs directory"
+          ls -la *.md
+          
+          # Check for tests
+          ls -la tests/ 2>/dev/null || echo "No tests directory"
+          
+          # Check for CI/CD configuration
+          ls -la .github/workflows/
+          
+          # Check for scripts
+          ls -la scripts/ 2>/dev/null || echo "No scripts directory"
+          ```
+          
+          ### Step 2.3: Review Recent Activity
+          
+          Use GitHub tools to understand recent repository activity:
+          - Recent pull requests and their review patterns
+          - Recent issues and their resolution patterns
+          - Recent workflow runs and their success/failure rates
+          
+          ## Phase 3: Identify Opportunities
+          
+          Based on your knowledge of Pelis Agent Factory patterns and your analysis of this repository, identify opportunities in these categories:
+          
+          ### 3.1: Missing Workflows
+          
+          Workflows that don't exist but would add significant value:
+          - Documentation automation
+          - Release automation enhancements
+          - Code quality agents
+          - Knowledge management
+          - Onboarding assistance
+          - Dependency management
+          - Performance monitoring
+          - Security automation beyond existing workflows
+          - Community engagement
+          
+          ### 3.2: Enhancement Opportunities
+          
+          Existing workflows that could be improved:
+          - Better caching strategies
+          - More sophisticated triggers
+          - Enhanced output formats
+          - Better tool utilization
+          - Improved error handling
+          - More comprehensive coverage
+          
+          ### 3.3: Integration Opportunities
+          
+          Ways to connect workflows for greater automation:
+          - Chaining workflows together
+          - Shared state and memory
+          - Cross-workflow coordination
+          - Event-driven automation
+          
+          ## Phase 4: Prioritize and Report
+          
+          ### Prioritization Criteria
+          
+          For each opportunity, assess:
+          
+          1. **Impact** (High/Medium/Low): How much value would this add?
+          2. **Effort** (High/Medium/Low): How complex is the implementation?
+          3. **Risk** (High/Medium/Low): What could go wrong?
+          4. **Dependencies**: What needs to be in place first?
+          
+          ### Priority Levels
+          
+          - **P0 - Critical**: High impact, low effort, should be implemented immediately
+          - **P1 - High**: High impact, medium effort, plan for near-term
+          - **P2 - Medium**: Medium impact, worth considering
+          - **P3 - Low**: Nice to have, future consideration
           
           ## Output Format
           
-          If you find security concerns:
-          1. Add a comment to the PR explaining each concern
-          2. For each issue, provide:
-             - **File and line number** where the issue exists
-             - **Code snippet** showing the problematic change
-             - **Explanation** of why this weakens security
-             - **Suggested action** (e.g., revert, modify, add mitigation)
+          Create a discussion with the following structure:
           
-          If no security issues are found:
-          - Do not add a comment (use noop safe-output)
-          - The PR passes the security review
+          ### 📊 Executive Summary
           
-          **SECURITY**: Be thorough but avoid false positives. Focus on actual security weakening, not code style or refactoring that maintains the same security level.
+          Brief overview of your findings (2-3 sentences on overall agentic workflow maturity and top opportunities).
+          
+          ### 🎓 Patterns Learned from Pelis Agent Factory
+          
+          Summarize the key patterns and best practices you learned from:
+          - The documentation site
+          - The agentics repository
+          - How they compare to current implementations in this repo
+          
+          ### 📋 Current Agentic Workflow Inventory
+          
+          Table of existing agentic workflows:
+          | Workflow | Purpose | Trigger | Assessment |
+          |----------|---------|---------|------------|
+          | ... | ... | ... | ... |
+          
+          ### 🚀 Actionable Recommendations
+          
+          For each recommendation, provide:
+          
+          #### [Priority] Recommendation Title
+          
+          **What**: Clear description of the opportunity
+          
+          **Why**: Reasoning and expected benefits
+          
+          **How**: High-level implementation approach
+          
+          **Effort**: Estimated complexity (Low/Medium/High)
+          
+          **Example**: Code snippet or configuration example if applicable
+          
+          ---
+          
+          Group recommendations by priority:
+          
+          #### P0 - Implement Immediately
+          (List P0 items)
+          
+          #### P1 - Plan for Near-Term
+          (List P1 items)
+          
+          #### P2 - Consider for Roadmap
+          (List P2 items)
+          
+          #### P3 - Future Ideas
+          (List P3 items)
+          
+          ### 📈 Maturity Assessment
+          
+          Rate the repository's agentic workflow maturity:
+          - **Current Level**: (1-5 scale with description)
+          - **Target Level**: What level should it aim for?
+          - **Gap Analysis**: What's needed to get there?
+          
+          ### 🔄 Comparison with Best Practices
+          
+          How does this repository compare to Pelis Agent Factory best practices?
+          - What it does well
+          - What it could improve
+          - Unique opportunities given the repository's domain (firewall/security)
+          
+          ### 📝 Notes for Future Runs
+          
+          Document in cache-memory:
+          - Patterns you observed
+          - Changes since last run (if applicable)
+          - Items to track over time
+          
+          ## Guidelines
+          
+          - **Be specific and actionable**: Each recommendation should be implementable
+          - **Leverage domain knowledge**: This is a security/firewall tool - suggest security-relevant automations
+          - **Think holistically**: Consider how workflows can work together
+          - **Prioritize ruthlessly**: Focus on high-impact, low-effort wins first
+          - **Learn continuously**: Use cache-memory to build knowledge over time
+          - **Be practical**: Consider the maintainers' time and resources
+          - **Cite sources**: Reference specific patterns from Pelis Agent Factory when applicable
           
           PROMPT_EOF
-      - name: Substitute placeholders
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
-        with:
-          script: |
-            const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
-            // Call the substitution function
-            return await substitutePlaceholders({
-              file: process.env.GH_AW_PROMPT,
-              substitutions: {
-                GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: process.env.GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER,
-                GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY
-              }
-            });
       - name: Append XPIA security instructions to prompt
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -529,6 +807,31 @@ jobs:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
         run: |
           cat "/opt/gh-aw/prompts/temp_folder_prompt.md" >> "$GH_AW_PROMPT"
+      - name: Append cache memory instructions to prompt
+        env:
+          GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
+        run: |
+          cat << 'PROMPT_EOF' >> "$GH_AW_PROMPT"
+          
+          ---
+          
+          ## Cache Folder Available
+          
+          You have access to a persistent cache folder at `/tmp/gh-aw/cache-memory/` where you can read and write files to create memories and store information.
+          
+          - **Read/Write Access**: You can freely read from and write to any files in this folder
+          - **Persistence**: Files in this folder persist across workflow runs via GitHub Actions cache
+          - **Last Write Wins**: If multiple processes write to the same file, the last write will be preserved
+          - **File Share**: Use this as a simple file share - organize files as you see fit
+          
+          Examples of what you can store:
+          - `/tmp/gh-aw/cache-memory/notes.txt` - general notes and observations
+          - `/tmp/gh-aw/cache-memory/preferences.json` - user preferences and settings
+          - `/tmp/gh-aw/cache-memory/history.log` - activity history and logs
+          - `/tmp/gh-aw/cache-memory/state/` - organized state files in subdirectories
+          
+          Feel free to create, read, update, and organize files in this folder as needed for your tasks.
+          PROMPT_EOF
       - name: Append safe outputs instructions to prompt
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -542,7 +845,7 @@ jobs:
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
           
-          **Available tools**: add_comment, missing_tool, noop
+          **Available tools**: create_discussion, missing_tool, noop
           
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
@@ -624,8 +927,6 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -639,11 +940,11 @@ jobs:
       - name: Execute GitHub Copilot CLI
         id: agentic_execution
         # Copilot CLI tool arguments (sorted):
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: |
           set -o pipefail
-          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
-            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
+          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /usr/bin/date:/usr/bin/date:ro --mount /usr/bin/gh:/usr/bin/gh:ro --mount /usr/bin/yq:/usr/bin/yq:ro --mount /usr/local/bin/copilot:/usr/local/bin/copilot:ro --mount /home/runner/.copilot:/home/runner/.copilot:rw --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains '*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,codeload.github.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,githubnext.github.io,host.docker.internal,lfs.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --image-tag 0.8.2 \
+            -- /usr/local/bin/copilot --add-dir /tmp/gh-aw/ --log-level all --log-dir /tmp/gh-aw/sandbox/agent/logs/ --add-dir "${GITHUB_WORKSPACE}" --disable-builtin-mcps --allow-all-tools --add-dir /tmp/gh-aw/cache-memory/ --allow-all-paths --share /tmp/gh-aw/sandbox/agent/logs/conversation.md --prompt "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_COPILOT:+ --model "$GH_AW_MODEL_AGENT_COPILOT"} \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
           COPILOT_AGENT_RUNNER_TYPE: STANDALONE
@@ -702,7 +1003,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_SAFE_OUTPUTS: ${{ env.GH_AW_SAFE_OUTPUTS }}
-          GH_AW_ALLOWED_DOMAINS: "api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,github.com,host.docker.internal,raw.githubusercontent.com,registry.npmjs.org"
+          GH_AW_ALLOWED_DOMAINS: "*.githubusercontent.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,codeload.github.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,githubnext.github.io,host.docker.internal,lfs.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
         with:
@@ -743,6 +1044,12 @@ jobs:
         env:
           AWF_LOGS_DIR: /tmp/gh-aw/sandbox/firewall/logs
         run: awf logs summary >> $GITHUB_STEP_SUMMARY
+      - name: Upload cache-memory data as artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: cache-memory
+          path: /tmp/gh-aw/cache-memory
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true
@@ -763,6 +1070,7 @@ jobs:
       - agent
       - detection
       - safe_outputs
+      - update_cache_memory
     if: (always()) && (needs.agent.result != 'skipped')
     runs-on: ubuntu-slim
     permissions:
@@ -807,7 +1115,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Pelis Agent Factory Advisor"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -820,7 +1128,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Pelis Agent Factory Advisor"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -836,7 +1144,7 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Security Guard"
+          GH_AW_WORKFLOW_NAME: "Pelis Agent Factory Advisor"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
         with:
@@ -852,6 +1160,8 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -880,8 +1190,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Security Guard"
-          WORKFLOW_DESCRIPTION: "Security Guard - Reviews PRs for changes that weaken security posture or extend security boundaries"
+          WORKFLOW_NAME: "Pelis Agent Factory Advisor"
+          WORKFLOW_DESCRIPTION: "Daily advisor that analyzes the repository for opportunities to add, enhance, or improve agentic workflows based on Pelis Agent Factory patterns"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -1007,13 +1317,11 @@ jobs:
     permissions:
       contents: read
       discussions: write
-      issues: write
-      pull-requests: write
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "security-guard"
-      GH_AW_WORKFLOW_NAME: "Security Guard"
+      GH_AW_WORKFLOW_ID: "pelis-agent-factory-advisor"
+      GH_AW_WORKFLOW_NAME: "Pelis Agent Factory Advisor"
     outputs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
@@ -1038,7 +1346,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_discussion\":{\"category\":\"General\",\"expires\":168,\"max\":1,\"title_prefix\":\"[Pelis Agent Factory Advisor] \"}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1046,4 +1354,28 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
+
+  update_cache_memory:
+    needs:
+      - agent
+      - detection
+    if: always() && needs.detection.outputs.success == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Setup Scripts
+        uses: githubnext/gh-aw/actions/setup@v0.36.0
+        with:
+          destination: /opt/gh-aw/actions
+      - name: Download cache-memory artifact (default)
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        continue-on-error: true
+        with:
+          name: cache-memory
+          path: /tmp/gh-aw/cache-memory
+      - name: Save cache-memory to cache (default)
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          key: memory-${{ github.workflow }}-${{ github.run_id }}
+          path: /tmp/gh-aw/cache-memory
 
