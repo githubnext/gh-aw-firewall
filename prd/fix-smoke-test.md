@@ -54,4 +54,16 @@ Modify the smoke test prompt to not require GitHub MCP functionality. This avoid
 
 - [x] Investigate PR #356 smoke test failures
 - [x] Document root cause
-- [ ] Implement fix (recompile workflow or add MCP gateway step) 
+- [x] Implement fix - Recompiled smoke-copilot.lock.yml with gh-aw v0.37.3
+
+## Fix Applied
+
+Recompiled `smoke-copilot.lock.yml` using gh-aw v0.37.3 (upgraded from v0.36.0). The new compilation properly includes:
+
+1. **MCP Gateway container download**: `ghcr.io/githubnext/gh-aw-mcpg:v0.0.74`
+2. **Start MCP gateway step**: Uses `start_mcp_gateway.sh` script
+3. **MCP server configuration**: GitHub MCP, Playwright MCP, and Safe Outputs configured to work through gateway
+4. **Stop MCP gateway step**: Proper cleanup with `stop_mcp_gateway.sh`
+5. **Gateway log parsing**: For CI summary via `parse_mcp_gateway_log.cjs`
+
+This matches the pattern used in `release.lock.yml` which works correctly. 

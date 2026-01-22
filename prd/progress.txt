@@ -11,8 +11,18 @@
 2. The workflow tries to run GitHub MCP server via `docker run` inside the AWF container, which doesn't have Docker access
 3. The `release.lock.yml` workflow shows the correct pattern - it uses an MCP Gateway running on the host machine
 
-**Next steps:**
-- Need to recompile smoke-copilot.lock.yml with gh-aw that properly handles sandbox.mcp configuration
-- Or manually add the MCP Gateway step to smoke-copilot.lock.yml
+### Fix Applied
 
-**Updated PRD** with detailed investigation results and resolution options.
+Upgraded gh-aw extension from v0.36.0 to v0.37.3 and recompiled the workflow:
+```
+gh extension upgrade gh-aw  # v0.36.0 -> v0.37.3
+gh aw compile .github/workflows/smoke-copilot.md
+```
+
+The recompiled workflow now includes:
+- MCP Gateway container: `ghcr.io/githubnext/gh-aw-mcpg:v0.0.74`
+- Start MCP gateway step with `start_mcp_gateway.sh`
+- Proper MCP server configuration through the gateway
+- Stop MCP gateway cleanup step
+
+**Updated PRD** with fix details. Ready for commit and testing.
