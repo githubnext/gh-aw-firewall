@@ -1,0 +1,49 @@
+{
+  "entries": {
+    "actions/checkout@v4": {
+      "repo": "actions/checkout",
+      "version": "v4",
+      "sha": "34e114876b0b11c390a56381ad16ebd13914f8d5"
+    },
+    "actions/github-script@v8": {
+      "repo": "actions/github-script",
+      "version": "v8",
+      "sha": "ed597411d8f924073f98dfc5c65a23a2325f34cd"
+    },
+    "actions/setup-node@v4": {
+      "repo": "actions/setup-node",
+      "version": "v4",
+      "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020"
+    },
+    "actions/upload-artifact@v4": {
+      "repo": "actions/upload-artifact",
+      "version": "v4",
+      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+    },
+    "docker/build-push-action@v5": {
+      "repo": "docker/build-push-action",
+      "version": "v5",
+      "sha": "ca052bb54ab0790a636c9b5f226502c73d547a25"
+    },
+    "docker/login-action@v3": {
+      "repo": "docker/login-action",
+      "version": "v3",
+      "sha": "5e57cd118135c172c3672efd75eb46360885c0ef"
+    },
+    "docker/setup-buildx-action@v3": {
+      "repo": "docker/setup-buildx-action",
+      "version": "v3",
+      "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
+    },
+    "githubnext/gh-aw/actions/setup@v0.37.3": {
+      "repo": "githubnext/gh-aw/actions/setup",
+      "version": "v0.37.3",
+      "sha": "55503f44aef44813947980f65655a67b5ed8702f"
+    },
+    "softprops/action-gh-release@v1": {
+      "repo": "softprops/action-gh-release",
+      "version": "v1",
+      "sha": "26994186c0ac3ef5cae75ac16aa32e8153525f77"
+    }
+  }
+}
