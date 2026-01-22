@@ -40,7 +40,7 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 permissions:
   contents: read
   actions: read
-  issues: read
+  issues: write
   pull-requests: read
 
 imports:
@@ -72,10 +72,10 @@ You are the CI Failure Doctor. When a workflow fails, investigate the root cause
 
 - **Repository**: ${{ github.repository }}
 - **Run**: [${{ github.event.workflow_run.id }}](${{ github.event.workflow_run.html_url }})
-- **Run Number**: ${{ github.event.workflow_run.run_number }}
+- **Workflow**: ${{ github.event.workflow_run.name }}
 - **Conclusion**: ${{ github.event.workflow_run.conclusion }}
 - **Commit**: ${{ github.event.workflow_run.head_sha }}
-- **Event**: ${{ github.event.workflow_run.event }}
+- **Branch**: ${{ github.event.workflow_run.head_branch }}
 
 ## Your Mission
 
