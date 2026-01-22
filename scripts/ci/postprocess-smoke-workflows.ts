@@ -10,25 +10,30 @@ const workflowPaths = [
 ];
 
 const installStepRegex =
-  /^ {6}- name: Install awf binary\n {8}run: bash \/opt\/gh-aw\/actions\/install_awf_binary\.sh v[0-9.]+\n/m;
+  /^(\s*)- name: Install awf binary\n\1\s*run: bash \/opt\/gh-aw\/actions\/install_awf_binary\.sh v[0-9.]+\n/m;
 const installStepRegexGlobal = new RegExp(installStepRegex.source, 'gm');
 
-const localInstallSteps = [
-  '      - name: Install awf dependencies',
-  '        run: npm ci',
-  '      - name: Build awf',
-  '        run: npm run build',
-  '      - name: Install awf binary (local)',
-  '        run: |',
-  '          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"',
-  '          NODE_BIN="$(command -v node)"',
-  '          sudo tee /usr/local/bin/awf > /dev/null <<EOF',
-  '          #!/bin/bash',
-  '          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\\$@"',
-  '          EOF',
-  '          sudo chmod +x /usr/local/bin/awf',
-  '',
-].join('\n');
+function buildLocalInstallSteps(indent: string): string {
+  const stepIndent = indent;
+  const runIndent = `${indent}  `;
+  const scriptIndent = `${runIndent}  `;
+
+  return [
+    `${stepIndent}- name: Install awf dependencies`,
+    `${runIndent}run: npm ci`,
+    `${stepIndent}- name: Build awf`,
+    `${runIndent}run: npm run build`,
+    `${stepIndent}- name: Install awf binary (local)`,
+    `${runIndent}run: |`,
+    `${scriptIndent}WORKSPACE_PATH="${'${GITHUB_WORKSPACE:-$(pwd)}'}"`,
+    `${scriptIndent}NODE_BIN="$(command -v node)"`,
+    `${scriptIndent}sudo tee /usr/local/bin/awf > /dev/null <<EOF`,
+    `${scriptIndent}#!/bin/bash`,
+    `${scriptIndent}exec "${'${NODE_BIN}'}" "${'${WORKSPACE_PATH}'}/dist/cli.js" "\\$@"`,
+    `${scriptIndent}EOF`,
+    `${scriptIndent}sudo chmod +x /usr/local/bin/awf`,
+  ].join('\n') + '\n';
+}
 
 for (const workflowPath of workflowPaths) {
   const content = fs.readFileSync(workflowPath, 'utf-8');
@@ -41,11 +46,15 @@ for (const workflowPath of workflowPaths) {
 
   if (matches.length !== 1) {
     throw new Error(
-      `Expected exactly one awf install step in ${workflowPath}, found ${matches.length}.`
+      `Expected exactly one awf install step in ${workflowPath}, found ${matches.length}. ` +
+        'Ensure the workflow has a single "Install awf binary" step in the agent job.'
     );
   }
 
-  const updated = content.replace(installStepRegexGlobal, localInstallSteps);
+  const updated = content.replace(
+    installStepRegexGlobal,
+    (_match, indent: string) => buildLocalInstallSteps(indent)
+  );
 
   fs.writeFileSync(workflowPath, updated);
   console.log(`Updated ${workflowPath}`);
