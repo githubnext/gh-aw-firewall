@@ -1,12 +1,12 @@
 #!/bin/bash
-# ralph-ci-monitor.sh
+# ralph
 # General Ralph loop for iterative task execution
 #
-# Usage: ./scripts/ralph-ci-monitor.sh <iterations> <prd_file> [progress_file]
+# Usage: ./scripts/ralph <iterations> <prd_file> [progress_file]
 #
 # Examples:
-#   ./scripts/ralph-ci-monitor.sh 10 scripts/prd.md
-#   ./scripts/ralph-ci-monitor.sh 10 scripts/prd.md scripts/progress.txt
+#   ./scripts/ralph 10 scripts/prd.md
+#   ./scripts/ralph 10 scripts/prd.md scripts/progress.txt
 
 set -e
 
@@ -43,7 +43,7 @@ for ((i=1; i<=$ITERATIONS; i++)); do
   echo "==========================================="
   echo ""
 
-  result=$(claude --permission-mode acceptEdits -p "@${PRD_FILE} @${PROGRESS_FILE} \
+  result=$(claude --dangerously-skip-permissions -p "@${PRD_FILE} @${PROGRESS_FILE} \
   1. Find the highest-priority task and implement it. \
   2. Run your tests and type checks. \
   3. Update the PRD with what was done. \
