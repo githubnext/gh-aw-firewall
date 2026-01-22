@@ -21,7 +21,14 @@ for ((i=1; i<=$1; i++)); do
   echo "==========================================="
   echo ""
 
-  result=$(claude --permission-mode acceptEdits -p "@${SCRIPT_DIR}/ralph-prompt.md")
+  result=$(claude --permission-mode acceptEdits -p "@${SCRIPT_DIR}/ralph-prompt.md \
+  1. Find the highest-priority task and implement it. \
+  2. Run your tests and type checks. \
+  3. Update the PRD with what was done. \
+  4. Append your progress to progress.txt. \
+  5. Commit your changes. \
+  ONLY WORK ON A SINGLE TASK. \
+  If the PRD is complete, output <promise>COMPLETE</promise>.")
 
   echo "$result"
 
