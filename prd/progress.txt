@@ -1,3 +1,6 @@
 2026-01-22T01:35:00Z: Pushed previous commits (MCP Gateway fix) to trigger workflow run 21232652692
 2026-01-22T01:38:00Z: Workflow failed - discovered --build-local incompatibility with binary install
 2026-01-22T01:40:00Z: Fixed by replacing --build-local with --image-tag 0.10.0 in smoke-copilot.lock.yml
+2026-01-22T01:40:15Z: Pushed fix commit 68d788c, triggered workflow run 21232751884
+2026-01-22T01:43:30Z: Workflow completed successfully - all tests passed including GitHub MCP
+2026-01-22T01:43:30Z: PRD COMPLETE - GitHub MCP now works correctly in Smoke Copilot workflow

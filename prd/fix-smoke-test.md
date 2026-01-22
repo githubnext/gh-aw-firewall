@@ -16,7 +16,7 @@ The original workflow (compiled with gh-aw v0.36.0) was missing MCP Gateway setu
 - AWF doesn't support Docker-in-Docker, causing MCP servers to fail silently
 - Fixed by recompiling with gh-aw v0.37.3 which properly includes MCP Gateway
 
-### Root Cause 2: --build-local Flag Incompatible with Binary Install (Current Fix)
+### Root Cause 2: --build-local Flag Incompatible with Binary Install (Fixed)
 The workflow used `--build-local` flag which requires AWF source files, but AWF was installed
 as a pre-built binary via `install_awf_binary.sh`. This caused container build failures:
 ```
@@ -31,4 +31,12 @@ matching the installed AWF version.
 - [x] Investigated MCP Gateway issue
 - [x] Recompiled workflow with gh-aw v0.37.3
 - [x] Fixed --build-local incompatibility
-- [ ] Verify GitHub MCP works in pipeline logs
+- [x] Verify GitHub MCP works in pipeline logs
+
+## Result
+
+**COMPLETE** - Workflow run 21232751884 passed with all tests:
+- GitHub MCP: Retrieved last 2 merged PRs
+- Playwright: Verified github.com title
+- File Writing: Created test file
+- Bash: Verified file creation
