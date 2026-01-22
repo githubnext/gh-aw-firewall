@@ -73,8 +73,10 @@ jobs:
           fi
 
       - name: Validate version matches tag
+        env:
+          TAG_VERSION: ${{ steps.version_early.outputs.version_number }}
+          TAG_NAME: ${{ steps.version_early.outputs.version }}
         run: |
-          TAG_VERSION="${{ steps.version_early.outputs.version_number }}"
           PKG_VERSION=$(node -p "require('./package.json').version")
 
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
@@ -89,7 +91,7 @@ jobs:
             echo "To fix this:"
             echo "  1. Update package.json version to match the tag"
             echo "  2. Commit the change"
-            echo "  3. Move the tag: git tag -f ${{ steps.version_early.outputs.version }} && git push -f origin ${{ steps.version_early.outputs.version }}"
+            echo "  3. Move the tag: git tag -f $TAG_NAME && git push -f origin $TAG_NAME"
             exit 1
           fi
 
@@ -122,9 +124,10 @@ jobs:
 
       - name: Sign Squid image with cosign
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          cosign sign --yes \
-            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+        env:
+          SQUID_DIGEST: ${{ steps.build_squid.outputs.digest }}
+          REPO: ${{ github.repository }}
+        run: cosign sign --yes "ghcr.io/${REPO}/squid@${SQUID_DIGEST}"
 
       - name: Generate SBOM for Squid image
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -136,11 +139,10 @@ jobs:
 
       - name: Attest SBOM for Squid image
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          cosign attest --yes \
-            --predicate squid-sbom.spdx.json \
-            --type spdxjson \
-            ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
+        env:
+          SQUID_DIGEST: ${{ steps.build_squid.outputs.digest }}
+          REPO: ${{ github.repository }}
+        run: cosign attest --yes --predicate squid-sbom.spdx.json --type spdxjson "ghcr.io/${REPO}/squid@${SQUID_DIGEST}"
 
       - name: Build and push Agent image
         id: build_agent
@@ -155,9 +157,10 @@ jobs:
 
       - name: Sign Agent image with cosign
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          cosign sign --yes \
-            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+        env:
+          AGENT_DIGEST: ${{ steps.build_agent.outputs.digest }}
+          REPO: ${{ github.repository }}
+        run: cosign sign --yes "ghcr.io/${REPO}/agent@${AGENT_DIGEST}"
 
       - name: Generate SBOM for Agent image
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -169,11 +172,10 @@ jobs:
 
       - name: Attest SBOM for Agent image
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: |
-          cosign attest --yes \
-            --predicate agent-sbom.spdx.json \
-            --type spdxjson \
-            ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
+        env:
+          AGENT_DIGEST: ${{ steps.build_agent.outputs.digest }}
+          REPO: ${{ github.repository }}
+        run: cosign attest --yes --predicate agent-sbom.spdx.json --type spdxjson "ghcr.io/${REPO}/agent@${AGENT_DIGEST}"
 
       - name: Install pkg for binary creation
         run: npm install -g pkg
@@ -195,10 +197,9 @@ jobs:
           file release/awf-linux-x64
 
       - name: Smoke test binary
-        run: |
-          npx tsx scripts/ci/smoke-test-binary.ts \
-            release/awf-linux-x64 \
-            ${{ steps.version_early.outputs.version_number }}
+        env:
+          VERSION_NUMBER: ${{ steps.version_early.outputs.version_number }}
+        run: npx tsx scripts/ci/smoke-test-binary.ts release/awf-linux-x64 "$VERSION_NUMBER"
 
       - name: Create tarball for npm package
         run: |
@@ -212,29 +213,29 @@ jobs:
 
       - name: Get previous release tag
         id: previous_tag
-        run: |
-          set -euo pipefail
-          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || echo "")
-          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-          echo "Previous tag: $PREVIOUS_TAG (current: $CURRENT_TAG)"
+        env:
+          CURRENT_TAG: ${{ steps.version_early.outputs.version }}
+        run: 'set -euo pipefail && PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || echo "") && echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT && echo "Previous tag: $PREVIOUS_TAG (current: $CURRENT_TAG)"'
 
       - name: Generate changelog from commits
         id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_TAG: ${{ steps.version_early.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.previous_tag.outputs.previous_tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          CURRENT_TAG="${{ steps.version_early.outputs.version }}"
-          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
 
           echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
 
           if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            CHANGELOG=$(gh api "repos/${REPO}/releases/generate-notes" \
               -f tag_name="$CURRENT_TAG" \
               -f previous_tag_name="$PREVIOUS_TAG" \
               --jq '.body' 2>/dev/null || echo "")
           else
-            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            CHANGELOG=$(gh api "repos/${REPO}/releases/generate-notes" \
               -f tag_name="$CURRENT_TAG" \
               --jq '.body' 2>/dev/null || echo "")
           fi
@@ -256,8 +257,6 @@ jobs:
           fi
 
           echo "Changelog generated successfully ($(wc -l < changelog_body.md) lines)"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate CLI help output
         id: cli_help
@@ -329,8 +328,10 @@ jobs:
           retention-days: 7
 steps:
   - name: Check dry run mode
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
     run: |
-      if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+      if [ "$DRY_RUN" = "true" ]; then
         echo "=== DRY RUN MODE ==="
         echo "Skipping AI agent - no release to update in dry run mode"
         echo "The release job has already previewed what would be created."
