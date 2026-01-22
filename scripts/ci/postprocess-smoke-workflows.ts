@@ -45,12 +45,7 @@ for (const workflowPath of workflowPaths) {
     );
   }
 
-  const updated = content.replace(installStepRegex, localInstallSteps);
-
-  if (updated === content) {
-    console.log(`No changes required for ${workflowPath}`);
-    continue;
-  }
+  const updated = content.replace(installStepRegexGlobal, localInstallSteps);
 
   fs.writeFileSync(workflowPath, updated);
   console.log(`Updated ${workflowPath}`);
