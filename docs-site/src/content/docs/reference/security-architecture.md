@@ -92,7 +92,7 @@ graph TB
 
 **Host iptables (DOCKER-USER chain)** — The outermost defense. Docker evaluates DOCKER-USER rules *before* container-specific chains, making it the right place to catch traffic from containers we didn't create directly. When the agent runs `docker run`, the spawned container joins `awf-net` and its egress hits DOCKER-USER where we route it through the proxy.
 
-**Container iptables (NAT table)** — Inside the agent container, NAT rules intercept outbound HTTP (port 80) and HTTPS (port 443) traffic, rewriting the destination to Squid at `172.30.0.10:3128`. This handles traffic from the agent process itself and any child processes (including stdio MCP servers).
+**Container iptables (NAT table)** — Inside the agent container, NAT rules intercept outbound HTTP (port 80) and HTTPS (port 443) traffic, rewriting the destination to Squid at `172.30.0.10:3128`. This handles traffic from the agent process itself and any child processes (including stdio MCP servers). After rule setup, the container drops `CAP_NET_ADMIN` capability, preventing malicious code from modifying firewall rules.
 
 **Squid ACL** — The primary control point. Squid receives CONNECT requests, extracts the target domain from SNI (for HTTPS) or Host header (for HTTP), and checks against the allowlist and blocklist. The evaluation order is:
 
