@@ -34,9 +34,14 @@ for (const workflowPath of workflowPaths) {
   const content = fs.readFileSync(workflowPath, 'utf-8');
   const matches = content.match(installStepRegexGlobal);
 
-  if (!matches || matches.length !== 1) {
+  if (!matches || matches.length === 0) {
+    console.log(`Skipping ${workflowPath}: no awf install step found.`);
+    continue;
+  }
+
+  if (matches.length !== 1) {
     throw new Error(
-      `Expected exactly one awf install step in ${workflowPath}, found ${matches?.length ?? 0}.`
+      `Expected exactly one awf install step in ${workflowPath}, found ${matches.length}.`
     );
   }
 
