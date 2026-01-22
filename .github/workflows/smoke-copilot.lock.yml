@@ -42,9 +42,7 @@ run-name: "Smoke Copilot"
 
 jobs:
   activation:
-    needs: pre_activation
-    if: >
-      (needs.pre_activation.outputs.activated == 'true') && ((github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id))
+    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -172,8 +170,31 @@ jobs:
           
           # Verify installation
           copilot --version
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.10.0
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:
@@ -1120,45 +1141,6 @@ jobs:
           name: threat-detection.log
           path: /tmp/gh-aw/threat-detection/detection.log
           if-no-files-found: ignore
-
-  pre_activation:
-    if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.id == github.repository_id)
-    runs-on: ubuntu-slim
-    permissions:
-      discussions: write
-      issues: write
-      pull-requests: write
-    outputs:
-      activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
-    steps:
-      - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@55503f44aef44813947980f65655a67b5ed8702f # v0.37.3
-        with:
-          destination: /opt/gh-aw/actions
-      - name: Add eyes reaction for immediate feedback
-        id: react
-        if: github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment' || github.event_name == 'discussion' || github.event_name == 'discussion_comment' || (github.event_name == 'pull_request') && (github.event.pull_request.head.repo.id == github.repository_id)
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_REACTION: "eyes"
-        with:
-          script: |
-            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
-            setupGlobals(core, github, context, exec, io);
-            const { main } = require('/opt/gh-aw/actions/add_reaction.cjs');
-            await main();
-      - name: Check team membership for workflow
-        id: check_membership
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          GH_AW_REQUIRED_ROLES: admin,maintainer,write
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
-            setupGlobals(core, github, context, exec, io);
-            const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
-            await main();
 
   safe_outputs:
     needs:
