@@ -15,12 +15,15 @@ RUN apt-get update && \
     curl \
     ca-certificates \
     git \
+    gh \
     gnupg \
     dnsutils \
     net-tools \
     netcat-openbsd \
     gosu \
     libcap2-bin && \
+    # Prefer system binaries over runner toolcache (e.g., act images) for Node checks.
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" && \
     # Install Node.js 22 from NodeSource
     # Check if Node.js 22 is already installed (common in runner images)
     if ! command -v node >/dev/null 2>&1 || ! node --version | grep -qE '^v22\.'; then \
@@ -39,8 +42,20 @@ RUN apt-get update && \
 # and prevents file ownership issues with mounted volumes
 ARG USER_UID=1000
 ARG USER_GID=1000
-RUN groupadd -g ${USER_GID} awfuser && \
-    useradd -u ${USER_UID} -g ${USER_GID} -m -s /bin/bash awfuser && \
+RUN if ! getent group awfuser >/dev/null 2>&1; then \
+      if ! getent group ${USER_GID} >/dev/null 2>&1; then \
+        groupadd -g ${USER_GID} awfuser; \
+      else \
+        groupadd awfuser; \
+      fi; \
+    fi && \
+    if ! id -u awfuser >/dev/null 2>&1; then \
+      if ! getent passwd ${USER_UID} >/dev/null 2>&1; then \
+        useradd -u ${USER_UID} -g awfuser -m -s /bin/bash awfuser; \
+      else \
+        useradd -g awfuser -m -s /bin/bash awfuser; \
+      fi; \
+    fi && \
     # Create directories for awfuser
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser

@@ -105,16 +105,16 @@ export function isValidIPv6(ip: string): boolean {
  * Safe patterns for agent base images to prevent supply chain attacks.
  * Allows:
  * - Official Ubuntu images (ubuntu:XX.XX)
- * - catthehacker runner images (ghcr.io/catthehacker/ubuntu:runner-XX.XX or full-XX.XX)
+ * - catthehacker runner images (ghcr.io/catthehacker/ubuntu:runner-XX.XX, full-XX.XX, or act-XX.XX)
  * - Images with SHA256 digest pinning
  */
 const SAFE_BASE_IMAGE_PATTERNS = [
   // Official Ubuntu images (e.g., ubuntu:22.04, ubuntu:24.04)
   /^ubuntu:\d+\.\d+$/,
-  // catthehacker runner images (e.g., ghcr.io/catthehacker/ubuntu:runner-22.04)
-  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full)-\d+\.\d+$/,
+  // catthehacker runner images (e.g., ghcr.io/catthehacker/ubuntu:runner-22.04, act-24.04)
+  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full|act)-\d+\.\d+$/,
   // catthehacker images with SHA256 digest pinning
-  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full)-\d+\.\d+@sha256:[a-f0-9]{64}$/,
+  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full|act)-\d+\.\d+@sha256:[a-f0-9]{64}$/,
   // Official Ubuntu images with SHA256 digest pinning
   /^ubuntu:\d+\.\d+@sha256:[a-f0-9]{64}$/,
 ];
@@ -139,6 +139,7 @@ export function validateAgentBaseImage(image: string): { valid: boolean; error?:
       '  - ubuntu:XX.XX (e.g., ubuntu:22.04)\n' +
       '  - ghcr.io/catthehacker/ubuntu:runner-XX.XX\n' +
       '  - ghcr.io/catthehacker/ubuntu:full-XX.XX\n' +
+      '  - ghcr.io/catthehacker/ubuntu:act-XX.XX\n' +
       'Use @sha256:... suffix for digest-pinned versions.'
   };
 }
