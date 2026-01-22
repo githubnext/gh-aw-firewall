@@ -58,8 +58,8 @@ for i in $(seq 1 $MAX_ITERATIONS); do
     echo ""
 
     # Run Claude with the prompt
-    # Using --print to get output and --allowedTools to permit bash commands
-    OUTPUT=$(claude --print --allowedTools "Bash(gh:*)" "$(cat "$PROMPT_FILE")" 2>&1) || true
+    # Using --print to get output and piping prompt via stdin
+    OUTPUT=$(cat "$PROMPT_FILE" | claude --print --allowedTools "Bash(gh:*)" 2>&1) || true
 
     echo "$OUTPUT"
 
