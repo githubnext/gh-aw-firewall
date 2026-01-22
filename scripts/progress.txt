@@ -1,19 +1,22 @@
+## 2026-01-22 - Smoke Copilot Test Failures Investigation
 
-## 2026-01-22 Session
+### Task: Investigate smoke test failures in run #21231821036
 
-### Task: Monitor and verify CI checks for PR #356
+**Findings:**
+- Downloaded and analyzed workflow logs from GitHub Actions
+- GitHub MCP and Playwright MCP both failed with "missing_tool" errors
+- Root cause: MCP servers are configured to use Docker containers, but AWF removed Docker-in-Docker support in v0.9.1 (PR #205)
+- The `docker-stub.sh` inside the AWF agent container returns error code 127 for any Docker command
+- File Writing and Bash Tool tests passed because they don't require Docker
 
-**Initial State:**
-- PR #356 had a failing PR Title Check due to unknown scope "scripts"
-- Other checks (Smoke Claude, Smoke Copilot, Security Guard) were in progress
+**Conclusion:**
+- This is an architecture incompatibility, NOT a bug in gh-aw-firewall
+- The fix needs to be made in the gh-aw repository (the compiler that generates the workflow)
+- The smoke-copilot workflow needs to use MCP servers compatible with AWF sandbox (HTTP-based or MCP Gateway)
 
-**Actions Taken:**
-1. Checked PR status - found PR title had already been updated to use "ci" scope
-2. Monitored remaining checks until completion
-3. Verified all 35 CI checks passed
+**Actions:**
+- Updated PRD with complete root cause analysis
+- Documented that this is not fixable in this repository
+- Recommended tracking this as an issue in githubnext/gh-aw
 
-**Result:**
-- All CI checks are now GREEN ✅
-- PR is ready for review/merge
-
-**No code changes were required** - the PR title fix had already been applied in a previous session.
+**Status:** COMPLETE - Investigation finished, documented as environment issue
