@@ -34,11 +34,12 @@ RUN groupadd -g ${USER_GID} awfuser && \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script and PID logger
+# Copy iptables setup script, PID logger, and isolate script
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
+COPY isolate.sh /usr/local/bin/isolate.sh
+RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh /usr/local/bin/isolate.sh
 
 # Install Docker stub script that shows helpful error message
 # Docker-in-Docker support was removed in v0.9.1

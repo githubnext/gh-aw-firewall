@@ -357,8 +357,8 @@ export function generateDockerCompose(
     });
   } else {
     // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
-    logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
-    agentVolumes.unshift('/:/host:rw');
+    logger.debug('No custom mounts specified, using blanket /:/host:ro mount');
+    agentVolumes.unshift('/:/host:ro');
   }
 
   // Agent service configuration

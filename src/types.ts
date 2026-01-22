@@ -180,7 +180,7 @@ export interface WrapperConfig {
    * - 'host_path:container_path:rw' (read-write)
    *
    * These are in addition to essential mounts (Docker socket, HOME, /tmp).
-   * The blanket /:/host:rw mount is removed when custom mounts are specified.
+   * The blanket /:/host:ro mount is removed when custom mounts are specified.
    *
    * @example ['/workspace:/workspace:ro', '/data:/data:rw']
    */
