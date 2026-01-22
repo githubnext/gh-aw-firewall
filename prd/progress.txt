@@ -1,0 +1,18 @@
+# Progress: Fix Smoke Copilot Test Failures
+
+## 2026-01-22
+
+### Investigation Complete
+
+**Root cause identified**: The smoke-copilot workflow fails because the MCP Gateway is not being set up properly.
+
+**Key findings:**
+1. The `smoke-copilot.lock.yml` was compiled by gh-aw v0.36.0 but is missing the "Start MCP gateway" step
+2. The workflow tries to run GitHub MCP server via `docker run` inside the AWF container, which doesn't have Docker access
+3. The `release.lock.yml` workflow shows the correct pattern - it uses an MCP Gateway running on the host machine
+
+**Next steps:**
+- Need to recompile smoke-copilot.lock.yml with gh-aw that properly handles sandbox.mcp configuration
+- Or manually add the MCP Gateway step to smoke-copilot.lock.yml
+
+**Updated PRD** with detailed investigation results and resolution options.
