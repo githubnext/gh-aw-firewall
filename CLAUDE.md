@@ -53,6 +53,29 @@ This downloads artifacts to `./artifacts-run-$RUN_ID` for local examination. Req
 
 **Example:** The "Pool overlaps" Docker network error was reproduced locally, traced to orphaned networks from `timeout`-killed processes, fixed by adding pre-test cleanup in scripts, then verified before updating workflows.
 
+## Agentic Workflow Compilation
+
+This repository contains agentic workflow definitions (`.github/workflows/*.md`) that are compiled to GitHub Actions workflows (`.github/workflows/*.lock.yml`) using `gh-aw`.
+
+**IMPORTANT:** After compiling workflows with `gh aw compile`, always run `use-local-awf.sh` to transform the compiled files for local AWF testing:
+
+```bash
+# Compile all workflows
+gh aw compile .github/workflows/*.md
+
+# Transform compiled workflows to use local AWF build
+./scripts/use-local-awf.sh
+```
+
+The `use-local-awf.sh` script:
+- Replaces `--image-tag X.Y.Z` with `--build-local` in compiled workflows
+- Enables testing local AWF changes before releasing
+
+**Dry run mode** to preview changes without modifying files:
+```bash
+./scripts/use-local-awf.sh --dry-run
+```
+
 ## Development Commands
 
 ### Build and Testing
