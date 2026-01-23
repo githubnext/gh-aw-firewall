@@ -133,24 +133,25 @@ export async function initSslDb(workDir: string): Promise<string> {
   const indexPath = path.join(sslDbPath, 'index.txt');
   const sizePath = path.join(sslDbPath, 'size');
 
-  // Create the database structure
+  // Create the database structure with permissions that allow the Squid container's
+  // proxy user (UID 13, GID 13) to read and write
   if (!fs.existsSync(sslDbPath)) {
-    fs.mkdirSync(sslDbPath, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(sslDbPath, { recursive: true, mode: 0o777 });
   }
 
   // Create certs subdirectory
   if (!fs.existsSync(certsPath)) {
-    fs.mkdirSync(certsPath, { mode: 0o700 });
+    fs.mkdirSync(certsPath, { mode: 0o777 });
   }
 
   // Create index.txt (empty file for certificate index)
   if (!fs.existsSync(indexPath)) {
-    fs.writeFileSync(indexPath, '', { mode: 0o600 });
+    fs.writeFileSync(indexPath, '', { mode: 0o666 });
   }
 
   // Create size file (tracks current DB size, starts at 0)
   if (!fs.existsSync(sizePath)) {
-    fs.writeFileSync(sizePath, '0\n', { mode: 0o600 });
+    fs.writeFileSync(sizePath, '0\n', { mode: 0o666 });
   }
 
   logger.debug(`SSL certificate database initialized at: ${sslDbPath}`);

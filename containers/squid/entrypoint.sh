@@ -1,23 +1,21 @@
 #!/bin/bash
 set -e
 
-# Fix permissions on mounted log directory
-# The directory is mounted from the host and may have wrong ownership
-chown -R proxy:proxy /var/log/squid
-chmod -R 755 /var/log/squid
+# Note: This container runs as the non-root 'proxy' user (UID 13, GID 13)
+# The host creates directories with 0o777 permissions to allow the proxy user to write
+# No chown/chmod commands are needed, improving security by eliminating root access
 
-# Fix permissions on SSL certificate database if SSL Bump is enabled
-# The database is initialized on the host side by awf, but the permissions
-# need to be fixed for the proxy user inside the container.
-if [ -d "/var/spool/squid_ssl_db" ]; then
-  echo "[squid-entrypoint] SSL Bump mode detected - fixing SSL database permissions..."
-
-  # Fix ownership for Squid (runs as proxy user)
-  chown -R proxy:proxy /var/spool/squid_ssl_db
-  chmod -R 700 /var/spool/squid_ssl_db
-
-  echo "[squid-entrypoint] SSL certificate database ready"
+# Verify we're running as the proxy user
+CURRENT_USER=$(id -un)
+if [ "$CURRENT_USER" != "proxy" ]; then
+  echo "[squid-entrypoint][ERROR] Container must run as 'proxy' user, currently: $CURRENT_USER"
+  exit 1
 fi
 
-# Start Squid
+# Log SSL Bump status if enabled
+if [ -d "/var/spool/squid_ssl_db" ]; then
+  echo "[squid-entrypoint] SSL Bump mode detected - using SSL certificate database"
+fi
+
+# Start Squid (runs as proxy user)
 exec squid -N -d 1

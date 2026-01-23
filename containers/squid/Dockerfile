@@ -12,8 +12,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create log directory and SSL database directory
-RUN mkdir -p /var/log/squid && \
-    chown -R proxy:proxy /var/log/squid
+# Also ensure /run is writable by proxy user for PID file
+RUN mkdir -p /var/log/squid /run && \
+    chown -R proxy:proxy /var/log/squid /run
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -23,5 +24,10 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 3128
 EXPOSE 3129
 
-# Use entrypoint to fix permissions before starting Squid
+# Switch to non-root proxy user for improved security
+# The proxy user (UID 13, GID 13) is created by the ubuntu/squid base image
+# Host directories are created with 0o777 permissions to allow the proxy user to write
+USER proxy
+
+# Use entrypoint to start Squid
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
