@@ -219,7 +219,7 @@ Working directory inside the container.
 
 ### `--dns-servers <servers>`
 
-Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to these servers, preventing DNS-based data exfiltration. Both IPv4 and IPv6 addresses are supported.
+Comma-separated list of DNS servers to configure in the container's `/etc/resolv.conf`. Both IPv4 and IPv6 addresses are supported.
 
 ```bash
 # Use Cloudflare DNS
@@ -228,6 +228,12 @@ Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to 
 # Use Google DNS with IPv6
 --dns-servers 8.8.8.8,2001:4860:4860::8888
 ```
+
+:::caution[IP-based filtering not yet implemented]
+Currently, this flag only configures which DNS servers the container *uses by default*. Applications that bypass `/etc/resolv.conf` and query DNS servers directly can still reach any DNS server.
+
+DNS IP-based filtering (blocking queries to non-specified servers) is planned in [issue #9](https://github.com/githubnext/gh-aw-firewall/issues/9).
+:::
 
 :::note
 Docker's embedded DNS (127.0.0.11) is always allowed for container name resolution, regardless of this setting.

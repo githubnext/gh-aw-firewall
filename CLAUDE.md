@@ -219,22 +219,23 @@ Containers stopped, temporary files cleaned up
 
 ## DNS Configuration
 
-DNS traffic is restricted to trusted DNS servers only to prevent DNS-based data exfiltration:
+The `--dns-servers` flag configures which DNS servers are used by the container's resolver, but DNS queries are not currently restricted by destination IP address.
 
 - **CLI Option**: `--dns-servers <servers>` (comma-separated list of IP addresses)
 - **Default**: Google DNS (`8.8.8.8,8.8.4.4`)
 - **IPv6 Support**: Both IPv4 and IPv6 DNS servers are supported
 - **Docker DNS**: `127.0.0.11` is always allowed for container name resolution
 
-**Implementation**:
-- Host-level iptables (`src/host-iptables.ts`): DNS traffic to non-whitelisted servers is blocked
-- Container NAT rules (`containers/agent/setup-iptables.sh`): Reads from `AWF_DNS_SERVERS` env var
-- Container DNS config (`containers/agent/entrypoint.sh`): Configures `/etc/resolv.conf`
+**Current Behavior**:
+- Container DNS config (`containers/agent/entrypoint.sh`): Configures `/etc/resolv.conf` with specified servers
 - Docker Compose (`src/docker-manager.ts`): Sets container `dns:` config and `AWF_DNS_SERVERS` env var
+- **Note**: Applications that bypass `/etc/resolv.conf` and query DNS servers directly (e.g., `dig @1.1.1.1`) can reach any DNS server, not just those specified via `--dns-servers`
+
+**Limitation**: DNS IP-based filtering is not currently implemented. See issue [#9](https://github.com/githubnext/gh-aw-firewall/issues/9) for planned implementation.
 
 **Example**:
 ```bash
-# Use Cloudflare DNS instead of Google DNS
+# Configure container to use Cloudflare DNS for standard lookups
 sudo awf --allow-domains github.com --dns-servers 1.1.1.1,1.0.0.1 -- curl https://api.github.com
 ```
 
