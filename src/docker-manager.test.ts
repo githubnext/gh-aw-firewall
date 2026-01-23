@@ -270,8 +270,8 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should NOT include blanket /:/host:ro mount
-      expect(volumes).not.toContain('/:/host:ro');
+      // Should STILL include /:/host:ro mount for chroot functionality
+      expect(volumes).toContain('/:/host:ro');
 
       // Should include custom mounts
       expect(volumes).toContain('/workspace:/workspace:ro');
@@ -282,12 +282,12 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
-    it('should use blanket mount when no custom mounts specified', () => {
+    it('should always include /:/host:ro mount for chroot functionality', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should include blanket /:/host:ro mount
+      // Should include /:/host:ro mount
       expect(volumes).toContain('/:/host:ro');
     });
 

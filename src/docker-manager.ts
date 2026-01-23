@@ -355,11 +355,12 @@ export function generateDockerCompose(
     config.volumeMounts.forEach(mount => {
       agentVolumes.push(mount);
     });
-  } else {
-    // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
-    logger.debug('No custom mounts specified, using blanket /:/host:ro mount');
-    agentVolumes.unshift('/:/host:ro');
   }
+
+  // Always include /:/host:ro mount for isolate.sh chroot functionality
+  // This is added regardless of custom mounts to ensure commands can fall back to host binaries
+  logger.debug('Adding /:/host:ro mount for chroot functionality');
+  agentVolumes.unshift('/:/host:ro');
 
   // Agent service configuration
   const agentService: any = {
