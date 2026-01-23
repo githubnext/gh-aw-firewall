@@ -140,5 +140,6 @@ echo ""
 # The order of operations:
 # 1. capsh drops CAP_NET_ADMIN from the bounding set (cannot be regained)
 # 2. gosu switches to awfuser (drops root privileges)
-# 3. exec replaces the current process with the user command
-exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser $(printf '%q ' "$@")"
+# 3. isolate.sh wraps the command, falling back to host chroot if binary not in container PATH
+# 4. exec replaces the current process with the user command
+exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser /usr/local/bin/isolate.sh $(printf '%q ' "$@")"
