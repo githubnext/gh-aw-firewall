@@ -122,6 +122,39 @@ jobs:
             --type spdxjson \
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
+      # Build agent-act image with catthehacker/ubuntu:act-24.04 base for GitHub Actions parity
+      - name: Build and push Agent-Act image
+        id: build_agent_act
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/agent
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent-act:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/agent-act:latest
+          build-args: |
+            BASE_IMAGE=ghcr.io/catthehacker/ubuntu:act-24.04
+          no-cache: true
+
+      - name: Sign Agent-Act image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
+
+      - name: Generate SBOM for Agent-Act image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
+          format: spdx-json
+          output-file: agent-act-sbom.spdx.json
+
+      - name: Attest SBOM for Agent-Act image
+        run: |
+          cosign attest --yes \
+            --predicate agent-act-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
+
       - name: Install pkg for binary creation
         run: npm install -g pkg
 
