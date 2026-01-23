@@ -64,7 +64,8 @@ Once the workflow completes:
 3. Go to **Packages** page (in repository)
 4. Verify Docker images are published:
    - `squid:<version>` and `squid:latest`
-   - `copilot:<version>` and `copilot:latest`
+   - `agent:<version>` and `agent:latest`
+   - `agent-act:<version>` and `agent-act:latest` (GitHub Actions parity image)
 
 ## Manual Release
 
@@ -89,9 +90,12 @@ Each release includes:
 ### GitHub Container Registry (GHCR)
 Docker images are published to `ghcr.io/githubnext/gh-aw-firewall`:
 - `squid:<version>` and `squid:latest` - Squid proxy container
-- `agent:<version>` and `agent:latest` - Agent execution environment
+- `agent:<version>` and `agent:latest` - Agent execution environment (minimal, ~200MB)
+- `agent-act:<version>` and `agent-act:latest` - Agent with GitHub Actions parity (~2GB)
 
 These images are automatically pulled by the CLI when running commands.
+
+The `agent-act` image is used when running with `--agent-image act` for workflows that need closer parity with GitHub Actions runner environments.
 
 ## Testing a Release Locally
 
