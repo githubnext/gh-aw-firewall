@@ -419,8 +419,15 @@ export function generateDockerCompose(
   }
 
   // Use GHCR image or build locally
-  if (useGHCR) {
-    agentService.image = `${registry}/agent:${tag}`;
+  // For presets ('default', 'act'), use GHCR images
+  // For custom images, build locally with the custom base image
+  const agentImage = config.agentImage || 'default';
+  const isPreset = agentImage === 'default' || agentImage === 'act';
+  
+  if (useGHCR && isPreset) {
+    // Use pre-built GHCR image based on preset
+    const imageName = agentImage === 'act' ? 'agent-act' : 'agent';
+    agentService.image = `${registry}/${imageName}:${tag}`;
   } else {
     const buildArgs: Record<string, string> = {
       // Pass host UID/GID to match file ownership in container
@@ -429,10 +436,15 @@ export function generateDockerCompose(
       USER_GID: getSafeHostGid(),
     };
 
-    // Allow custom base image for closer parity with GitHub Actions runner
-    if (config.agentBaseImage) {
-      buildArgs.BASE_IMAGE = config.agentBaseImage;
+    // For custom images (not presets), pass as BASE_IMAGE build arg
+    // For 'act' preset with --build-local, use the act base image
+    if (!isPreset) {
+      buildArgs.BASE_IMAGE = agentImage;
+    } else if (agentImage === 'act') {
+      // When building locally with 'act' preset, use the catthehacker act image
+      buildArgs.BASE_IMAGE = 'ghcr.io/catthehacker/ubuntu:act-24.04';
     }
+    // For 'default' preset with --build-local, use the Dockerfile's default (ubuntu:22.04)
 
     agentService.build = {
       context: path.join(projectRoot, 'containers/agent'),

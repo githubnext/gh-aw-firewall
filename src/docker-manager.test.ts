@@ -205,50 +205,79 @@ describe('docker-manager', () => {
       expect(result.services.agent.image).toBeUndefined();
     });
 
-    it('should pass BASE_IMAGE build arg when agentBaseImage is specified', () => {
-      const customBaseImageConfig = {
+    it('should pass BASE_IMAGE build arg when custom agentImage is specified with --build-local', () => {
+      const customImageConfig = {
         ...mockConfig,
         buildLocal: true,
-        agentBaseImage: 'ghcr.io/catthehacker/ubuntu:runner-22.04',
+        agentImage: 'ghcr.io/catthehacker/ubuntu:runner-22.04',
       };
-      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+      const result = generateDockerCompose(customImageConfig, mockNetworkConfig);
 
       expect(result.services.agent.build).toBeDefined();
       expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:runner-22.04');
     });
 
-    it('should not include BASE_IMAGE build arg when using default ubuntu:22.04', () => {
-      const localConfig = { ...mockConfig, buildLocal: true };
+    it('should not include BASE_IMAGE build arg when using default agentImage with --build-local', () => {
+      const localConfig = { ...mockConfig, buildLocal: true, agentImage: 'default' };
       const result = generateDockerCompose(localConfig, mockNetworkConfig);
 
       expect(result.services.agent.build).toBeDefined();
-      // BASE_IMAGE should not be set when using the default (undefined or 'ubuntu:22.04')
+      // BASE_IMAGE should not be set when using the default preset
       expect(result.services.agent.build?.args?.BASE_IMAGE).toBeUndefined();
     });
 
-    it('should pass BASE_IMAGE build arg when agentBaseImage with SHA256 digest is specified', () => {
-      const customBaseImageConfig = {
+    it('should pass BASE_IMAGE build arg when agentImage with SHA256 digest is specified', () => {
+      const customImageConfig = {
         ...mockConfig,
         buildLocal: true,
-        agentBaseImage: 'ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1',
+        agentImage: 'ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1',
       };
-      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+      const result = generateDockerCompose(customImageConfig, mockNetworkConfig);
 
       expect(result.services.agent.build).toBeDefined();
       expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1');
     });
 
-    it('should not pass BASE_IMAGE when agentBaseImage is explicitly set to default ubuntu:22.04', () => {
-      const customBaseImageConfig = {
+    it('should use act base image when agentImage is "act" preset with --build-local', () => {
+      const actPresetConfig = {
         ...mockConfig,
         buildLocal: true,
-        agentBaseImage: 'ubuntu:22.04',
+        agentImage: 'act',
       };
-      const result = generateDockerCompose(customBaseImageConfig, mockNetworkConfig);
+      const result = generateDockerCompose(actPresetConfig, mockNetworkConfig);
 
       expect(result.services.agent.build).toBeDefined();
-      // The code only sets BASE_IMAGE if agentBaseImage is defined (truthy), so ubuntu:22.04 would be set
-      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ubuntu:22.04');
+      // When using 'act' preset with --build-local, should use the catthehacker act image
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:act-24.04');
+    });
+
+    it('should use agent-act GHCR image when agentImage is "act" preset without --build-local', () => {
+      const actPresetConfig = {
+        ...mockConfig,
+        agentImage: 'act',
+      };
+      const result = generateDockerCompose(actPresetConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(result.services.agent.build).toBeUndefined();
+    });
+
+    it('should use agent GHCR image when agentImage is "default" preset', () => {
+      const defaultPresetConfig = {
+        ...mockConfig,
+        agentImage: 'default',
+      };
+      const result = generateDockerCompose(defaultPresetConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.build).toBeUndefined();
+    });
+
+    it('should use agent GHCR image when agentImage is undefined', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.build).toBeUndefined();
     });
 
     it('should use custom registry and tag', () => {

@@ -148,20 +148,22 @@ export interface WrapperConfig {
   buildLocal?: boolean;
 
   /**
-   * Base image for the agent container when building locally
-   * 
-   * Allows customization of the agent container base image for closer parity
-   * with GitHub Actions runner environments. Only used when buildLocal is true.
-   * 
-   * Options:
-   * - 'ubuntu:22.04' (default): Minimal image, smallest size (~200MB)
-   * - 'ghcr.io/catthehacker/ubuntu:runner-22.04': Closer to GitHub Actions runner (~2-5GB)
-   * - 'ghcr.io/catthehacker/ubuntu:full-22.04': Near-identical to GitHub Actions runner (~20GB compressed)
-   * 
-   * @default 'ubuntu:22.04'
+   * Agent container image preset or custom base image
+   *
+   * Presets (pre-built, fast startup):
+   * - 'default' or undefined: Minimal ubuntu:22.04 (~200MB) - uses GHCR agent:tag
+   * - 'act': GitHub Actions parity (~2GB) - uses GHCR agent-act:tag
+   *
+   * Custom base images (require --build-local):
+   * - 'ubuntu:XX.XX': Official Ubuntu image
+   * - 'ghcr.io/catthehacker/ubuntu:runner-XX.XX': Closer to GitHub Actions runner (~2-5GB)
+   * - 'ghcr.io/catthehacker/ubuntu:full-XX.XX': Near-identical to GitHub Actions runner (~20GB)
+   *
+   * @default 'default'
+   * @example 'act'
    * @example 'ghcr.io/catthehacker/ubuntu:runner-22.04'
    */
-  agentBaseImage?: string;
+  agentImage?: 'default' | 'act' | string;
 
   /**
    * Additional environment variables to pass to the agent execution container
