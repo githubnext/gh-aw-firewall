@@ -793,10 +793,16 @@ describe('cli', () => {
         expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-24.04')).toEqual({ valid: true });
       });
 
+      it('should accept catthehacker act images', () => {
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:act-22.04')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:act-24.04')).toEqual({ valid: true });
+      });
+
       it('should accept images with SHA256 digest pinning', () => {
         expect(validateAgentBaseImage('ubuntu:22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
         expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
         expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:act-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1')).toEqual({ valid: true });
       });
     });
 
@@ -873,6 +879,7 @@ describe('cli', () => {
         expect(result.error).toContain('ubuntu:XX.XX');
         expect(result.error).toContain('ghcr.io/catthehacker/ubuntu:runner-XX.XX');
         expect(result.error).toContain('ghcr.io/catthehacker/ubuntu:full-XX.XX');
+        expect(result.error).toContain('ghcr.io/catthehacker/ubuntu:act-XX.XX');
         expect(result.error).toContain('@sha256:');
       });
     });
@@ -884,15 +891,17 @@ describe('cli', () => {
         expect(validateAgentBaseImage('ubuntu:26.10')).toEqual({ valid: true });
       });
 
-      it('should match pattern 2: catthehacker runner/full without digest', () => {
+      it('should match pattern 2: catthehacker runner/full/act without digest', () => {
         expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:runner-18.04')).toEqual({ valid: true });
         expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:full-26.10')).toEqual({ valid: true });
+        expect(validateAgentBaseImage('ghcr.io/catthehacker/ubuntu:act-22.04')).toEqual({ valid: true });
       });
 
       it('should match pattern 3: catthehacker with SHA256 digest', () => {
         const digest = 'sha256:' + '1234567890abcdef'.repeat(4);
         expect(validateAgentBaseImage(`ghcr.io/catthehacker/ubuntu:runner-22.04@${digest}`)).toEqual({ valid: true });
         expect(validateAgentBaseImage(`ghcr.io/catthehacker/ubuntu:full-24.04@${digest}`)).toEqual({ valid: true });
+        expect(validateAgentBaseImage(`ghcr.io/catthehacker/ubuntu:act-22.04@${digest}`)).toEqual({ valid: true });
       });
 
       it('should match pattern 4: plain ubuntu with SHA256 digest', () => {
