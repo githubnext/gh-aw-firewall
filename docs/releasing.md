@@ -147,7 +147,6 @@ sudo ./dist/cli.js \
    - Docker build errors: Test image builds locally in `containers/` directories
    - GHCR push errors: Ensure `packages: write` permission is granted
    - Permission errors: Ensure repository has `contents: write` permission
-   - Missing `actions/setup`: The githubnext org workflow requires the `actions/setup` directory (synced from gh-aw repo)
 
 ### Binary doesn't work
 
