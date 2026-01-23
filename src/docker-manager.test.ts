@@ -47,6 +47,16 @@ describe('docker-manager', () => {
     });
   });
 
+  describe('ACT_PRESET_BASE_IMAGE', () => {
+    it('should be a valid catthehacker act image', () => {
+      expect(ACT_PRESET_BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:act-24.04');
+    });
+
+    it('should match expected pattern for catthehacker images', () => {
+      expect(ACT_PRESET_BASE_IMAGE).toMatch(/^ghcr\.io\/catthehacker\/ubuntu:act-\d+\.\d+$/);
+    });
+  });
+
   describe('validateIdNotInSystemRange', () => {
     it('should return 1000 for system UIDs (0-999)', () => {
       expect(validateIdNotInSystemRange(0)).toBe('1000');
@@ -226,6 +236,16 @@ describe('docker-manager', () => {
       expect(result.services.agent.build?.args?.BASE_IMAGE).toBeUndefined();
     });
 
+    it('should not include BASE_IMAGE build arg when agentImage is undefined with --build-local', () => {
+      const localConfig = { ...mockConfig, buildLocal: true };
+      // agentImage is not set, should default to 'default' preset
+      const result = generateDockerCompose(localConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      // BASE_IMAGE should not be set when using the default (undefined means 'default')
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBeUndefined();
+    });
+
     it('should pass BASE_IMAGE build arg when agentImage with SHA256 digest is specified', () => {
       const customImageConfig = {
         ...mockConfig,
@@ -278,6 +298,19 @@ describe('docker-manager', () => {
 
       expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
       expect(result.services.agent.build).toBeUndefined();
+    });
+
+    it('should use custom registry and tag with act preset', () => {
+      const customConfig = {
+        ...mockConfig,
+        agentImage: 'act',
+        imageRegistry: 'docker.io/myrepo',
+        imageTag: 'v1.0.0',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services['squid-proxy'].image).toBe('docker.io/myrepo/squid:v1.0.0');
+      expect(result.services.agent.image).toBe('docker.io/myrepo/agent-act:v1.0.0');
     });
 
     it('should use custom registry and tag', () => {

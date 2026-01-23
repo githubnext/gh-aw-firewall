@@ -908,10 +908,23 @@ describe('cli', () => {
         expect(result.error).toContain('Invalid agent image');
       });
 
+      it('should reject SHA256 digest with uppercase hex', () => {
+        const result = validateAgentImage('ubuntu:22.04@sha256:A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid agent image');
+      });
+
       it('should reject image with path traversal attempt', () => {
         const result = validateAgentImage('../ubuntu:22.04');
         expect(result.valid).toBe(false);
         expect(result.error).toContain('Invalid agent image');
+      });
+
+      it('should reject similar but invalid registry paths', () => {
+        // Similar to ghcr.io/catthehacker but different
+        expect(validateAgentImage('ghcr.io/catthehacker2/ubuntu:runner-22.04').valid).toBe(false);
+        expect(validateAgentImage('ghcr.io/catthehackerubuntu:runner-22.04').valid).toBe(false);
+        expect(validateAgentImage('ghcr.io/cat-the-hacker/ubuntu:runner-22.04').valid).toBe(false);
       });
 
       it('should provide helpful error message with allowed options including presets', () => {
