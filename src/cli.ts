@@ -102,6 +102,49 @@ export function isValidIPv6(ip: string): boolean {
 }
 
 /**
+ * Safe patterns for agent base images to prevent supply chain attacks.
+ * Allows:
+ * - Official Ubuntu images (ubuntu:XX.XX)
+ * - catthehacker runner images (ghcr.io/catthehacker/ubuntu:runner-XX.XX, full-XX.XX, or act-XX.XX)
+ * - Images with SHA256 digest pinning
+ */
+const SAFE_BASE_IMAGE_PATTERNS = [
+  // Official Ubuntu images (e.g., ubuntu:22.04, ubuntu:24.04)
+  /^ubuntu:\d+\.\d+$/,
+  // catthehacker runner images (e.g., ghcr.io/catthehacker/ubuntu:runner-22.04, act-24.04)
+  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full|act)-\d+\.\d+$/,
+  // catthehacker images with SHA256 digest pinning
+  /^ghcr\.io\/catthehacker\/ubuntu:(runner|full|act)-\d+\.\d+@sha256:[a-f0-9]{64}$/,
+  // Official Ubuntu images with SHA256 digest pinning
+  /^ubuntu:\d+\.\d+@sha256:[a-f0-9]{64}$/,
+];
+
+/**
+ * Validates that a base image is from an approved source to prevent supply chain attacks.
+ * @param image - Docker image reference to validate
+ * @returns Object with valid boolean and optional error message
+ */
+export function validateAgentBaseImage(image: string): { valid: boolean; error?: string } {
+  // Check against safe patterns
+  const isValid = SAFE_BASE_IMAGE_PATTERNS.some(pattern => pattern.test(image));
+  
+  if (isValid) {
+    return { valid: true };
+  }
+  
+  return {
+    valid: false,
+    error: `Invalid base image: "${image}". ` +
+      'For security, only approved base images are allowed:\n' +
+      '  - ubuntu:XX.XX (e.g., ubuntu:22.04)\n' +
+      '  - ghcr.io/catthehacker/ubuntu:runner-XX.XX\n' +
+      '  - ghcr.io/catthehacker/ubuntu:full-XX.XX\n' +
+      '  - ghcr.io/catthehacker/ubuntu:act-XX.XX\n' +
+      'Use @sha256:... suffix for digest-pinned versions.'
+  };
+}
+
+/**
  * Parses and validates DNS servers from a comma-separated string
  * @param input - Comma-separated DNS server string (e.g., "8.8.8.8,1.1.1.1")
  * @returns Array of validated DNS server IP addresses
@@ -343,6 +386,14 @@ program
     '--build-local',
     'Build containers locally instead of using GHCR images',
     false
+  )
+  .option(
+    '--agent-base-image <image>',
+    'Base image for agent container when using --build-local. Options:\n' +
+    '                                   ubuntu:22.04 (default): Minimal, ~200MB\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions, ~2-5GB\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions, ~20GB',
+    'ubuntu:22.04'
   )
   .option(
     '--image-registry <registry>',
@@ -617,6 +668,7 @@ program
       tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
+      agentBaseImage: options.agentBaseImage,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
@@ -630,6 +682,22 @@ program
       sslBump: options.sslBump,
       allowedUrls,
     };
+
+    // Validate and warn if using custom agent base image
+    if (options.agentBaseImage && options.agentBaseImage !== 'ubuntu:22.04') {
+      // Validate against approved base images for supply chain security
+      const validation = validateAgentBaseImage(options.agentBaseImage);
+      if (!validation.valid) {
+        logger.error(validation.error!);
+        process.exit(1);
+      }
+      
+      if (options.buildLocal) {
+        logger.info(`Using custom agent base image: ${options.agentBaseImage}`);
+      } else {
+        logger.warn('⚠️  --agent-base-image is only used with --build-local. Ignoring.');
+      }
+    }
 
     // Warn if --env-all is used
     if (config.envAll) {

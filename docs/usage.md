@@ -25,6 +25,9 @@ Options:
   --env-all                  Pass all host environment variables to container
   -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
   --tty                      Allocate a pseudo-TTY for interactive tools
+  --build-local              Build containers locally instead of using GHCR images
+  --agent-base-image <image> Base image for agent container (requires --build-local)
+                             See "Agent Base Image" section for available options
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
@@ -341,6 +344,102 @@ SSL Bump requires intercepting HTTPS traffic:
 - Traffic is re-encrypted between proxy and destination
 
 For more details, see [SSL Bump documentation](ssl-bump.md).
+
+## Agent Base Image (GitHub Actions Parity)
+
+By default, the agent container uses `ubuntu:22.04`, a minimal image optimized for size (~200MB). When you need closer parity with GitHub Actions runner environments, you can specify an alternative base image.
+
+### Available Base Images
+
+| Image | Size | Description |
+|-------|------|-------------|
+| `ubuntu:22.04` (default) | ~200MB | Minimal Ubuntu, smallest footprint |
+| `ghcr.io/catthehacker/ubuntu:runner-22.04` | ~2-5GB | Medium image with common tools, closer to GitHub Actions |
+| `ghcr.io/catthehacker/ubuntu:full-22.04` | ~20GB compressed | Near-identical to GitHub Actions runner |
+
+### Usage
+
+The `--agent-base-image` flag requires `--build-local` since it customizes the container build:
+
+```bash
+# Use runner image for better GitHub Actions compatibility
+sudo awf \
+  --build-local \
+  --agent-base-image ghcr.io/catthehacker/ubuntu:runner-22.04 \
+  --allow-domains github.com \
+  -- your-command
+
+# Use full image for maximum parity (large download, ~20GB)
+sudo awf \
+  --build-local \
+  --agent-base-image ghcr.io/catthehacker/ubuntu:full-22.04 \
+  --allow-domains github.com \
+  -- your-command
+```
+
+### When to Use Custom Base Images
+
+**Use `ubuntu:22.04` (default) when:**
+- Fast startup time is important
+- Minimal container size is preferred
+- Your commands only need basic tools (curl, git, Node.js, Docker CLI)
+
+**Use `runner-22.04` when:**
+- You need tools commonly available in GitHub Actions (multiple Python versions, Go, Java, etc.)
+- Commands fail due to missing dependencies
+- Moderate GitHub Actions parity is needed
+
+**Use `full-22.04` when:**
+- Maximum GitHub Actions parity is required
+- You need specific tools only available in the full runner image
+- Download time and disk space are not concerns
+
+### Security Considerations
+
+**⚠️ IMPORTANT:** Custom base images introduce supply chain risk. When using third-party images:
+
+1. **Verify image sources** - Only use images from trusted publishers. The `catthehacker` images are community-maintained and not officially supported by GitHub.
+
+2. **Review image contents** - Understand what tools and configurations are included. Third-party images may contain pre-installed software that could behave unexpectedly.
+
+3. **Pin specific versions** - Use image digests (e.g., `@sha256:...`) instead of mutable tags to prevent tag manipulation:
+   ```bash
+   --agent-base-image ghcr.io/catthehacker/ubuntu@sha256:abc123...
+   ```
+
+4. **Monitor for vulnerabilities** - Third-party images may not receive timely security updates compared to official images.
+
+**Existing security controls remain in effect:**
+- Host-level iptables (DOCKER-USER chain) enforce egress filtering regardless of container contents
+- Squid proxy enforces domain allowlist at L7
+- NET_ADMIN capability is dropped before user command execution
+- Seccomp profile blocks dangerous syscalls
+- `no-new-privileges` prevents privilege escalation
+
+**For maximum security, use the default `ubuntu:22.04` image.** Custom base images are recommended only when you trust the image publisher and the benefits outweigh the supply chain risks.
+
+### Pre-installed Tools
+
+The default `ubuntu:22.04` image includes:
+- Node.js 22
+- Docker CLI
+- curl, git, iptables
+- CA certificates
+- Network utilities (dnsutils, net-tools, netcat)
+
+When using runner images, you get additional tools like:
+- Multiple Python, Node.js, Go, Ruby versions
+- Build tools (make, cmake, gcc)
+- AWS CLI, Azure CLI, GitHub CLI
+- Container tools (docker, buildx)
+- And many more (see [catthehacker/docker_images](https://github.com/catthehacker/docker_images))
+
+### Notes
+
+- Custom base images only work with `--build-local` (not GHCR images)
+- First build with a new base image will take longer (downloading the image)
+- Subsequent builds use Docker cache and are faster
+- The `full-22.04` image requires significant disk space (~60GB extracted)
 
 ## Limitations
 
