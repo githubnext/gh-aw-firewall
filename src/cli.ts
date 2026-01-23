@@ -128,8 +128,7 @@ const SAFE_BASE_IMAGE_PATTERNS = [
  * Checks if the given value is a preset name (default, act)
  */
 export function isAgentImagePreset(value: string | undefined): value is 'default' | 'act' {
-  if (!value) return false;
-  return AGENT_IMAGE_PRESETS.includes(value as 'default' | 'act');
+  return value === 'default' || value === 'act';
 }
 
 /**
@@ -688,25 +687,24 @@ program
 
     // Validate agent image option
     const agentImage = options.agentImage || 'default';
-    if (agentImage !== 'default') {
-      // Validate the image value (preset or custom)
-      const validation = validateAgentImage(agentImage);
-      if (!validation.valid) {
-        logger.error(validation.error!);
+    
+    // Always validate the image (works for both presets and custom images)
+    const validation = validateAgentImage(agentImage);
+    if (!validation.valid) {
+      logger.error(validation.error!);
+      process.exit(1);
+    }
+    
+    // Custom images (not presets) require --build-local
+    if (!isAgentImagePreset(agentImage)) {
+      if (!options.buildLocal) {
+        logger.error('❌ Custom agent images require --build-local flag');
+        logger.error('   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...');
         process.exit(1);
       }
-      
-      // Custom images (not presets) require --build-local
-      if (!isAgentImagePreset(agentImage)) {
-        if (!options.buildLocal) {
-          logger.error('❌ Custom agent images require --build-local flag');
-          logger.error('   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...');
-          process.exit(1);
-        }
-        logger.info(`Using custom agent base image: ${agentImage}`);
-      } else if (agentImage === 'act') {
-        logger.info('Using agent image preset: act (GitHub Actions parity)');
-      }
+      logger.info(`Using custom agent base image: ${agentImage}`);
+    } else if (agentImage === 'act') {
+      logger.info('Using agent image preset: act (GitHub Actions parity)');
     }
 
     const config: WrapperConfig = {
