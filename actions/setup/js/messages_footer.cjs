@@ -1,0 +1,269 @@
+// @ts-check
+/// <reference types="@actions/github-script" />
+
+/**
+ * Footer Message Module
+ *
+ * This module provides footer and installation instructions generation
+ * for safe-output workflows.
+ */
+
+const { getMessages, renderTemplate, toSnakeCase } = require("./messages_core.cjs");
+const { getMissingInfoSections } = require("./missing_messages_helper.cjs");
+
+/**
+ * @typedef {Object} FooterContext
+ * @property {string} workflowName - Name of the workflow
+ * @property {string} runUrl - URL of the workflow run
+ * @property {string} [workflowSource] - Source of the workflow (owner/repo/path@ref)
+ * @property {string} [workflowSourceUrl] - GitHub URL for the workflow source
+ * @property {number|string} [triggeringNumber] - Issue, PR, or discussion number that triggered this workflow
+ */
+
+/**
+ * Get the footer message, using custom template if configured.
+ * @param {FooterContext} ctx - Context for footer generation
+ * @returns {string} Footer message
+ */
+function getFooterMessage(ctx) {
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default footer template - pirate themed! 🏴‍☠️
+  const defaultFooter = "> Ahoy! This treasure was crafted by [🏴‍☠️ {workflow_name}]({run_url})";
+
+  // Use custom footer if configured
+  let footer = messages?.footer ? renderTemplate(messages.footer, templateContext) : renderTemplate(defaultFooter, templateContext);
+
+  // Add triggering reference if available
+  if (ctx.triggeringNumber) {
+    footer += ` fer issue #{triggering_number} 🗺️`.replace("{triggering_number}", String(ctx.triggeringNumber));
+  }
+
+  return footer;
+}
+
+/**
+ * Get the footer installation instructions, using custom template if configured.
+ * @param {FooterContext} ctx - Context for footer generation
+ * @returns {string} Footer installation message or empty string if no source
+ */
+function getFooterInstallMessage(ctx) {
+  if (!ctx.workflowSource || !ctx.workflowSourceUrl) {
+    return "";
+  }
+
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default installation template - pirate themed! 🏴‍☠️
+  const defaultInstall = "> Arr! To plunder this workflow fer yer own ship, run `gh aw add {workflow_source}`. Chart yer course at [🦜 {workflow_source_url}]({workflow_source_url})!";
+
+  // Use custom installation message if configured
+  return messages?.footerInstall ? renderTemplate(messages.footerInstall, templateContext) : renderTemplate(defaultInstall, templateContext);
+}
+
+/**
+ * @typedef {Object} WorkflowRecompileContext
+ * @property {string} workflowName - Name of the workflow
+ * @property {string} runUrl - URL of the workflow run
+ * @property {string} repository - Repository name (owner/repo)
+ */
+
+/**
+ * Get the footer message for workflow recompile issues, using custom template if configured.
+ * @param {WorkflowRecompileContext} ctx - Context for footer generation
+ * @returns {string} Footer message for workflow recompile issues
+ */
+function getFooterWorkflowRecompileMessage(ctx) {
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default footer template - pirate themed! 🏴‍☠️
+  const defaultFooter = "> Ahoy! This treasure was crafted by [🏴‍☠️ {workflow_name}]({run_url})";
+
+  // Use custom workflow recompile footer if configured, otherwise use default footer
+  return messages?.footerWorkflowRecompile ? renderTemplate(messages.footerWorkflowRecompile, templateContext) : renderTemplate(defaultFooter, templateContext);
+}
+
+/**
+ * Get the footer message for comments on workflow recompile issues, using custom template if configured.
+ * @param {WorkflowRecompileContext} ctx - Context for footer generation
+ * @returns {string} Footer message for comments on workflow recompile issues
+ */
+function getFooterWorkflowRecompileCommentMessage(ctx) {
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default footer template - pirate themed! 🏴‍☠️
+  const defaultFooter = "> Ahoy! This update was brought to ye by [🏴‍☠️ {workflow_name}]({run_url})";
+
+  // Use custom workflow recompile comment footer if configured, otherwise use default footer
+  return messages?.footerWorkflowRecompileComment ? renderTemplate(messages.footerWorkflowRecompileComment, templateContext) : renderTemplate(defaultFooter, templateContext);
+}
+
+/**
+ * @typedef {Object} AgentFailureContext
+ * @property {string} workflowName - Name of the workflow
+ * @property {string} runUrl - URL of the workflow run
+ * @property {string} [workflowSource] - Source of the workflow (owner/repo/path@ref)
+ * @property {string} [workflowSourceUrl] - GitHub URL for the workflow source
+ */
+
+/**
+ * Get the footer message for agent failure tracking issues, using custom template if configured.
+ * @param {AgentFailureContext} ctx - Context for footer generation
+ * @returns {string} Footer message for agent failure tracking issues
+ */
+function getFooterAgentFailureIssueMessage(ctx) {
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default footer template with link to workflow run
+  const defaultFooter = "> Generated from [{workflow_name}]({run_url})";
+
+  // Use custom agent failure issue footer if configured, otherwise use default footer
+  return messages?.agentFailureIssue ? renderTemplate(messages.agentFailureIssue, templateContext) : renderTemplate(defaultFooter, templateContext);
+}
+
+/**
+ * Get the footer message for comments on agent failure tracking issues, using custom template if configured.
+ * @param {AgentFailureContext} ctx - Context for footer generation
+ * @returns {string} Footer message for comments on agent failure tracking issues
+ */
+function getFooterAgentFailureCommentMessage(ctx) {
+  const messages = getMessages();
+
+  // Create context with both camelCase and snake_case keys
+  const templateContext = toSnakeCase(ctx);
+
+  // Default footer template with link to workflow run
+  const defaultFooter = "> Generated from [{workflow_name}]({run_url})";
+
+  // Use custom agent failure comment footer if configured, otherwise use default footer
+  return messages?.agentFailureComment ? renderTemplate(messages.agentFailureComment, templateContext) : renderTemplate(defaultFooter, templateContext);
+}
+
+/**
+ * Generates an XML comment marker with agentic workflow metadata for traceability.
+ * This marker enables searching and tracing back items generated by an agentic workflow.
+ *
+ * The marker format is:
+ * <!-- gh-aw-agentic-workflow: workflow-name, gh-aw-tracker-id: id, engine: copilot, version: 1.0.0, model: gpt-5, run: https://github.com/... -->
+ *
+ * @param {string} workflowName - Name of the workflow
+ * @param {string} runUrl - URL of the workflow run
+ * @returns {string} XML comment marker with workflow metadata
+ */
+function generateXMLMarker(workflowName, runUrl) {
+  // Read engine metadata from environment variables
+  const engineId = process.env.GH_AW_ENGINE_ID || "";
+  const engineVersion = process.env.GH_AW_ENGINE_VERSION || "";
+  const engineModel = process.env.GH_AW_ENGINE_MODEL || "";
+  const trackerId = process.env.GH_AW_TRACKER_ID || "";
+
+  // Build the key-value pairs for the marker
+  const parts = [];
+
+  // Always include agentic-workflow name
+  parts.push(`gh-aw-agentic-workflow: ${workflowName}`);
+
+  // Add tracker-id if available (for searchability and tracing)
+  if (trackerId) {
+    parts.push(`gh-aw-tracker-id: ${trackerId}`);
+  }
+
+  // Add engine ID if available
+  if (engineId) {
+    parts.push(`engine: ${engineId}`);
+  }
+
+  // Add version if available
+  if (engineVersion) {
+    parts.push(`version: ${engineVersion}`);
+  }
+
+  // Add model if available
+  if (engineModel) {
+    parts.push(`model: ${engineModel}`);
+  }
+
+  // Always include run URL
+  parts.push(`run: ${runUrl}`);
+
+  // Return the XML comment marker
+  return `<!-- ${parts.join(", ")} -->`;
+}
+
+/**
+ * Generate the complete footer with AI attribution and optional installation instructions.
+ * This is a drop-in replacement for the original generateFooter function.
+ * @param {string} workflowName - Name of the workflow
+ * @param {string} runUrl - URL of the workflow run
+ * @param {string} workflowSource - Source of the workflow (owner/repo/path@ref)
+ * @param {string} workflowSourceURL - GitHub URL for the workflow source
+ * @param {number|undefined} triggeringIssueNumber - Issue number that triggered this workflow
+ * @param {number|undefined} triggeringPRNumber - Pull request number that triggered this workflow
+ * @param {number|undefined} triggeringDiscussionNumber - Discussion number that triggered this workflow
+ * @returns {string} Complete footer text
+ */
+function generateFooterWithMessages(workflowName, runUrl, workflowSource, workflowSourceURL, triggeringIssueNumber, triggeringPRNumber, triggeringDiscussionNumber) {
+  // Determine triggering number (issue takes precedence, then PR, then discussion)
+  let triggeringNumber;
+  if (triggeringIssueNumber) {
+    triggeringNumber = triggeringIssueNumber;
+  } else if (triggeringPRNumber) {
+    triggeringNumber = triggeringPRNumber;
+  } else if (triggeringDiscussionNumber) {
+    triggeringNumber = `discussion #${triggeringDiscussionNumber}`;
+  }
+
+  const ctx = {
+    workflowName,
+    runUrl,
+    workflowSource,
+    workflowSourceUrl: workflowSourceURL,
+    triggeringNumber,
+  };
+
+  let footer = "\n\n" + getFooterMessage(ctx);
+
+  // Add installation instructions if source is available
+  const installMessage = getFooterInstallMessage(ctx);
+  if (installMessage) {
+    footer += "\n>\n" + installMessage;
+  }
+
+  // Add missing tools and data sections if available
+  const missingInfoSections = getMissingInfoSections();
+  if (missingInfoSections) {
+    footer += missingInfoSections;
+  }
+
+  // Add XML comment marker for traceability
+  footer += "\n\n" + generateXMLMarker(workflowName, runUrl);
+
+  footer += "\n";
+  return footer;
+}
+
+module.exports = {
+  getFooterMessage,
+  getFooterInstallMessage,
+  getFooterWorkflowRecompileMessage,
+  getFooterWorkflowRecompileCommentMessage,
+  getFooterAgentFailureIssueMessage,
+  getFooterAgentFailureCommentMessage,
+  generateFooterWithMessages,
+  generateXMLMarker,
+};
