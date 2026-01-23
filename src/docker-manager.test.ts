@@ -238,6 +238,21 @@ describe('docker-manager', () => {
       expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:full-22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1');
     });
 
+    it('should use agent-act image when useAgentActImage is true', () => {
+      const actImageConfig = { ...mockConfig, useAgentActImage: true };
+      const result = generateDockerCompose(actImageConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(result.services.agent.build).toBeUndefined();
+    });
+
+    it('should use default agent image when useAgentActImage is false', () => {
+      const defaultConfig = { ...mockConfig, useAgentActImage: false };
+      const result = generateDockerCompose(defaultConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+    });
+
     it('should not pass BASE_IMAGE when agentBaseImage is explicitly set to default ubuntu:22.04', () => {
       const customBaseImageConfig = {
         ...mockConfig,

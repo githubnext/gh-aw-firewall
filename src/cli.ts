@@ -389,10 +389,12 @@ program
   )
   .option(
     '--agent-base-image <image>',
-    'Base image for agent container when using --build-local. Options:\n' +
+    'Base image for agent container. Options:\n' +
     '                                   ubuntu:22.04 (default): Minimal, ~200MB\n' +
-    '                                   ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions, ~2-5GB\n' +
-    '                                   ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions, ~20GB',
+    '                                   act: Pre-built image with GitHub Actions parity (uses GHCR agent-act image)\n' +
+    '                                   With --build-local, can also use:\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:runner-22.04: ~2-5GB\n' +
+    '                                   ghcr.io/catthehacker/ubuntu:full-22.04: ~20GB',
     'ubuntu:22.04'
   )
   .option(
@@ -683,19 +685,27 @@ program
       allowedUrls,
     };
 
-    // Validate and warn if using custom agent base image
+    // Validate and handle custom agent base image
     if (options.agentBaseImage && options.agentBaseImage !== 'ubuntu:22.04') {
-      // Validate against approved base images for supply chain security
-      const validation = validateAgentBaseImage(options.agentBaseImage);
-      if (!validation.valid) {
-        logger.error(validation.error!);
-        process.exit(1);
-      }
-      
-      if (options.buildLocal) {
-        logger.info(`Using custom agent base image: ${options.agentBaseImage}`);
+      // Special case: 'act' uses pre-built GHCR image (no --build-local needed)
+      if (options.agentBaseImage === 'act') {
+        config.useAgentActImage = true;
+        logger.info('Using pre-built agent-act image with GitHub Actions parity');
       } else {
-        logger.warn('⚠️  --agent-base-image is only used with --build-local. Ignoring.');
+        // Validate against approved base images for supply chain security
+        const validation = validateAgentBaseImage(options.agentBaseImage);
+        if (!validation.valid) {
+          logger.error(validation.error!);
+          process.exit(1);
+        }
+
+        if (options.buildLocal) {
+          logger.info(`Using custom agent base image: ${options.agentBaseImage}`);
+        } else {
+          logger.warn('⚠️  --agent-base-image requires --build-local for custom images.');
+          logger.warn('   Use --agent-base-image act for pre-built GitHub Actions parity image.');
+          process.exit(1);
+        }
       }
     }
 

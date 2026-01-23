@@ -420,7 +420,9 @@ export function generateDockerCompose(
 
   // Use GHCR image or build locally
   if (useGHCR) {
-    agentService.image = `${registry}/agent:${tag}`;
+    // Use agent-act image if requested for GitHub Actions parity
+    const agentImageName = config.useAgentActImage ? 'agent-act' : 'agent';
+    agentService.image = `${registry}/${agentImageName}:${tag}`;
   } else {
     const buildArgs: Record<string, string> = {
       // Pass host UID/GID to match file ownership in container
