@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1032,6 +1032,111 @@ describe('cli', () => {
         expect(validateAgentImage('ubuntu:99.99')).toEqual({ valid: true });
         // Single digit versions
         expect(validateAgentImage('ubuntu:1.04')).toEqual({ valid: true });
+      });
+    });
+  });
+
+  describe('processAgentImageOption', () => {
+    describe('default preset', () => {
+      it('should return default when no option provided', () => {
+        const result = processAgentImageOption(undefined, false);
+        expect(result.agentImage).toBe('default');
+        expect(result.isPreset).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBeUndefined();
+      });
+
+      it('should return default when explicitly set', () => {
+        const result = processAgentImageOption('default', false);
+        expect(result.agentImage).toBe('default');
+        expect(result.isPreset).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBeUndefined();
+      });
+
+      it('should work with --build-local', () => {
+        const result = processAgentImageOption('default', true);
+        expect(result.agentImage).toBe('default');
+        expect(result.isPreset).toBe(true);
+        expect(result.error).toBeUndefined();
+      });
+    });
+
+    describe('act preset', () => {
+      it('should return act preset with info message', () => {
+        const result = processAgentImageOption('act', false);
+        expect(result.agentImage).toBe('act');
+        expect(result.isPreset).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBe('Using agent image preset: act (GitHub Actions parity)');
+      });
+
+      it('should work with --build-local', () => {
+        const result = processAgentImageOption('act', true);
+        expect(result.agentImage).toBe('act');
+        expect(result.isPreset).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBe('Using agent image preset: act (GitHub Actions parity)');
+      });
+    });
+
+    describe('custom images', () => {
+      it('should require --build-local for custom images', () => {
+        const result = processAgentImageOption('ubuntu:22.04', false);
+        expect(result.agentImage).toBe('ubuntu:22.04');
+        expect(result.isPreset).toBe(false);
+        expect(result.requiresBuildLocal).toBe(true);
+        expect(result.error).toContain('Custom agent images require --build-local flag');
+      });
+
+      it('should accept custom ubuntu image with --build-local', () => {
+        const result = processAgentImageOption('ubuntu:22.04', true);
+        expect(result.agentImage).toBe('ubuntu:22.04');
+        expect(result.isPreset).toBe(false);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBe('Using custom agent base image: ubuntu:22.04');
+      });
+
+      it('should accept catthehacker runner image with --build-local', () => {
+        const result = processAgentImageOption('ghcr.io/catthehacker/ubuntu:runner-22.04', true);
+        expect(result.agentImage).toBe('ghcr.io/catthehacker/ubuntu:runner-22.04');
+        expect(result.isPreset).toBe(false);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toBe('Using custom agent base image: ghcr.io/catthehacker/ubuntu:runner-22.04');
+      });
+
+      it('should accept catthehacker full image with --build-local', () => {
+        const result = processAgentImageOption('ghcr.io/catthehacker/ubuntu:full-24.04', true);
+        expect(result.agentImage).toBe('ghcr.io/catthehacker/ubuntu:full-24.04');
+        expect(result.isPreset).toBe(false);
+        expect(result.error).toBeUndefined();
+        expect(result.infoMessage).toContain('full-24.04');
+      });
+
+      it('should accept image with SHA256 digest with --build-local', () => {
+        const image = 'ubuntu:22.04@sha256:a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1';
+        const result = processAgentImageOption(image, true);
+        expect(result.agentImage).toBe(image);
+        expect(result.isPreset).toBe(false);
+        expect(result.error).toBeUndefined();
+      });
+    });
+
+    describe('invalid images', () => {
+      it('should return error for invalid image', () => {
+        const result = processAgentImageOption('malicious:image', false);
+        expect(result.error).toContain('Invalid agent image');
+        expect(result.isPreset).toBe(false);
+      });
+
+      it('should return error for invalid image even with --build-local', () => {
+        const result = processAgentImageOption('malicious:image', true);
+        expect(result.error).toContain('Invalid agent image');
+      });
+
+      it('should return error for alpine image', () => {
+        const result = processAgentImageOption('alpine:latest', true);
+        expect(result.error).toContain('Invalid agent image');
       });
     });
   });

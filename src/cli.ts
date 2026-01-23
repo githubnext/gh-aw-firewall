@@ -168,6 +168,82 @@ export function validateAgentImage(image: string): { valid: boolean; error?: str
 }
 
 /**
+ * Result of processing the agent image option
+ */
+export interface AgentImageResult {
+  /** The resolved agent image value */
+  agentImage: string;
+  /** Whether this is a preset (default, act) or custom image */
+  isPreset: boolean;
+  /** Log message to display (info level) */
+  infoMessage?: string;
+  /** Error message if validation failed */
+  error?: string;
+  /** Whether --build-local is required but not provided */
+  requiresBuildLocal?: boolean;
+}
+
+/**
+ * Processes and validates the agent image option.
+ * This function handles the logic for determining whether the image is valid,
+ * whether it requires --build-local, and what messages to display.
+ *
+ * @param agentImageOption - The --agent-image option value (may be undefined)
+ * @param buildLocal - Whether --build-local flag was provided
+ * @returns AgentImageResult with the processed values
+ */
+export function processAgentImageOption(
+  agentImageOption: string | undefined,
+  buildLocal: boolean
+): AgentImageResult {
+  const agentImage = agentImageOption || 'default';
+
+  // Validate the image (works for both presets and custom images)
+  const validation = validateAgentImage(agentImage);
+  if (!validation.valid) {
+    return {
+      agentImage,
+      isPreset: false,
+      error: validation.error,
+    };
+  }
+
+  const isPreset = isAgentImagePreset(agentImage);
+
+  // Custom images (not presets) require --build-local
+  if (!isPreset) {
+    if (!buildLocal) {
+      return {
+        agentImage,
+        isPreset: false,
+        requiresBuildLocal: true,
+        error: '❌ Custom agent images require --build-local flag\n   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...',
+      };
+    }
+    return {
+      agentImage,
+      isPreset: false,
+      infoMessage: `Using custom agent base image: ${agentImage}`,
+    };
+  }
+
+  // Handle presets
+  if (agentImage === 'act') {
+    return {
+      agentImage,
+      isPreset: true,
+      infoMessage: 'Using agent image preset: act (GitHub Actions parity)',
+    };
+  }
+
+  // 'default' preset - no special message needed
+  return {
+    agentImage,
+    isPreset: true,
+  };
+}
+
+/**
  * Parses and validates DNS servers from a comma-separated string
  * @param input - Comma-separated DNS server string (e.g., "8.8.8.8,1.1.1.1")
  * @returns Array of validated DNS server IP addresses
@@ -686,26 +762,15 @@ program
     }
 
     // Validate agent image option
-    const agentImage = options.agentImage || 'default';
-    
-    // Always validate the image (works for both presets and custom images)
-    const validation = validateAgentImage(agentImage);
-    if (!validation.valid) {
-      logger.error(validation.error!);
+    const agentImageResult = processAgentImageOption(options.agentImage, options.buildLocal);
+    if (agentImageResult.error) {
+      logger.error(agentImageResult.error);
       process.exit(1);
     }
-    
-    // Custom images (not presets) require --build-local
-    if (!isAgentImagePreset(agentImage)) {
-      if (!options.buildLocal) {
-        logger.error('❌ Custom agent images require --build-local flag');
-        logger.error('   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...');
-        process.exit(1);
-      }
-      logger.info(`Using custom agent base image: ${agentImage}`);
-    } else if (agentImage === 'act') {
-      logger.info('Using agent image preset: act (GitHub Actions parity)');
+    if (agentImageResult.infoMessage) {
+      logger.info(agentImageResult.infoMessage);
     }
+    const agentImage = agentImageResult.agentImage;
 
     const config: WrapperConfig = {
       allowedDomains,
