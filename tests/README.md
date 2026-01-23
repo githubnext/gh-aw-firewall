@@ -4,7 +4,7 @@ TypeScript-based integration tests for the awf (Agentic Workflow Firewall) CLI.
 
 ## Overview
 
-This directory contains comprehensive integration tests that verify firewall behavior across multiple scenarios. Currently includes **17 integration test files** covering:
+This directory contains comprehensive integration tests that verify firewall behavior across multiple scenarios. Currently includes **18 integration test files** covering:
 
 ### Core Functionality
 - **Basic Firewall Functionality** (`basic-firewall.test.ts`) - Domain whitelisting, subdomain matching, exit code propagation
@@ -34,6 +34,7 @@ This directory contains comprehensive integration tests that verify firewall beh
 
 ### Integration Testing
 - **Claude Code** (`claude-code.test.ts`) - Claude Code CLI integration
+- **Playwright Testing** (`playwright-testing.test.ts`) - Playwright browser automation through firewall
 - **No Docker** (`no-docker.test.ts`) - Docker-in-Docker removal verification
 - **Docker Warning** (`docker-warning.test.ts`) - Docker command warning messages
 
@@ -267,7 +268,7 @@ Key considerations:
 
 The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
 
-**Integration test files (17 total):**
+**Integration test files (18 total):**
 | Category | Test File | Description |
 |----------|-----------|-------------|
 | Core | `basic-firewall.test.ts` | Domain whitelisting, connectivity |
@@ -285,6 +286,7 @@ The project uses TypeScript-based integration tests that run in CI via `.github/
 | Errors | `error-handling.test.ts` | Error scenarios |
 | Logging | `log-commands.test.ts` | Log parsing |
 | Integration | `claude-code.test.ts` | Claude Code CLI |
+| Integration | `playwright-testing.test.ts` | Playwright browser automation |
 | Integration | `no-docker.test.ts` | Docker removal |
 | Integration | `docker-warning.test.ts` | Docker warnings |
 
