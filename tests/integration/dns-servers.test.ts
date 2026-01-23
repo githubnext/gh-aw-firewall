@@ -112,4 +112,41 @@ describe('DNS Server Configuration', () => {
     // dig should return IP address(es)
     expect(result.stdout.trim()).toMatch(/\d+\.\d+\.\d+\.\d+/);
   }, 120000);
+
+  test('should block DNS queries to non-allowlisted servers', async () => {
+    // Use default DNS servers (8.8.8.8, 8.8.4.4)
+    // Try to query a different DNS server (1.1.1.1 - Cloudflare)
+    // This should fail because only the allowlisted DNS servers should be accessible
+    const result = await runner.runWithSudo(
+      'dig @1.1.1.1 github.com +time=2',
+      {
+        allowDomains: ['github.com'],
+        dnsServers: ['8.8.8.8', '8.8.4.4'], // Explicitly set to Google DNS
+        logLevel: 'debug',
+        timeout: 60000,
+      }
+    );
+
+    // The command should fail because 1.1.1.1 is not in the allowlist
+    expect(result.success).toBe(false);
+    // dig should timeout or fail to connect
+    expect(result.stdout + result.stderr).toMatch(/connection timed out|no servers could be reached|communications error/i);
+  }, 120000);
+
+  test('should allow DNS queries to explicitly allowlisted servers', async () => {
+    // Explicitly allow Cloudflare DNS (1.1.1.1)
+    const result = await runner.runWithSudo(
+      'dig @1.1.1.1 github.com +short',
+      {
+        allowDomains: ['github.com'],
+        dnsServers: ['1.1.1.1'], // Only allow Cloudflare DNS
+        logLevel: 'debug',
+        timeout: 60000,
+      }
+    );
+
+    expect(result).toSucceed();
+    // dig should return IP address(es)
+    expect(result.stdout.trim()).toMatch(/\d+\.\d+\.\d+\.\d+/);
+  }, 120000);
 });
