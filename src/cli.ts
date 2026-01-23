@@ -4,7 +4,6 @@ import { Command } from 'commander';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { isIPv6 } from 'net';
 import { WrapperConfig, LogLevel } from './types';
 import { logger } from './logger';
 import {
@@ -78,30 +77,6 @@ export function parseDomainsFile(filePath: string): string[] {
 }
 
 /**
- * Default DNS servers (Google Public DNS)
- */
-export const DEFAULT_DNS_SERVERS = ['8.8.8.8', '8.8.4.4'];
-
-/**
- * Validates that a string is a valid IPv4 address
- * @param ip - String to validate
- * @returns true if the string is a valid IPv4 address
- */
-export function isValidIPv4(ip: string): boolean {
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
-  return ipv4Regex.test(ip);
-}
-
-/**
- * Validates that a string is a valid IPv6 address using Node.js built-in net module
- * @param ip - String to validate
- * @returns true if the string is a valid IPv6 address
- */
-export function isValidIPv6(ip: string): boolean {
-  return isIPv6(ip);
-}
-
-/**
  * Safe patterns for agent base images to prevent supply chain attacks.
  * Allows:
  * - Official Ubuntu images (ubuntu:XX.XX)
@@ -142,31 +117,6 @@ export function validateAgentBaseImage(image: string): { valid: boolean; error?:
       '  - ghcr.io/catthehacker/ubuntu:act-XX.XX\n' +
       'Use @sha256:... suffix for digest-pinned versions.'
   };
-}
-
-/**
- * Parses and validates DNS servers from a comma-separated string
- * @param input - Comma-separated DNS server string (e.g., "8.8.8.8,1.1.1.1")
- * @returns Array of validated DNS server IP addresses
- * @throws Error if any IP address is invalid or if the list is empty
- */
-export function parseDnsServers(input: string): string[] {
-  const servers = input
-    .split(',')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  if (servers.length === 0) {
-    throw new Error('At least one DNS server must be specified');
-  }
-
-  for (const server of servers) {
-    if (!isValidIPv4(server) && !isValidIPv6(server)) {
-      throw new Error(`Invalid DNS server IP address: ${server}`);
-    }
-  }
-
-  return servers;
 }
 
 /**
@@ -427,11 +377,6 @@ program
     'Working directory inside the container (should match GITHUB_WORKSPACE for path consistency)'
   )
   .option(
-    '--dns-servers <servers>',
-    'Comma-separated list of trusted DNS servers. DNS traffic is ONLY allowed to these servers (default: 8.8.8.8,8.8.4.4)',
-    '8.8.8.8,8.8.4.4'
-  )
-  .option(
     '--proxy-logs-dir <path>',
     'Directory to save Squid proxy logs to (writes access.log directly to this directory)'
   )
@@ -597,15 +542,6 @@ program
       logger.debug(`Parsed ${volumeMounts.length} volume mount(s)`);
     }
 
-    // Parse and validate DNS servers
-    let dnsServers: string[];
-    try {
-      dnsServers = parseDnsServers(options.dnsServers);
-    } catch (error) {
-      logger.error(`Invalid DNS servers: ${error instanceof Error ? error.message : error}`);
-      process.exit(1);
-    }
-
     // Parse --allow-urls for SSL Bump mode
     let allowedUrls: string[] | undefined;
     if (options.allowUrls) {
@@ -675,7 +611,6 @@ program
       envAll: options.envAll,
       volumeMounts,
       containerWorkDir: options.containerWorkdir,
-      dnsServers,
       proxyLogsDir: options.proxyLogsDir,
       enableHostAccess: options.enableHostAccess,
       allowHostPorts: options.allowHostPorts,
@@ -733,7 +668,6 @@ program
     if (blockedDomains.length > 0) {
       logger.info(`Blocked domains: ${blockedDomains.join(', ')}`);
     }
-    logger.debug(`DNS servers: ${dnsServers.join(', ')}`);
 
     let exitCode = 0;
     let containersStarted = false;

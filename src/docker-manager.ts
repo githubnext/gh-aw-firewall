@@ -317,10 +317,6 @@ export function generateDockerCompose(
     Object.assign(environment, config.additionalEnv);
   }
 
-  // Pass DNS servers to container for setup-iptables.sh and entrypoint.sh
-  const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
-  environment.AWF_DNS_SERVERS = dnsServers.join(',');
-
   // Pass allowed ports to container for setup-iptables.sh (if specified)
   if (config.allowHostPorts) {
     environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
@@ -369,8 +365,6 @@ export function generateDockerCompose(
         ipv4_address: networkConfig.agentIp,
       },
     },
-    dns: dnsServers, // Use configured DNS servers (prevents DNS exfiltration)
-    dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
     volumes: agentVolumes,
     environment,
     depends_on: {

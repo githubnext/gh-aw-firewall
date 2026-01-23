@@ -2,7 +2,7 @@ import { WrapperConfig } from './types';
 
 export interface WorkflowDependencies {
   ensureFirewallNetwork: () => Promise<{ squidIp: string }>;
-  setupHostIptables: (squidIp: string, port: number, dnsServers: string[]) => Promise<void>;
+  setupHostIptables: (squidIp: string, port: number) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
   startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string) => Promise<void>;
   runAgentCommand: (
@@ -42,8 +42,7 @@ export async function runMainWorkflow(
   // Step 0: Setup host-level network and iptables
   logger.info('Setting up host-level firewall network and iptables rules...');
   const networkConfig = await dependencies.ensureFirewallNetwork();
-  const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
-  await dependencies.setupHostIptables(networkConfig.squidIp, 3128, dnsServers);
+  await dependencies.setupHostIptables(networkConfig.squidIp, 3128);
   onHostIptablesSetup?.();
 
   // Step 1: Write configuration files

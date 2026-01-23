@@ -216,22 +216,6 @@ export interface WrapperConfig {
   containerWorkDir?: string;
 
   /**
-   * List of trusted DNS servers for DNS queries
-   *
-   * DNS traffic is ONLY allowed to these servers, preventing DNS-based data
-   * exfiltration to arbitrary destinations. Both IPv4 and IPv6 addresses are
-   * supported.
-   *
-   * Docker's embedded DNS (127.0.0.11) is always allowed for container name
-   * resolution, in addition to the servers specified here.
-   *
-   * @default ['8.8.8.8', '8.8.4.4'] (Google Public DNS)
-   * @example ['1.1.1.1', '1.0.0.1'] (Cloudflare DNS)
-   * @example ['8.8.8.8', '2001:4860:4860::8888'] (Google DNS with IPv6)
-   */
-  dnsServers?: string[];
-
-  /**
    * Custom directory for Squid proxy logs (written directly during runtime)
    *
    * When specified, Squid proxy logs (access.log, cache.log) are written
