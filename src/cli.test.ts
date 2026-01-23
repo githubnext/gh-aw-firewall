@@ -796,6 +796,25 @@ describe('cli', () => {
     it('should return false for empty string', () => {
       expect(isAgentImagePreset('')).toBe(false);
     });
+
+    it('should return false for case variations of presets', () => {
+      expect(isAgentImagePreset('Default')).toBe(false);
+      expect(isAgentImagePreset('DEFAULT')).toBe(false);
+      expect(isAgentImagePreset('Act')).toBe(false);
+      expect(isAgentImagePreset('ACT')).toBe(false);
+    });
+
+    it('should return false for presets with whitespace', () => {
+      expect(isAgentImagePreset(' default')).toBe(false);
+      expect(isAgentImagePreset('default ')).toBe(false);
+      expect(isAgentImagePreset(' act ')).toBe(false);
+    });
+
+    it('should return false for similar but not exact preset names', () => {
+      expect(isAgentImagePreset('defaults')).toBe(false);
+      expect(isAgentImagePreset('action')).toBe(false);
+      expect(isAgentImagePreset('def')).toBe(false);
+    });
   });
 
   describe('AGENT_IMAGE_PRESETS', () => {
@@ -969,9 +988,50 @@ describe('cli', () => {
       it('should reject images that almost match but do not exactly', () => {
         // Nearly matching but invalid
         expect(validateAgentImage('ubuntu:22.04 ').valid).toBe(false); // trailing space
-        expect(validateAgentImage(' ubuntu:22.04').valid).toBe(false); // leading space  
+        expect(validateAgentImage(' ubuntu:22.04').valid).toBe(false); // leading space
         expect(validateAgentImage('Ubuntu:22.04').valid).toBe(false); // capital U
         expect(validateAgentImage('ghcr.io/catthehacker/ubuntu:Runner-22.04').valid).toBe(false); // capital R
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle special characters in image names', () => {
+        expect(validateAgentImage('ubuntu:22.04;rm -rf /').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:22.04 && malicious').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:22.04|cat /etc/passwd').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:22.04`whoami`').valid).toBe(false);
+      });
+
+      it('should reject newlines and control characters', () => {
+        expect(validateAgentImage('ubuntu:22.04\nmalicious').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:22.04\tmalicious').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:22.04\rmalicious').valid).toBe(false);
+      });
+
+      it('should reject URL-like injection attempts', () => {
+        expect(validateAgentImage('http://evil.com/ubuntu:22.04').valid).toBe(false);
+        expect(validateAgentImage('https://evil.com/image').valid).toBe(false);
+      });
+
+      it('should reject environment variable injection', () => {
+        expect(validateAgentImage('ubuntu:$VERSION').valid).toBe(false);
+        expect(validateAgentImage('ubuntu:${VERSION}').valid).toBe(false);
+      });
+
+      it('should reject images with multiple @ symbols', () => {
+        expect(validateAgentImage('ubuntu:22.04@sha256:abc@sha256:def').valid).toBe(false);
+      });
+
+      it('should reject catthehacker with extra path segments', () => {
+        expect(validateAgentImage('ghcr.io/catthehacker/ubuntu/extra:runner-22.04').valid).toBe(false);
+        expect(validateAgentImage('ghcr.io/catthehacker/ubuntu:runner-22.04/extra').valid).toBe(false);
+      });
+
+      it('should accept valid edge case versions', () => {
+        // High version numbers
+        expect(validateAgentImage('ubuntu:99.99')).toEqual({ valid: true });
+        // Single digit versions
+        expect(validateAgentImage('ubuntu:1.04')).toEqual({ valid: true });
       });
     });
   });

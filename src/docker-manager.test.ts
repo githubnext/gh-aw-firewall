@@ -325,6 +325,69 @@ describe('docker-manager', () => {
       expect(result.services.agent.image).toBe('docker.io/myrepo/agent:v1.0.0');
     });
 
+    it('should use custom registry and tag with default preset explicitly set', () => {
+      const customConfig = {
+        ...mockConfig,
+        agentImage: 'default',
+        imageRegistry: 'docker.io/myrepo',
+        imageTag: 'v2.0.0',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services.agent.image).toBe('docker.io/myrepo/agent:v2.0.0');
+      expect(result.services.agent.build).toBeUndefined();
+    });
+
+    it('should build locally with custom catthehacker full image', () => {
+      const customConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentImage: 'ghcr.io/catthehacker/ubuntu:full-24.04',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:full-24.04');
+      expect(result.services.agent.image).toBeUndefined();
+    });
+
+    it('should build locally with custom ubuntu image', () => {
+      const customConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentImage: 'ubuntu:24.04',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ubuntu:24.04');
+    });
+
+    it('should include USER_UID and USER_GID in build args with custom image', () => {
+      const customConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentImage: 'ghcr.io/catthehacker/ubuntu:runner-22.04',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build?.args?.USER_UID).toBeDefined();
+      expect(result.services.agent.build?.args?.USER_GID).toBeDefined();
+    });
+
+    it('should include USER_UID and USER_GID in build args with act preset', () => {
+      const customConfig = {
+        ...mockConfig,
+        buildLocal: true,
+        agentImage: 'act',
+      };
+      const result = generateDockerCompose(customConfig, mockNetworkConfig);
+
+      expect(result.services.agent.build?.args?.USER_UID).toBeDefined();
+      expect(result.services.agent.build?.args?.USER_GID).toBeDefined();
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe(ACT_PRESET_BASE_IMAGE);
+    });
+
     it('should configure network with correct IPs', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
