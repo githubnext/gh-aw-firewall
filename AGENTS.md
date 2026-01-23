@@ -208,11 +208,13 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 **Squid Container** (`containers/squid/`)
 - Based on `ubuntu/squid:latest`
+- **Security:** Runs as non-root `proxy` user (UID 13, GID 13) from container start
 - Mounts dynamically-generated `squid.conf` from work directory
 - Exposes port 3128 for proxy traffic
 - Logs to shared volume `squid-logs:/var/log/squid`
 - **Network:** Connected to `awf-net` at `172.30.0.10`
 - **Firewall Exemption:** Allowed unrestricted outbound access via iptables rule `-s 172.30.0.10 -j ACCEPT`
+- **Permissions:** Host directories created with 0o777 permissions to allow proxy user write access without requiring root
 
 **Agent Execution Container** (`containers/agent/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
