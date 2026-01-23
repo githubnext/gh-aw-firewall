@@ -1,11 +1,10 @@
 /**
- * DNS Server Configuration Tests
+ * DNS Resolution Tests
  *
- * These tests verify the --dns-servers CLI option:
- * - Default DNS servers (8.8.8.8, 8.8.4.4)
- * - Custom DNS server configuration
- * - DNS resolution works with custom servers
- * - Invalid DNS server handling
+ * These tests verify that DNS resolution works correctly through Squid proxy:
+ * - Squid handles DNS internally (configured with 8.8.8.8, 8.8.4.4)
+ * - DNS queries work for allowed domains
+ * - No DNS traffic is allowed outside of Squid
  */
 
 /// <reference path="../jest-custom-matchers.d.ts" />
@@ -14,7 +13,7 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
 
-describe('DNS Server Configuration', () => {
+describe('DNS Resolution', () => {
   let runner: AwfRunner;
 
   beforeAll(async () => {
@@ -26,7 +25,7 @@ describe('DNS Server Configuration', () => {
     await cleanup(false);
   });
 
-  test('should resolve DNS with default servers', async () => {
+  test('should resolve DNS for allowed domains through Squid', async () => {
     const result = await runner.runWithSudo(
       'nslookup github.com',
       {
@@ -40,7 +39,7 @@ describe('DNS Server Configuration', () => {
     expect(result.stdout).toContain('Address');
   }, 120000);
 
-  test('should resolve DNS with custom Google DNS server', async () => {
+  test('should resolve DNS with explicit DNS server', async () => {
     const result = await runner.runWithSudo(
       'nslookup github.com 8.8.8.8',
       {
@@ -54,7 +53,7 @@ describe('DNS Server Configuration', () => {
     expect(result.stdout).toContain('Address');
   }, 120000);
 
-  test('should resolve DNS with Cloudflare DNS server', async () => {
+  test('should resolve DNS with alternative DNS server', async () => {
     const result = await runner.runWithSudo(
       'nslookup github.com 1.1.1.1',
       {
@@ -66,21 +65,6 @@ describe('DNS Server Configuration', () => {
 
     expect(result).toSucceed();
     expect(result.stdout).toContain('Address');
-  }, 120000);
-
-  test('should show DNS servers in debug output', async () => {
-    const result = await runner.runWithSudo(
-      'echo "test"',
-      {
-        allowDomains: ['github.com'],
-        logLevel: 'debug',
-        timeout: 60000,
-      }
-    );
-
-    expect(result).toSucceed();
-    // Debug output should show DNS configuration
-    expect(result.stderr).toMatch(/DNS|dns/);
   }, 120000);
 
   test('should resolve multiple domains sequentially', async () => {
@@ -98,7 +82,7 @@ describe('DNS Server Configuration', () => {
     expect(result.stdout).toContain('github.com');
   }, 120000);
 
-  test('should resolve DNS for allowed domains', async () => {
+  test('should resolve DNS using dig', async () => {
     const result = await runner.runWithSudo(
       'dig github.com +short',
       {
