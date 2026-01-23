@@ -26,8 +26,8 @@ Options:
   -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
   --tty                      Allocate a pseudo-TTY for interactive tools
   --build-local              Build containers locally instead of using GHCR images
-  --agent-base-image <image> Base image for agent container (requires --build-local)
-                             See "Agent Base Image" section for available options
+  --agent-image <value>      Agent container image (default: "default")
+                             See "Agent Image" section for available options
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
@@ -345,54 +345,76 @@ SSL Bump requires intercepting HTTPS traffic:
 
 For more details, see [SSL Bump documentation](ssl-bump.md).
 
-## Agent Base Image (GitHub Actions Parity)
+## Agent Image
 
-By default, the agent container uses `ubuntu:22.04`, a minimal image optimized for size (~200MB). When you need closer parity with GitHub Actions runner environments, you can specify an alternative base image.
+The `--agent-image` flag controls which agent container image to use. It supports two presets for quick startup, or custom base images for advanced use cases.
 
-### Available Base Images
+### Presets (Pre-built, Fast Startup)
+
+| Preset | GHCR Image | Base | Size | Use Case |
+|--------|------------|------|------|----------|
+| `default` | `agent:latest` | `ubuntu:22.04` | ~200MB | Minimal, fast startup |
+| `act` | `agent-act:latest` | `catthehacker/ubuntu:act-24.04` | ~2GB | GitHub Actions parity |
+
+```bash
+# Use default preset (minimal image, fastest startup)
+sudo awf --allow-domains github.com -- your-command
+
+# Explicitly specify default
+sudo awf --agent-image default --allow-domains github.com -- your-command
+
+# Use act preset for GitHub Actions parity
+sudo awf --agent-image act --allow-domains github.com -- your-command
+```
+
+### Custom Base Images (Requires --build-local)
+
+For advanced use cases, you can specify a custom base image. This requires `--build-local` since it customizes the container build:
 
 | Image | Size | Description |
 |-------|------|-------------|
-| `ubuntu:22.04` (default) | ~200MB | Minimal Ubuntu, smallest footprint |
-| `ghcr.io/catthehacker/ubuntu:runner-22.04` | ~2-5GB | Medium image with common tools, closer to GitHub Actions |
-| `ghcr.io/catthehacker/ubuntu:full-22.04` | ~20GB compressed | Near-identical to GitHub Actions runner |
-
-### Usage
-
-The `--agent-base-image` flag requires `--build-local` since it customizes the container build:
+| `ubuntu:XX.XX` | ~200MB | Official Ubuntu image |
+| `ghcr.io/catthehacker/ubuntu:runner-XX.XX` | ~2-5GB | Medium image with common tools |
+| `ghcr.io/catthehacker/ubuntu:full-XX.XX` | ~20GB | Near-identical to GitHub Actions runner |
 
 ```bash
-# Use runner image for better GitHub Actions compatibility
+# Use custom runner image (requires --build-local)
 sudo awf \
   --build-local \
-  --agent-base-image ghcr.io/catthehacker/ubuntu:runner-22.04 \
+  --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 \
   --allow-domains github.com \
   -- your-command
 
 # Use full image for maximum parity (large download, ~20GB)
 sudo awf \
   --build-local \
-  --agent-base-image ghcr.io/catthehacker/ubuntu:full-22.04 \
+  --agent-image ghcr.io/catthehacker/ubuntu:full-22.04 \
   --allow-domains github.com \
   -- your-command
 ```
 
-### When to Use Custom Base Images
+**Error handling:** Using a custom image without `--build-local` will result in an error:
+```
+❌ Custom agent images require --build-local flag
+   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...
+```
 
-**Use `ubuntu:22.04` (default) when:**
+### When to Use Each Option
+
+**Use `default` preset when:**
 - Fast startup time is important
 - Minimal container size is preferred
 - Your commands only need basic tools (curl, git, Node.js, Docker CLI)
 
-**Use `runner-22.04` when:**
-- You need tools commonly available in GitHub Actions (multiple Python versions, Go, Java, etc.)
-- Commands fail due to missing dependencies
-- Moderate GitHub Actions parity is needed
+**Use `act` preset when:**
+- You need GitHub Actions parity without building locally
+- Fast startup is still important
+- You trust the pre-built GHCR image
 
-**Use `full-22.04` when:**
-- Maximum GitHub Actions parity is required
-- You need specific tools only available in the full runner image
-- Download time and disk space are not concerns
+**Use custom base images with `--build-local` when:**
+- You need specific runner variants (runner-22.04, full-22.04)
+- You want to pin to a specific digest for reproducibility
+- You need maximum control over the base image
 
 ### Security Considerations
 
@@ -404,7 +426,7 @@ sudo awf \
 
 3. **Pin specific versions** - Use image digests (e.g., `@sha256:...`) instead of mutable tags to prevent tag manipulation:
    ```bash
-   --agent-base-image ghcr.io/catthehacker/ubuntu@sha256:abc123...
+   --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04@sha256:abc123...
    ```
 
 4. **Monitor for vulnerabilities** - Third-party images may not receive timely security updates compared to official images.
@@ -416,7 +438,7 @@ sudo awf \
 - Seccomp profile blocks dangerous syscalls
 - `no-new-privileges` prevents privilege escalation
 
-**For maximum security, use the default `ubuntu:22.04` image.** Custom base images are recommended only when you trust the image publisher and the benefits outweigh the supply chain risks.
+**For maximum security, use the `default` preset.** Custom base images are recommended only when you trust the image publisher and the benefits outweigh the supply chain risks.
 
 ### Pre-installed Tools
 
@@ -427,7 +449,7 @@ The default `ubuntu:22.04` image includes:
 - CA certificates
 - Network utilities (dnsutils, net-tools, netcat)
 
-When using runner images, you get additional tools like:
+When using runner/full images or the `act` preset, you get additional tools like:
 - Multiple Python, Node.js, Go, Ruby versions
 - Build tools (make, cmake, gcc)
 - AWS CLI, Azure CLI, GitHub CLI
@@ -436,10 +458,11 @@ When using runner images, you get additional tools like:
 
 ### Notes
 
-- Custom base images only work with `--build-local` (not GHCR images)
+- Presets (`default`, `act`) use pre-built GHCR images for fast startup
+- Custom base images require `--build-local` and build time on first use
 - First build with a new base image will take longer (downloading the image)
 - Subsequent builds use Docker cache and are faster
-- The `full-22.04` image requires significant disk space (~60GB extracted)
+- The `full-XX.XX` images require significant disk space (~60GB extracted)
 
 ## Limitations
 

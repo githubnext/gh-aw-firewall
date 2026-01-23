@@ -102,7 +102,12 @@ export function isValidIPv6(ip: string): boolean {
 }
 
 /**
- * Safe patterns for agent base images to prevent supply chain attacks.
+ * Pre-defined agent image presets
+ */
+export const AGENT_IMAGE_PRESETS = ['default', 'act'] as const;
+
+/**
+ * Safe patterns for custom agent base images to prevent supply chain attacks.
  * Allows:
  * - Official Ubuntu images (ubuntu:XX.XX)
  * - catthehacker runner images (ghcr.io/catthehacker/ubuntu:runner-XX.XX, full-XX.XX, or act-XX.XX)
@@ -120,12 +125,26 @@ const SAFE_BASE_IMAGE_PATTERNS = [
 ];
 
 /**
- * Validates that a base image is from an approved source to prevent supply chain attacks.
- * @param image - Docker image reference to validate
+ * Checks if the given value is a preset name (default, act)
+ */
+export function isAgentImagePreset(value: string | undefined): value is 'default' | 'act' {
+  return value === 'default' || value === 'act';
+}
+
+/**
+ * Validates that an agent image value is either a preset or an approved custom base image.
+ * For presets ('default', 'act'), validation always passes.
+ * For custom images, validates against approved patterns to prevent supply chain attacks.
+ * @param image - Agent image value (preset or custom image reference)
  * @returns Object with valid boolean and optional error message
  */
-export function validateAgentBaseImage(image: string): { valid: boolean; error?: string } {
-  // Check against safe patterns
+export function validateAgentImage(image: string): { valid: boolean; error?: string } {
+  // Presets are always valid
+  if (isAgentImagePreset(image)) {
+    return { valid: true };
+  }
+
+  // Check custom images against safe patterns
   const isValid = SAFE_BASE_IMAGE_PATTERNS.some(pattern => pattern.test(image));
   
   if (isValid) {
@@ -134,13 +153,93 @@ export function validateAgentBaseImage(image: string): { valid: boolean; error?:
   
   return {
     valid: false,
-    error: `Invalid base image: "${image}". ` +
-      'For security, only approved base images are allowed:\n' +
-      '  - ubuntu:XX.XX (e.g., ubuntu:22.04)\n' +
-      '  - ghcr.io/catthehacker/ubuntu:runner-XX.XX\n' +
-      '  - ghcr.io/catthehacker/ubuntu:full-XX.XX\n' +
-      '  - ghcr.io/catthehacker/ubuntu:act-XX.XX\n' +
-      'Use @sha256:... suffix for digest-pinned versions.'
+    error: `Invalid agent image: "${image}". ` +
+      'For security, only approved images are allowed:\n\n' +
+      '  Presets (pre-built, fast):\n' +
+      '    default  - Minimal ubuntu:22.04 (~200MB)\n' +
+      '    act      - GitHub Actions parity (~2GB)\n\n' +
+      '  Custom base images (requires --build-local):\n' +
+      '    ubuntu:XX.XX (e.g., ubuntu:22.04)\n' +
+      '    ghcr.io/catthehacker/ubuntu:runner-XX.XX\n' +
+      '    ghcr.io/catthehacker/ubuntu:full-XX.XX\n' +
+      '    ghcr.io/catthehacker/ubuntu:act-XX.XX\n\n' +
+      '  Use @sha256:... suffix for digest-pinned versions.'
+  };
+}
+
+/**
+ * Result of processing the agent image option
+ */
+export interface AgentImageResult {
+  /** The resolved agent image value */
+  agentImage: string;
+  /** Whether this is a preset (default, act) or custom image */
+  isPreset: boolean;
+  /** Log message to display (info level) */
+  infoMessage?: string;
+  /** Error message if validation failed */
+  error?: string;
+  /** Whether --build-local is required but not provided */
+  requiresBuildLocal?: boolean;
+}
+
+/**
+ * Processes and validates the agent image option.
+ * This function handles the logic for determining whether the image is valid,
+ * whether it requires --build-local, and what messages to display.
+ *
+ * @param agentImageOption - The --agent-image option value (may be undefined)
+ * @param buildLocal - Whether --build-local flag was provided
+ * @returns AgentImageResult with the processed values
+ */
+export function processAgentImageOption(
+  agentImageOption: string | undefined,
+  buildLocal: boolean
+): AgentImageResult {
+  const agentImage = agentImageOption || 'default';
+
+  // Validate the image (works for both presets and custom images)
+  const validation = validateAgentImage(agentImage);
+  if (!validation.valid) {
+    return {
+      agentImage,
+      isPreset: false,
+      error: validation.error,
+    };
+  }
+
+  const isPreset = isAgentImagePreset(agentImage);
+
+  // Custom images (not presets) require --build-local
+  if (!isPreset) {
+    if (!buildLocal) {
+      return {
+        agentImage,
+        isPreset: false,
+        requiresBuildLocal: true,
+        error: '❌ Custom agent images require --build-local flag\n   Example: awf --build-local --agent-image ghcr.io/catthehacker/ubuntu:runner-22.04 ...',
+      };
+    }
+    return {
+      agentImage,
+      isPreset: false,
+      infoMessage: `Using custom agent base image: ${agentImage}`,
+    };
+  }
+
+  // Handle presets
+  if (agentImage === 'act') {
+    return {
+      agentImage,
+      isPreset: true,
+      infoMessage: 'Using agent image preset: act (GitHub Actions parity)',
+    };
+  }
+
+  // 'default' preset - no special message needed
+  return {
+    agentImage,
+    isPreset: true,
   };
 }
 
@@ -388,12 +487,15 @@ program
     false
   )
   .option(
-    '--agent-base-image <image>',
-    'Base image for agent container when using --build-local. Options:\n' +
-    '                                   ubuntu:22.04 (default): Minimal, ~200MB\n' +
-    '                                   ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions, ~2-5GB\n' +
-    '                                   ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions, ~20GB',
-    'ubuntu:22.04'
+    '--agent-image <value>',
+    'Agent container image (default: "default")\n' +
+    '                                   Presets (pre-built, fast):\n' +
+    '                                     default  - Minimal ubuntu:22.04 (~200MB)\n' +
+    '                                     act      - GitHub Actions parity (~2GB)\n' +
+    '                                   Custom base images (requires --build-local):\n' +
+    '                                     ubuntu:XX.XX\n' +
+    '                                     ghcr.io/catthehacker/ubuntu:runner-XX.XX\n' +
+    '                                     ghcr.io/catthehacker/ubuntu:full-XX.XX'
   )
   .option(
     '--image-registry <registry>',
@@ -659,6 +761,17 @@ program
       logger.warn('⚠️  SSL Bump intercepts HTTPS traffic. Only use for trusted workloads.');
     }
 
+    // Validate agent image option
+    const agentImageResult = processAgentImageOption(options.agentImage, options.buildLocal);
+    if (agentImageResult.error) {
+      logger.error(agentImageResult.error);
+      process.exit(1);
+    }
+    if (agentImageResult.infoMessage) {
+      logger.info(agentImageResult.infoMessage);
+    }
+    const agentImage = agentImageResult.agentImage;
+
     const config: WrapperConfig = {
       allowedDomains,
       blockedDomains: blockedDomains.length > 0 ? blockedDomains : undefined,
@@ -668,7 +781,7 @@ program
       tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
-      agentBaseImage: options.agentBaseImage,
+      agentImage,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
@@ -682,22 +795,6 @@ program
       sslBump: options.sslBump,
       allowedUrls,
     };
-
-    // Validate and warn if using custom agent base image
-    if (options.agentBaseImage && options.agentBaseImage !== 'ubuntu:22.04') {
-      // Validate against approved base images for supply chain security
-      const validation = validateAgentBaseImage(options.agentBaseImage);
-      if (!validation.valid) {
-        logger.error(validation.error!);
-        process.exit(1);
-      }
-      
-      if (options.buildLocal) {
-        logger.info(`Using custom agent base image: ${options.agentBaseImage}`);
-      } else {
-        logger.warn('⚠️  --agent-base-image is only used with --build-local. Ignoring.');
-      }
-    }
 
     // Warn if --env-all is used
     if (config.envAll) {
