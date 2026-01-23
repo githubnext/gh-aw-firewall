@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, MIN_REGULAR_UID } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -248,7 +248,7 @@ describe('docker-manager', () => {
 
       expect(result.services.agent.build).toBeDefined();
       // When using 'act' preset with --build-local, should use the catthehacker act image
-      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe('ghcr.io/catthehacker/ubuntu:act-24.04');
+      expect(result.services.agent.build?.args?.BASE_IMAGE).toBe(ACT_PRESET_BASE_IMAGE);
     });
 
     it('should use agent-act GHCR image when agentImage is "act" preset without --build-local', () => {

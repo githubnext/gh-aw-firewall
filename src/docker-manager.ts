@@ -12,6 +12,12 @@ const SQUID_PORT = 3128;
 const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
+ * Base image for the 'act' preset when building locally.
+ * Uses catthehacker's GitHub Actions parity image.
+ */
+export const ACT_PRESET_BASE_IMAGE = 'ghcr.io/catthehacker/ubuntu:act-24.04';
+
+/**
  * Minimum UID/GID value for regular users.
  * UIDs 0-999 are reserved for system users on most Linux distributions.
  */
@@ -442,7 +448,7 @@ export function generateDockerCompose(
       buildArgs.BASE_IMAGE = agentImage;
     } else if (agentImage === 'act') {
       // When building locally with 'act' preset, use the catthehacker act image
-      buildArgs.BASE_IMAGE = 'ghcr.io/catthehacker/ubuntu:act-24.04';
+      buildArgs.BASE_IMAGE = ACT_PRESET_BASE_IMAGE;
     }
     // For 'default' preset with --build-local, use the Dockerfile's default (ubuntu:22.04)
 
