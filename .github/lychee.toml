@@ -37,16 +37,15 @@ exclude = [
   '^#',
   
   # Template placeholders used in documentation templates
-  '{run_url}',
-  '{workflow_name}',
-  '{{REPOSITORY}}',
-  '{{VERSION}}',
-  '{{VERSION_NUMBER}}',
-  
-  # Absolute paths in docs-site (Astro handles these at build time)
-  '^/guides/',
-  '^/gh-aw-firewall/',
+  # Using literal strings instead of regex patterns
+  'run_url',
+  'workflow_name',
+  'REPOSITORY',
+  'VERSION_NUMBER',
 ]
+
+# Exclude links containing these glob patterns
+exclude_link_local = true
 
 # Exclude these paths from checking
 exclude_path = [
@@ -58,6 +57,9 @@ exclude_path = [
   # Test fixtures or example data
   'test/fixtures/',
   'examples/node_modules/',
+  
+  # Docs site (Astro handles absolute paths at build time)
+  'docs-site/',
 ]
 
 # Accept these status codes as valid
