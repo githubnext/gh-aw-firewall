@@ -335,5 +335,5 @@ docker exec awf-squid awk 'NF != 10' /var/log/squid/access.log
 
 ## See Also
 
-- [LOGGING.md](../LOGGING.md) - Complete logging documentation
+- [logging_quickref.md](logging_quickref.md) - Complete logging documentation
 - [README.md](../README.md) - Main project documentation

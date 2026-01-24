@@ -380,4 +380,4 @@ If you're still experiencing issues:
    - [Architecture](architecture.md) - Understand how the system works
    - [Usage Guide](usage.md) - Detailed usage examples
    - [SSL Bump](ssl-bump.md) - HTTPS content inspection and URL filtering
-   - [Logging Documentation](../LOGGING.md) - Comprehensive logging guide
+   - [Logging Documentation](logging_quickref.md) - Comprehensive logging guide

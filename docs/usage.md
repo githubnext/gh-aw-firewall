@@ -802,4 +802,4 @@ Count blocked attempts by domain:
 docker exec awf-squid grep "TCP_DENIED" /var/log/squid/access.log | awk '{print $3}' | sort | uniq -c | sort -rn
 ```
 
-**For detailed logging documentation, see [LOGGING.md](../LOGGING.md)**
+**For detailed logging documentation, see [logging_quickref.md](logging_quickref.md)**

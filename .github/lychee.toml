@@ -1,0 +1,92 @@
+# Lychee link checker configuration
+# https://github.com/lycheeverse/lychee
+
+# Maximum number of concurrent network requests
+max_concurrency = 8
+
+# Exclude URLs matching these patterns
+exclude = [
+  # Local development URLs
+  'http://localhost:*',
+  'https://localhost:*',
+  'http://127.0.0.1:*',
+  'https://127.0.0.1:*',
+  
+  # Example domains (used in documentation)
+  'http://example.com',
+  'https://example.com',
+  'http://*.example.com',
+  'https://*.example.com',
+  'http://example.org',
+  'https://example.org',
+  
+  # Placeholder/template URLs
+  'https://api-*.example.com',
+  'https://secure.example.com',
+  'http://legacy-api.example.com',
+  
+  # Private/internal network ranges (RFC 1918)
+  'http://10.*',
+  'https://10.*',
+  'http://172.*',
+  'https://172.*',
+  'http://192.168.*',
+  'https://192.168.*',
+  
+  # Relative links and anchors (handled separately)
+  '^#',
+  
+  # Template placeholders used in documentation templates
+  '{run_url}',
+  '{workflow_name}',
+  '{{REPOSITORY}}',
+  '{{VERSION}}',
+  '{{VERSION_NUMBER}}',
+  
+  # Absolute paths in docs-site (Astro handles these at build time)
+  '^/guides/',
+  '^/gh-aw-firewall/',
+]
+
+# Exclude these paths from checking
+exclude_path = [
+  # Node modules and dependencies
+  'node_modules/',
+  'dist/',
+  'build/',
+  
+  # Test fixtures or example data
+  'test/fixtures/',
+  'examples/node_modules/',
+]
+
+# Accept these status codes as valid
+accept = [
+  200,  # OK
+  201,  # Created
+  202,  # Accepted
+  203,  # Non-Authoritative Information
+  204,  # No Content
+  206,  # Partial Content
+  429,  # Too Many Requests (rate limited, but link exists)
+  # GitHub API often returns 403 for unauthenticated requests
+  403,
+]
+
+# Maximum number of retries per link
+max_retries = 3
+
+# Retry wait time in seconds
+retry_wait_time = 2
+
+# Request timeout in seconds
+timeout = 20
+
+# Follow redirects
+include_verbatim = false
+
+# User agent string
+user_agent = "Mozilla/5.0 (compatible; lychee/link-checker)"
+
+# Check links in markdown, HTML, and text files
+include_mail = false

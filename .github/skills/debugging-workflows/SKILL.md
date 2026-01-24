@@ -359,5 +359,5 @@ Tool 'xyz' not found
 - [Architecture](../../../docs/architecture.md) - System architecture details
 - [Troubleshooting](../../../docs/troubleshooting.md) - Common issues and solutions
 - [GitHub Actions Integration](../../../docs/github_actions.md) - CI/CD setup
-- [Logging Documentation](../../../LOGGING.md) - Comprehensive logging guide
+- [Logging Documentation](../../../docs/logging_quickref.md) - Comprehensive logging guide
 - [Debug Firewall Skill](../debug-firewall/SKILL.md) - Firewall-specific debugging

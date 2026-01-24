@@ -1,0 +1,76 @@
+name: Link Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - '.github/workflows/link-check.yml'
+      - '.github/lychee.toml'
+  schedule:
+    # Run at 00:00 UTC every Monday
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  link-check:
+    name: Check Links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Link Checker
+        uses: lycheeverse/lychee-action@2ab9e4c8e3e991ef946de7b0b5a7e9f2c7f28f3c # v2
+        with:
+          # Check all markdown files
+          args: --verbose --no-progress --config .github/lychee.toml '**/*.md'
+          # Fail action on broken links
+          fail: true
+          # Create an issue if broken links are found on scheduled runs
+          jobSummary: true
+          format: markdown
+
+      - name: Create issue on failure (scheduled runs only)
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const title = '🔗 Broken links detected in documentation';
+            const body = `The weekly link check found broken links in the documentation.
+
+            **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please review the workflow logs and fix the broken links.`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'documentation,broken-links'
+            });
+
+            const existingIssue = issues.data.find(issue => issue.title === title);
+
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['documentation', 'broken-links']
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Another broken link was detected on ${new Date().toISOString().split('T')[0]}.\n\n${body}`
+              });
+            }
