@@ -58,14 +58,23 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
   if [ "${1}" = "run" ] || [ "${1}" = "create" ]; then
     # Check if --add-host host.docker.internal:host-gateway is already present
     ADD_HOST_PRESENT=false
+    i=0
     for arg in "${@}"; do
-      if [[ "$arg" == "--add-host" ]] || [[ "$arg" =~ ^--add-host= ]]; then
-        # Check next arg or the value after = for host.docker.internal
+      if [[ "$arg" == "--add-host" ]]; then
+        # Check next argument for host.docker.internal
+        next_arg="${@:$((i+2)):1}"
+        if [[ "$next_arg" =~ host\.docker\.internal ]]; then
+          ADD_HOST_PRESENT=true
+          break
+        fi
+      elif [[ "$arg" =~ ^--add-host= ]]; then
+        # Check value after = for host.docker.internal
         if [[ "$arg" =~ host\.docker\.internal ]]; then
           ADD_HOST_PRESENT=true
           break
         fi
       fi
+      ((i++))
     done
 
     # Inject --add-host if not already present
@@ -73,7 +82,14 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
     # This prevents malicious code from enabling host access without authorization
     if [ "$ADD_HOST_PRESENT" = false ]; then
       # Insert after the run/create command but before other arguments
-      DOCKER_ARGS=("${DOCKER_ARGS[0]}" "--add-host" "host.docker.internal:host-gateway" "${DOCKER_ARGS[@]:1}")
+      # Handle case where there are no additional arguments after run/create
+      if [ $# -eq 1 ]; then
+        # Only 'run' or 'create' command, no other args
+        DOCKER_ARGS=("${DOCKER_ARGS[0]}" "--add-host" "host.docker.internal:host-gateway")
+      else
+        # Has additional arguments after run/create
+        DOCKER_ARGS=("${DOCKER_ARGS[0]}" "--add-host" "host.docker.internal:host-gateway" "${DOCKER_ARGS[@]:1}")
+      fi
     fi
   fi
 fi
