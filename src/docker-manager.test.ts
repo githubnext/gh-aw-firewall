@@ -650,6 +650,31 @@ describe('docker-manager', () => {
       });
     });
 
+    describe('AWF_ENABLE_HOST_ACCESS environment variable', () => {
+      it('should pass AWF_ENABLE_HOST_ACCESS=true to agent container when enableHostAccess is true', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBe('true');
+      });
+
+      it('should NOT set AWF_ENABLE_HOST_ACCESS when enableHostAccess is false', () => {
+        const config = { ...mockConfig, enableHostAccess: false };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBeUndefined();
+      });
+
+      it('should NOT set AWF_ENABLE_HOST_ACCESS when enableHostAccess is undefined', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBeUndefined();
+      });
+    });
+
     it('should override environment variables with additionalEnv', () => {
       const originalEnv = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'original_token';
