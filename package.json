@@ -55,7 +55,7 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
+    "eslint": "^9.39.2",
     "eslint-plugin-rulesdir": "^0.2.2",
     "eslint-plugin-security": "^3.0.1",
     "glob": "^10.5.0",
