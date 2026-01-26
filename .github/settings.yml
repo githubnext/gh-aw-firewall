@@ -67,8 +67,8 @@ branches:
           - "Scan Agent Container"
           - "Scan Squid Container"
           
-          # PR title validation
-          - "PR Title Check"
+          # PR title validation (uses job ID as no name is defined)
+          - "pr-title"
       
       # Additional protections
       enforce_admins: false  # Allow admins to bypass for emergencies
