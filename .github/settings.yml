@@ -1,0 +1,78 @@
+# Repository settings managed by Probot Settings App
+# https://github.com/probot/settings
+#
+# This file codifies branch protection rules, making them version controlled
+# and preventing configuration drift during repository operations.
+
+repository:
+  # Repository metadata
+  name: gh-aw-firewall
+  description: 🔥 A network firewall for agentic workflows with domain whitelisting
+  homepage: https://githubnext.com/projects/agentic-workflows/
+  topics: github, copilot, security, firewall, docker, squid, mcp
+  
+  # Features
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  has_downloads: true
+  
+  # Merge options
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
+  delete_branch_on_merge: true
+  
+  # Security
+  enable_automated_security_fixes: true
+  enable_vulnerability_alerts: true
+
+# Branch protection rules for main branch
+branches:
+  - name: main
+    protection:
+      # Require pull request reviews before merging
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: false
+        require_code_owner_reviews: false
+        require_last_push_approval: false
+      
+      # Require status checks to pass before merging
+      required_status_checks:
+        strict: true  # Require branches to be up to date before merging
+        contexts:
+          # Build verification across Node versions
+          - "Build and Lint (Node 18)"
+          - "Build and Lint (Node 20)"
+          - "Build and Lint (Node 22)"
+          
+          # Code quality checks
+          - "ESLint"
+          
+          # TypeScript type checking
+          - "TypeScript Type Check"
+          
+          # Test coverage
+          - "Test Coverage Report"
+          
+          # Examples testing
+          - "Test Examples"
+          
+          # Security scanning - CodeQL
+          - "Analyze (javascript-typescript)"
+          - "Analyze (actions)"
+          
+          # Security scanning - Container images
+          - "Scan Agent Container"
+          - "Scan Squid Container"
+          
+          # PR title validation
+          - "PR Title Check"
+      
+      # Additional protections
+      enforce_admins: false  # Allow admins to bypass for emergencies
+      required_linear_history: false
+      allow_force_pushes: false
+      allow_deletions: false
+      required_conversation_resolution: false

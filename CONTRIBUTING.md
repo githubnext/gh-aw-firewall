@@ -118,6 +118,22 @@ logger.success('Operation completed successfully');
    - Address any feedback
    - Once approved, your PR will be merged
 
+### Branch Protection
+
+The `main` branch is protected by required status checks defined in `.github/settings.yml`. All pull requests must:
+
+- Pass all required status checks:
+  - **Build verification** across Node 18, 20, and 22
+  - **Code quality** checks (ESLint, TypeScript type checking)
+  - **Test coverage** with comparison against base branch
+  - **Examples testing** to validate real-world usage
+  - **Security scanning** (CodeQL analysis, Trivy container scans)
+  - **PR title validation** following Conventional Commits format
+- Receive at least **1 approving review** from a maintainer
+- Be **up to date** with the base branch before merging
+
+These rules are codified in `.github/settings.yml` and managed by the [Probot Settings App](https://github.com/probot/settings). Changes to branch protection rules should be made through pull requests to this file, providing an audit trail and preventing configuration drift.
+
 ## 🏗️ Project Structure
 
 ```
