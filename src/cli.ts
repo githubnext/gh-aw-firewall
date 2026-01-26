@@ -447,7 +447,8 @@ program
     '                                   *.github.com       - any subdomain of github.com\n' +
     '                                   api-*.example.com  - api-* subdomains\n' +
     '                                   https://secure.com - HTTPS only\n' +
-    '                                   http://legacy.com  - HTTP only'
+    '                                   http://legacy.com  - HTTP only\n' +
+    '                                   localhost          - auto-configure for local testing (Playwright, etc.)'
   )
   .option(
     '--allow-domains-file <path>',
