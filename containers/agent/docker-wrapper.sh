@@ -8,6 +8,8 @@
 #
 # Security Note: AWF_ENABLE_HOST_ACCESS is made readonly in entrypoint.sh to prevent malicious code
 # from enabling host access after container startup
+#
+# Note: This script requires bash (not POSIX sh) due to use of [[, regex matching, and indirect parameter expansion
 
 set -e
 
@@ -54,26 +56,39 @@ DOCKER_ARGS=("$@")
 # inject --add-host host.docker.internal:host-gateway to allow spawned containers
 # to resolve host.docker.internal
 if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
-  # Check if this is a 'docker run' or 'docker create' command
-  if [ "${1}" = "run" ] || [ "${1}" = "create" ]; then
-    # Check if --add-host host.docker.internal:host-gateway is already present
+  # Find the position of 'run' or 'create' subcommand
+  # Handle global Docker options (e.g., docker --debug run)
+  RUN_CREATE_POS=0
+  for ((i=1; i<=$#; i++)); do
+    arg="${!i}"
+    if [[ "$arg" == "run" ]] || [[ "$arg" == "create" ]]; then
+      RUN_CREATE_POS=$i
+      break
+    fi
+  done
+
+  # Only inject if we found a run/create subcommand
+  if [ $RUN_CREATE_POS -gt 0 ]; then
+    # Check if --add-host host.docker.internal is already present
     ADD_HOST_PRESENT=false
-    # Use 1-based indexing to match positional parameters ($1, $2, etc.)
+    # Use bash-specific C-style for loop (requires bash, not POSIX sh)
     for ((i=1; i<=$#; i++)); do
       arg="${!i}"
       if [[ "$arg" == "--add-host" ]]; then
         # Check next argument for host.docker.internal (with bounds check)
+        # Use anchored regex to avoid false positives like 'myhost.docker.internal.example.com'
         if [ $i -lt $# ]; then
           next_i=$((i+1))
           next_arg="${!next_i}"
-          if [[ "$next_arg" =~ host\.docker\.internal ]]; then
+          if [[ "$next_arg" =~ ^host\.docker\.internal(:|$) ]]; then
             ADD_HOST_PRESENT=true
             break
           fi
         fi
       elif [[ "$arg" =~ ^--add-host= ]]; then
         # Check value after = for host.docker.internal
-        if [[ "$arg" =~ host\.docker\.internal ]]; then
+        # Use anchored regex to avoid false positives
+        if [[ "$arg" =~ host\.docker\.internal(:|$) ]]; then
           ADD_HOST_PRESENT=true
           break
         fi
@@ -84,9 +99,17 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
     # Security: Only inject when AWF_ENABLE_HOST_ACCESS=true (set by awf CLI and made readonly)
     # This prevents malicious code from enabling host access without authorization
     if [ "$ADD_HOST_PRESENT" = false ]; then
-      # Build new argument array with --add-host injected after run/create command
-      # This approach works uniformly whether there are additional arguments or not
-      new_args=("$1" "--add-host" "host.docker.internal:host-gateway" "${@:2}")
+      # Build new argument array with --add-host injected after run/create subcommand
+      # Split args into: before run/create, run/create, --add-host, after run/create
+      new_args=()
+      for ((i=1; i<=$#; i++)); do
+        arg="${!i}"
+        new_args+=("$arg")
+        # Insert --add-host after the run/create subcommand
+        if [ $i -eq $RUN_CREATE_POS ]; then
+          new_args+=("--add-host" "host.docker.internal:host-gateway")
+        fi
+      done
       DOCKER_ARGS=("${new_args[@]}")
     fi
   fi
