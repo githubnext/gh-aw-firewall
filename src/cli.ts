@@ -633,6 +633,40 @@ program
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
 
+    // Handle special "localhost" keyword for Playwright testing
+    // This makes localhost testing work out of the box without requiring manual configuration
+    const localhostIndex = allowedDomains.findIndex(d => 
+      d === 'localhost' || d === 'http://localhost' || d === 'https://localhost'
+    );
+    if (localhostIndex !== -1) {
+      // Remove localhost and replace with host.docker.internal
+      const localhostValue = allowedDomains[localhostIndex];
+      allowedDomains.splice(localhostIndex, 1);
+      
+      // Preserve protocol if specified
+      if (localhostValue.startsWith('http://')) {
+        allowedDomains.push('http://host.docker.internal');
+      } else if (localhostValue.startsWith('https://')) {
+        allowedDomains.push('https://host.docker.internal');
+      } else {
+        allowedDomains.push('host.docker.internal');
+      }
+      
+      // Auto-enable host access
+      if (!options.enableHostAccess) {
+        options.enableHostAccess = true;
+        logger.info('ℹ️  localhost keyword detected - automatically enabling host access');
+      }
+      
+      // Auto-configure common dev ports if not already specified
+      // Use specific popular development ports to avoid dangerous ports
+      if (!options.allowHostPorts) {
+        options.allowHostPorts = '3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090';
+        logger.info('ℹ️  localhost keyword detected - allowing common development ports (3000, 4200, 5173, 8080, etc.)');
+        logger.info('   Use --allow-host-ports to customize the port list');
+      }
+    }
+
     // Validate all domains and patterns
     for (const domain of allowedDomains) {
       try {
