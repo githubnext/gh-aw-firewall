@@ -332,12 +332,6 @@ export function generateDockerCompose(
     environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
   }
 
-  // Pass enableHostAccess flag to container for docker-wrapper.sh (if enabled)
-  // This allows spawned containers to resolve host.docker.internal
-  if (config.enableHostAccess) {
-    environment.AWF_ENABLE_HOST_ACCESS = 'true';
-  }
-
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();

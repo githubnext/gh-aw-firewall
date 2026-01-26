@@ -98,13 +98,6 @@ if [ -f /etc/resolv.conf ]; then
   echo "[entrypoint] DNS configured with Docker embedded DNS (127.0.0.11) and trusted servers: $DNS_SERVERS"
 fi
 
-# Make AWF_ENABLE_HOST_ACCESS readonly to prevent tampering by malicious code
-# This security measure ensures that host access cannot be enabled after the container starts
-if [ -n "${AWF_ENABLE_HOST_ACCESS}" ]; then
-  readonly AWF_ENABLE_HOST_ACCESS
-  echo "[entrypoint] Host access enabled: AWF_ENABLE_HOST_ACCESS=${AWF_ENABLE_HOST_ACCESS} (readonly)"
-fi
-
 # Update CA certificates if SSL Bump is enabled
 # The CA certificate is mounted at /usr/local/share/ca-certificates/awf-ca.crt
 if [ "${AWF_SSL_BUMP_ENABLED}" = "true" ]; then

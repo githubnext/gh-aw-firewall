@@ -66,15 +66,10 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
-# Install Docker wrapper script for spawned containers
-# The wrapper is installed at /usr/local/bin/docker (higher in PATH than /usr/bin)
-# This allows users to install docker-cli via apt (which installs to /usr/bin/docker)
-# and the wrapper will intercept calls, adding --add-host for spawned containers
-# when --enable-host-access is used
-# Docker-in-Docker support was removed in v0.9.1 (PR #205)
-COPY docker-wrapper.sh /usr/local/bin/docker
+# Install Docker stub script that shows helpful error message
+# Docker-in-Docker support was removed in v0.9.1
 COPY docker-stub.sh /usr/bin/docker
-RUN chmod +x /usr/local/bin/docker /usr/bin/docker
+RUN chmod +x /usr/bin/docker
 
 # Set working directory
 WORKDIR /workspace
