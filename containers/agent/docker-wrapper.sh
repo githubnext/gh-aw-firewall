@@ -58,12 +58,14 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
   if [ "${1}" = "run" ] || [ "${1}" = "create" ]; then
     # Check if --add-host host.docker.internal:host-gateway is already present
     ADD_HOST_PRESENT=false
-    i=0
-    for arg in "${@}"; do
+    # Use 1-based indexing to match positional parameters ($1, $2, etc.)
+    for ((i=1; i<=$#; i++)); do
+      arg="${!i}"
       if [[ "$arg" == "--add-host" ]]; then
         # Check next argument for host.docker.internal (with bounds check)
-        if [ $((i+1)) -lt $# ]; then
-          next_arg="${@:$((i+2)):1}"
+        if [ $i -lt $# ]; then
+          next_i=$((i+1))
+          next_arg="${!next_i}"
           if [[ "$next_arg" =~ host\.docker\.internal ]]; then
             ADD_HOST_PRESENT=true
             break
@@ -76,7 +78,6 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
           break
         fi
       fi
-      ((i++))
     done
 
     # Inject --add-host if not already present
