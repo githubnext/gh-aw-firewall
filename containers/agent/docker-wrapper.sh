@@ -61,11 +61,13 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
     i=0
     for arg in "${@}"; do
       if [[ "$arg" == "--add-host" ]]; then
-        # Check next argument for host.docker.internal
-        next_arg="${@:$((i+2)):1}"
-        if [[ "$next_arg" =~ host\.docker\.internal ]]; then
-          ADD_HOST_PRESENT=true
-          break
+        # Check next argument for host.docker.internal (with bounds check)
+        if [ $((i+1)) -lt $# ]; then
+          next_arg="${@:$((i+2)):1}"
+          if [[ "$next_arg" =~ host\.docker\.internal ]]; then
+            ADD_HOST_PRESENT=true
+            break
+          fi
         fi
       elif [[ "$arg" =~ ^--add-host= ]]; then
         # Check value after = for host.docker.internal
@@ -81,15 +83,10 @@ if [ "${AWF_ENABLE_HOST_ACCESS}" = "true" ]; then
     # Security: Only inject when AWF_ENABLE_HOST_ACCESS=true (set by awf CLI and made readonly)
     # This prevents malicious code from enabling host access without authorization
     if [ "$ADD_HOST_PRESENT" = false ]; then
-      # Insert after the run/create command but before other arguments
-      # Handle case where there are no additional arguments after run/create
-      if [ $# -eq 1 ]; then
-        # Only 'run' or 'create' command, no other args
-        DOCKER_ARGS=("${DOCKER_ARGS[0]}" "--add-host" "host.docker.internal:host-gateway")
-      else
-        # Has additional arguments after run/create
-        DOCKER_ARGS=("${DOCKER_ARGS[0]}" "--add-host" "host.docker.internal:host-gateway" "${DOCKER_ARGS[@]:1}")
-      fi
+      # Build new argument array with --add-host injected after run/create command
+      # This approach works uniformly whether there are additional arguments or not
+      new_args=("$1" "--add-host" "host.docker.internal:host-gateway" "${@:2}")
+      DOCKER_ARGS=("${new_args[@]}")
     fi
   fi
 fi
