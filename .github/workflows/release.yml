@@ -155,6 +155,38 @@ jobs:
             --type spdxjson \
             ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
 
+      # Build agent-setup init container for iptables setup
+      - name: Build and push Agent-Setup image
+        id: build_agent_setup
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/agent-setup
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent-setup:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/agent-setup:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign Agent-Setup image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/agent-setup@${{ steps.build_agent_setup.outputs.digest }}
+
+      - name: Generate SBOM for Agent-Setup image
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        with:
+          image: ghcr.io/${{ github.repository }}/agent-setup@${{ steps.build_agent_setup.outputs.digest }}
+          format: spdx-json
+          output-file: agent-setup-sbom.spdx.json
+
+      - name: Attest SBOM for Agent-Setup image
+        run: |
+          cosign attest --yes \
+            --predicate agent-setup-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/agent-setup@${{ steps.build_agent_setup.outputs.digest }}
+
       - name: Install pkg for binary creation
         run: npm install -g pkg
 

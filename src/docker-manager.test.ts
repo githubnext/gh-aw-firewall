@@ -462,22 +462,62 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/:/host:rw');
     });
 
-    it('should set agent to depend on healthy squid', () => {
+    it('should set agent to depend on healthy squid and completed iptables setup', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const depends = agent.depends_on as { [key: string]: { condition: string } };
 
       expect(depends['squid-proxy'].condition).toBe('service_healthy');
+      expect(depends['iptables-setup'].condition).toBe('service_completed_successfully');
     });
 
-    it('should add NET_ADMIN capability to agent for iptables setup', () => {
-      // NET_ADMIN is required at container start for setup-iptables.sh
-      // The capability is dropped before user command execution via capsh
-      // (see containers/agent/entrypoint.sh)
+    it('should NOT add NET_ADMIN capability to agent (handled by init container)', () => {
+      // With init container pattern, agent container never has NET_ADMIN
+      // iptables setup is done by separate init container
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
-      expect(agent.cap_add).toContain('NET_ADMIN');
+      expect(agent.cap_add).toBeUndefined();
+    });
+
+    it('should configure iptables-setup init container', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const setup = result.services['iptables-setup'];
+
+      expect(setup).toBeDefined();
+      expect(setup.container_name).toBe('awf-iptables-setup');
+      expect(setup.network_mode).toBe('service:agent'); // Share network namespace
+      expect(setup.cap_add).toEqual(['NET_ADMIN']); // Has NET_ADMIN for iptables setup
+      expect(setup.cap_drop).toContain('NET_RAW');
+      expect(setup.cap_drop).toContain('SYS_ADMIN');
+    });
+
+    it('should pass environment to iptables-setup init container', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const setup = result.services['iptables-setup'];
+      const env = setup.environment as Record<string, string>;
+
+      expect(env.SQUID_PROXY_HOST).toBe('squid-proxy');
+      expect(env.SQUID_PROXY_PORT).toBe('3128');
+      expect(env.AWF_DNS_SERVERS).toBe('8.8.8.8,8.8.4.4');
+    });
+
+    it('should use GHCR image for iptables-setup when not building locally', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const setup = result.services['iptables-setup'];
+
+      expect(setup.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-setup:latest');
+      expect(setup.build).toBeUndefined();
+    });
+
+    it('should build iptables-setup locally when buildLocal is true', () => {
+      const localConfig = { ...mockConfig, buildLocal: true };
+      const result = generateDockerCompose(localConfig, mockNetworkConfig);
+      const setup = result.services['iptables-setup'];
+
+      expect(setup.build).toBeDefined();
+      expect(setup.build?.context).toContain('containers/agent-setup');
+      expect(setup.image).toBeUndefined();
     });
 
     it('should apply container hardening measures', () => {
@@ -724,7 +764,8 @@ describe('docker-manager', () => {
         expect(result.services.agent.working_dir).toBe('/custom/workdir');
         // Verify other config is still present
         expect(result.services.agent.container_name).toBe('awf-agent');
-        expect(result.services.agent.cap_add).toContain('NET_ADMIN');
+        // Agent no longer has NET_ADMIN (handled by init container)
+        expect(result.services.agent.cap_add).toBeUndefined();
       });
 
       it('should handle empty string containerWorkDir by not setting working_dir', () => {

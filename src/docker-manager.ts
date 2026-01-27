@@ -338,6 +338,49 @@ export function generateDockerCompose(
   environment.AWF_USER_GID = getSafeHostGid();
   // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
+  // Build environment for iptables setup init container
+  // It needs minimal config: just proxy info and DNS servers
+  const setupEnvironment: Record<string, string> = {
+    SQUID_PROXY_HOST: 'squid-proxy',
+    SQUID_PROXY_PORT: SQUID_PORT.toString(),
+    AWF_DNS_SERVERS: dnsServers.join(','),
+  };
+
+  // Pass allowed ports to init container if specified
+  if (config.allowHostPorts) {
+    setupEnvironment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
+  }
+
+  // Init container for iptables setup
+  // Shares network namespace with agent container, sets up iptables rules, then exits
+  const iptablesSetupService: any = {
+    container_name: 'awf-iptables-setup',
+    network_mode: 'service:agent', // Share network namespace with agent
+    environment: setupEnvironment,
+    // NET_ADMIN is required for iptables setup
+    // This is the ONLY container that has NET_ADMIN capability
+    cap_add: ['NET_ADMIN'],
+    cap_drop: [
+      'NET_RAW',
+      'SYS_ADMIN',
+      'SYS_PTRACE',
+      'SYS_MODULE',
+      'MKNOD',
+      'AUDIT_WRITE',
+      'SETFCAP',
+    ],
+  };
+
+  // Use GHCR image or build locally for init container
+  if (useGHCR) {
+    iptablesSetupService.image = `${registry}/agent-setup:${tag}`;
+  } else {
+    iptablesSetupService.build = {
+      context: path.join(projectRoot, 'containers/agent-setup'),
+      dockerfile: 'Dockerfile',
+    };
+  }
+
   // Build volumes list for agent execution container
   const agentVolumes: string[] = [
     // Essential mounts that are always included
@@ -383,12 +426,12 @@ export function generateDockerCompose(
       'squid-proxy': {
         condition: 'service_healthy',
       },
+      'iptables-setup': {
+        condition: 'service_completed_successfully',
+      },
     },
-    // NET_ADMIN is required for iptables setup in entrypoint.sh.
-    // Security: The capability is dropped before running user commands
-    // via 'capsh --drop=cap_net_admin' in containers/agent/entrypoint.sh.
-    // This prevents malicious code from modifying iptables rules.
-    cap_add: ['NET_ADMIN'],
+    // Security: NO NET_ADMIN capability - iptables setup handled by separate init container
+    // This is the key security improvement: agent container never has NET_ADMIN, even at startup
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
@@ -462,6 +505,7 @@ export function generateDockerCompose(
   return {
     services: {
       'squid-proxy': squidService,
+      'iptables-setup': iptablesSetupService,
       'agent': agentService,
     },
     networks: {
