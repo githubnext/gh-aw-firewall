@@ -268,6 +268,7 @@ Key considerations:
 The project uses TypeScript-based integration tests that run in CI via `.github/workflows/test-coverage.yml`:
 
 **Integration test files (17 total):**
+
 | Category | Test File | Description |
 |----------|-----------|-------------|
 | Core | `basic-firewall.test.ts` | Domain whitelisting, connectivity |

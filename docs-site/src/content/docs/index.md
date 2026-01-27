@@ -162,19 +162,19 @@ The firewall uses a containerized architecture with three security layers:
 <div class="sl-steps">
 
 1. **Learn Domain Filtering**
-   
+
    Master [allowlists, blocklists, and wildcards](/gh-aw-firewall/guides/domain-filtering/) for fine-grained network control.
 
 2. **Understand Security**
-   
+
    Review the [Security Architecture](/gh-aw-firewall/reference/security-architecture/) to learn how the firewall protects against attacks.
 
 3. **CLI Reference**
-   
+
    See the [CLI Reference](/gh-aw-firewall/reference/cli-reference/) for all available options.
 
 4. **Debug Issues**
-   
+
    Check the [troubleshooting guide](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
 
 </div>

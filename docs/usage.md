@@ -143,6 +143,7 @@ You can use wildcard patterns with `*` to match multiple domains:
 - Use quotes around patterns to prevent shell expansion
 
 **Examples:**
+
 | Pattern | Matches | Does Not Match |
 |---------|---------|----------------|
 | `*.github.com` | `api.github.com`, `raw.github.com` | `github.com` |
