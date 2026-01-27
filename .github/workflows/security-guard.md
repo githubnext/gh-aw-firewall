@@ -9,6 +9,8 @@ permissions:
   contents: read
   pull-requests: read
   issues: read
+engine:
+  id: claude
 tools:
   github:
     toolsets: [default]
