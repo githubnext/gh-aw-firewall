@@ -88,21 +88,44 @@ Alternatively, if there's a configuration option in the agentic workflows system
 
 ## Recommended Actions
 
-1. **Report to githubnext/gh-aw**: File an issue in the `githubnext/gh-aw` repository about the MCP Gateway port binding failure
-2. **Check for Configuration**: Review if there's already a way to configure a custom port for the MCP Gateway
-3. **Update actions-lock.json**: When a fix is released, update the version in `.github/aw/actions-lock.json`
+### Immediate Solution: Upgrade Setup Action
+
+The current version in use is **v0.37.3** (from 2025), but the latest is **v0.37.26** (released 2026-01-27). Many improvements have been made since v0.37.3, though it's unclear if the port binding issue was specifically fixed.
+
+**Action**: Update `.github/aw/actions-lock.json` to use a newer version of the setup action.
+
+```bash
+# Using gh-aw CLI (if available)
+gh aw upgrade
+
+# Or manually update the version in .github/aw/actions-lock.json
+# Change from v0.37.3 to v0.37.26 (or latest)
+```
+
+### Long-term Solutions
+
+1. **Report to githubnext/gh-aw**: If upgrading doesn't fix the issue, file an issue in the `githubnext/gh-aw` repository about the MCP Gateway port binding failure
+2. **Check for Configuration**: Review if there's a way to configure a custom port for the MCP Gateway
+3. **Alternative**: Use non-privileged port (8080) instead of port 80 for MCP Gateway
 
 ## Related Files
 
-- `.github/aw/actions-lock.json` - Contains locked version of `githubnext/gh-aw/actions/setup@v0.37.3`
+- `.github/aw/actions-lock.json` - Contains locked version of `githubnext/gh-aw/actions/setup@v0.37.3` (needs update to v0.37.26+)
 - `.github/workflows/release.yml` - Original release workflow (non-agentic)
 - Agentic workflow source is in `githubnext/gh-aw` repository (not in this repo)
 
+## Version Information
+
+- **Current version**: `githubnext/gh-aw/actions/setup@v0.37.3`
+- **Latest version**: `githubnext/gh-aw/actions/setup@v0.37.26` (as of 2026-01-27)
+- **MCP Gateway image**: `ghcr.io/githubnext/gh-aw-mcpg:v0.0.59`
+
 ## Status
 
-- [ ] Issue reported to githubnext/gh-aw
-- [ ] Configuration option identified
-- [ ] Fix applied and verified
+- [x] Issue identified and documented
+- [x] Latest version identified (v0.37.26)
+- [ ] Upgrade to latest version
+- [ ] Verify fix with test workflow
 - [ ] Release workflow succeeds
 
 Last Updated: 2026-01-27
