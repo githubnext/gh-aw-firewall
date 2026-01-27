@@ -217,12 +217,17 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 **Agent Execution Container** (`containers/agent/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
-- Mounts entire host filesystem at `/host` and user home directory for full access
+- Mounts entire host filesystem at `/host` **read-only** for security
+- Uses `isolate.sh` wrapper to provide transparent fallback to host binaries when not available in container
 - `NET_ADMIN` capability required for iptables setup during initialization
-- **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
-- Two-stage entrypoint:
+- **Security:** 
+  - Host filesystem mounted read-only (`/:/host:ro`) prevents accidental or malicious writes
+  - `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
+  - `isolate.sh` enables execution of host binaries via chroot when needed
+- Three-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
-  2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user
+  2. `entrypoint.sh`: Drops NET_ADMIN capability, wraps command with isolate.sh
+  3. `isolate.sh`: Executes command directly if in container PATH, otherwise falls back to chroot for host binaries
 - Key iptables rules (in `setup-iptables.sh`):
   - Allow localhost traffic (for stdio MCP servers)
   - Allow DNS queries
@@ -256,6 +261,36 @@ Containers stopped, temporary files cleaned up
   - `github.com` → matches `github.com` and `.github.com` (subdomains)
   - `.github.com` → matches all subdomains
 - Squid denies any domain not in the allowlist
+
+## Host Binary Isolation with isolate.sh
+
+The agent container uses `isolate.sh` to provide transparent access to host binaries while maintaining a read-only host filesystem mount for security.
+
+**How it works:**
+1. When a command is executed in the agent container, `isolate.sh` first checks if it exists in the container's PATH
+2. If found in container, executes directly (e.g., container's `node`, `npm`, `git`)
+3. If not found, checks if the binary exists in `/host` (the read-only host mount)
+4. If found in `/host`, uses `chroot /host` to execute the host binary
+5. If not found anywhere, lets bash handle the "command not found" error
+
+**Security benefits:**
+- Host filesystem mounted read-only prevents accidental or malicious writes
+- `chroot` provides process-level isolation when running host binaries
+- All commands still run as non-root user (awfuser) after capability drop
+- Fallback is transparent - no changes needed to user commands
+
+**Example:**
+```bash
+# If 'terraform' exists in container PATH → executes container's terraform
+# If 'terraform' not in container but exists in /host → chroot to host, runs host's terraform
+# If 'terraform' doesn't exist anywhere → "command not found" error
+awf --allow-domains example.com 'terraform version'
+```
+
+**Implementation:**
+- Script location: `/usr/local/bin/isolate.sh` in agent container
+- Invoked by: `entrypoint.sh` wraps all user commands automatically
+- Source: `containers/agent/isolate.sh`
 
 ## Exit Code Handling
 
