@@ -16,7 +16,8 @@
 # - chroot provides process-level isolation when running host binaries
 # - All commands run as non-root user (awfuser) after capability drop
 
-set -e
+# Note: We intentionally do NOT use 'set -e' here to allow graceful fallback
+# through multiple command resolution strategies without exiting on first failure
 
 # Get the command to execute (first argument)
 COMMAND="$1"
@@ -39,8 +40,8 @@ if [ ! -d /host ]; then
   exec "$@"
 fi
 
-# Check if this is an absolute path
-if [[ "$COMMAND" == /* ]]; then
+# Check if this is an absolute path (POSIX-compliant test)
+if [ "${COMMAND#/}" != "$COMMAND" ]; then
   # Absolute path - check if it exists in /host
   HOST_PATH="/host${COMMAND}"
   if [ -x "$HOST_PATH" ]; then
