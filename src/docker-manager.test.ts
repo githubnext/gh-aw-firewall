@@ -427,7 +427,7 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      expect(volumes).toContain('/:/host:rw');
+      expect(volumes).toContain('/:/host:ro');
       expect(volumes).toContain('/tmp:/tmp:rw');
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
@@ -441,8 +441,8 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should NOT include blanket /:/host:rw mount
-      expect(volumes).not.toContain('/:/host:rw');
+      // Should NOT include blanket /:/host:ro mount
+      expect(volumes).not.toContain('/:/host:ro');
 
       // Should include custom mounts
       expect(volumes).toContain('/workspace:/workspace:ro');
@@ -458,8 +458,8 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should include blanket /:/host:rw mount
-      expect(volumes).toContain('/:/host:rw');
+      // Should include blanket /:/host:ro mount
+      expect(volumes).toContain('/:/host:ro');
     });
 
     it('should set agent to depend on healthy squid', () => {
