@@ -13,7 +13,7 @@ permissions:
   issues: read
   actions: read
 
-if: ${{ github.actor != 'dependabot[bot]' }}
+if: github.actor != 'dependabot[bot]'
 
 name: Smoke Copilot
 engine: copilot

@@ -12,7 +12,7 @@ permissions:
   issues: read
   pull-requests: read
 
-if: ${{ github.actor != 'dependabot[bot]' }}
+if: github.actor != 'dependabot[bot]'
   
 name: Smoke Claude
 engine:
