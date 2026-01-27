@@ -456,6 +456,8 @@ When using runner/full images or the `act` preset, you get additional tools like
 - Container tools (docker, buildx)
 - And many more (see [catthehacker/docker_images](https://github.com/catthehacker/docker_images))
 
+For complete tool listings with versions, see [Agent Image Tools Reference](/gh-aw-firewall/reference/agent-images/).
+
 ### Notes
 
 - Presets (`default`, `act`) use pre-built GHCR images for fast startup
