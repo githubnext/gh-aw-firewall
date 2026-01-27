@@ -111,8 +111,8 @@ if [ "${AWF_SSL_BUMP_ENABLED}" = "true" ]; then
   fi
 fi
 
-# Setup iptables rules
-/usr/local/bin/setup-iptables.sh
+# Note: iptables setup is handled by separate init container (awf-iptables-setup)
+# The init container shares our network namespace and sets up iptables rules before we start
 
 # Print proxy environment
 echo "[entrypoint] Proxy configuration:"
@@ -129,16 +129,11 @@ echo "[entrypoint]   Hostname: $(hostname)"
 runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
 
 echo "[entrypoint] =================================="
-echo "[entrypoint] Dropping CAP_NET_ADMIN capability and privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
+echo "[entrypoint] Switching to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Drop CAP_NET_ADMIN capability and privileges, then execute the user command
-# This prevents malicious code from modifying iptables rules to bypass the firewall
-# Security note: capsh --drop removes the capability from the bounding set,
-# preventing any process (even if it escalates to root) from acquiring it
-# The order of operations:
-# 1. capsh drops CAP_NET_ADMIN from the bounding set (cannot be regained)
-# 2. gosu switches to awfuser (drops root privileges)
-# 3. exec replaces the current process with the user command
-exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser $(printf '%q ' "$@")"
+# Security: Container does not have NET_ADMIN capability (iptables setup done by init container)
+# Switch to unprivileged user and execute command
+# Note: No need for capsh since NET_ADMIN was never granted to this container
+exec su -s /bin/bash awfuser -c "exec $(printf '%q ' "$@")"

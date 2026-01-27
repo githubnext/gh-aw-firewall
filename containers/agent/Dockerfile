@@ -8,10 +8,11 @@ ARG BASE_IMAGE=ubuntu:22.04
 FROM ${BASE_IMAGE}
 
 # Install required packages and Node.js 22
+# Note: gosu and libcap2-bin removed - no longer needed with init container pattern
+# Note: iptables removed - init container handles iptables setup
 # Note: Some packages may already exist in runner-like base images, apt handles this gracefully
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    iptables \
     curl \
     ca-certificates \
     git \
@@ -19,9 +20,7 @@ RUN apt-get update && \
     gnupg \
     dnsutils \
     net-tools \
-    netcat-openbsd \
-    gosu \
-    libcap2-bin && \
+    netcat-openbsd && \
     # Prefer system binaries over runner toolcache (e.g., act images) for Node checks.
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" && \
     # Install Node.js 22 from NodeSource
@@ -60,11 +59,10 @@ RUN if ! getent group awfuser >/dev/null 2>&1; then \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script and PID logger
-COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
+# Copy entrypoint and PID logger (setup-iptables.sh removed - handled by init container)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
 # Install Docker stub script that shows helpful error message
 # Docker-in-Docker support was removed in v0.9.1
@@ -74,5 +72,7 @@ RUN chmod +x /usr/bin/docker
 # Set working directory
 WORKDIR /workspace
 
-# Use entrypoint to setup iptables and run command
+# Entrypoint performs system configuration as root, then switches to awfuser
+# Note: USER directive not set - container starts as root for system configuration
+# Security: NET_ADMIN capability is NOT granted (handled by separate init container)
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
