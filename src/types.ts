@@ -557,7 +557,19 @@ export interface DockerService {
    * @example ['awf-net']
    * @example { 'awf-net': { ipv4_address: '172.30.0.10' } }
    */
-  networks: string[] | { [key: string]: { ipv4_address?: string } };
+  networks?: string[] | { [key: string]: { ipv4_address?: string } };
+
+  /**
+   * Network mode for the container
+   *
+   * Allows sharing the network namespace with another container or the host.
+   * Used by the init container pattern to share network namespace with the agent.
+   *
+   * @example 'service:agent' - Share network namespace with agent service
+   * @example 'host' - Use host's network namespace
+   * @example 'none' - Disable networking
+   */
+  network_mode?: string;
 
   /**
    * Custom DNS servers for the container
