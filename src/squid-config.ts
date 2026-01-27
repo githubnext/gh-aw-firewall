@@ -511,6 +511,10 @@ pinger_enable off
 # Note: For CONNECT requests (HTTPS), the domain is in the URL field
 logformat firewall_detailed %ts.%03tu %>a:%>p %{Host}>h %<a:%<p %rv %rm %>Hs %Ss:%Sh %ru "%{User-Agent}>h"
 
+# Don't log healthcheck probes from localhost
+acl healthcheck_localhost src 127.0.0.1 ::1
+log_access deny healthcheck_localhost
+
 # Access log and cache configuration
 access_log /var/log/squid/access.log firewall_detailed
 cache_log /var/log/squid/cache.log

@@ -105,6 +105,110 @@ describe('log-aggregator', () => {
       expect(stats.byDomain.has('-')).toBe(true);
       expect(stats.byDomain.has('github.com')).toBe(true);
     });
+
+    it('should filter out transaction-end-before-headers entries', () => {
+      const entries: ParsedLogEntry[] = [
+        createLogEntry({ 
+          domain: 'github.com', 
+          url: 'github.com:443',
+          isAllowed: true 
+        }),
+        createLogEntry({ 
+          domain: '-', 
+          url: 'error:transaction-end-before-headers',
+          decision: 'NONE_NONE:HIER_NONE',
+          statusCode: 0,
+          isAllowed: false 
+        }),
+        createLogEntry({ 
+          domain: 'npmjs.org', 
+          url: 'npmjs.org:443',
+          isAllowed: true 
+        }),
+      ];
+
+      const stats = aggregateLogs(entries);
+
+      // Should only count the two valid entries
+      expect(stats.totalRequests).toBe(2); // Only actual requests, not benign operational entries
+      expect(stats.allowedRequests).toBe(2);
+      expect(stats.deniedRequests).toBe(0);
+      expect(stats.uniqueDomains).toBe(2);
+      expect(stats.byDomain.has('github.com')).toBe(true);
+      expect(stats.byDomain.has('npmjs.org')).toBe(true);
+      expect(stats.byDomain.has('-')).toBe(false); // Filtered entry not in domain stats
+    });
+
+    it('should handle multiple transaction-end-before-headers entries', () => {
+      const entries: ParsedLogEntry[] = [
+        createLogEntry({ 
+          domain: 'github.com', 
+          url: 'github.com:443',
+          isAllowed: true 
+        }),
+        createLogEntry({ 
+          domain: '-', 
+          url: 'error:transaction-end-before-headers',
+          clientIp: '::1', // healthcheck from localhost
+          decision: 'NONE_NONE:HIER_NONE',
+          statusCode: 0,
+          isAllowed: false 
+        }),
+        createLogEntry({ 
+          domain: '-', 
+          url: 'error:transaction-end-before-headers',
+          clientIp: '172.30.0.20', // shutdown-time connection closure
+          decision: 'NONE_NONE:HIER_NONE',
+          statusCode: 0,
+          isAllowed: false 
+        }),
+        createLogEntry({ 
+          domain: 'npmjs.org', 
+          url: 'npmjs.org:443',
+          isAllowed: true 
+        }),
+      ];
+
+      const stats = aggregateLogs(entries);
+
+      expect(stats.totalRequests).toBe(2); // Only actual requests
+      expect(stats.allowedRequests).toBe(2);
+      expect(stats.deniedRequests).toBe(0);
+      expect(stats.uniqueDomains).toBe(2);
+    });
+
+    it('should still count time range from all entries including filtered ones', () => {
+      const entries: ParsedLogEntry[] = [
+        createLogEntry({ 
+          timestamp: 1000.0,
+          domain: 'github.com', 
+          url: 'github.com:443',
+          isAllowed: true 
+        }),
+        createLogEntry({ 
+          timestamp: 1500.0,
+          domain: '-', 
+          url: 'error:transaction-end-before-headers',
+          decision: 'NONE_NONE:HIER_NONE',
+          statusCode: 0,
+          isAllowed: false 
+        }),
+        createLogEntry({ 
+          timestamp: 2000.0,
+          domain: 'npmjs.org', 
+          url: 'npmjs.org:443',
+          isAllowed: true 
+        }),
+      ];
+
+      const stats = aggregateLogs(entries);
+
+      // Time range should span all entries, even filtered ones
+      expect(stats.timeRange).toEqual({
+        start: 1000.0,
+        end: 2000.0,
+      });
+    });
   });
 
   describe('loadAllLogs', () => {
