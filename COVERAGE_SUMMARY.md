@@ -92,7 +92,7 @@ After running `npm run test:coverage`, reports are available in multiple formats
 
 ### Medium Priority
 
-3. **`host-iptables.ts`** (83.63% coverage)
+1. **`host-iptables.ts`** (83.63% coverage)
    - Edge cases in remaining 16.37%
    - Error conditions
    - Cleanup scenarios

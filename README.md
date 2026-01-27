@@ -95,7 +95,7 @@ The shell installer automatically:
 - Protects against 404 error pages being saved as binaries
 - Installs to `/usr/local/bin/awf`
 
-**Alternative: Manual installation**
+### Alternative: Manual installation
 
 ```bash
 # Download the latest release binary

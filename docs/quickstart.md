@@ -318,7 +318,7 @@ test-domain github.com
 test-domain example.com
 ```
 
-## Success!
+## Success
 
 You're now ready to use the firewall. Try integrating it into your GitHub Actions workflow or use it locally for testing restricted network environments.
 
