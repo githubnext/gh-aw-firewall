@@ -8,7 +8,7 @@ on:
   schedule: every 1h
   skip-if-match:
     query: "is:pr is:open is:draft author:app/copilot-swe-agent"
-    max: 9
+    max: 10
   skip-if-no-match: "is:issue is:open"
 
 permissions:
