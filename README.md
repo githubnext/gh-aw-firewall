@@ -39,6 +39,15 @@ sudo -E awf \
   -- copilot --prompt "List my repositories"
 ```
 
+### Playwright Testing Localhost (out of the box)
+
+```bash
+# Start your dev server, then test it:
+sudo awf --allow-domains localhost,playwright.dev -- npx playwright test
+```
+
+The `localhost` keyword automatically configures everything for local testing.
+
 For checksum verification, version pinning, and manual installation steps, see [Quick start](docs/quickstart.md).
 
 #### GitHub Action (recommended for CI/CD)

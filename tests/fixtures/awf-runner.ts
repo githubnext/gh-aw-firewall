@@ -16,6 +16,7 @@ export interface AwfOptions {
   containerWorkDir?: string; // Working directory inside the container
   tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
   dnsServers?: string[]; // DNS servers to use (e.g., ['8.8.8.8', '2001:4860:4860::8888'])
+  allowHostPorts?: string; // Ports or port ranges to allow for host access (e.g., '3000' or '3000-8000')
 }
 
 export interface AwfResult {
@@ -90,6 +91,11 @@ export class AwfRunner {
     // Add DNS servers
     if (options.dnsServers && options.dnsServers.length > 0) {
       args.push('--dns-servers', options.dnsServers.join(','));
+    }
+
+    // Add allow-host-ports
+    if (options.allowHostPorts) {
+      args.push('--allow-host-ports', options.allowHostPorts);
     }
 
     // Add -- separator before command
@@ -209,6 +215,11 @@ export class AwfRunner {
     // Add DNS servers
     if (options.dnsServers && options.dnsServers.length > 0) {
       args.push('--dns-servers', options.dnsServers.join(','));
+    }
+
+    // Add allow-host-ports
+    if (options.allowHostPorts) {
+      args.push('--allow-host-ports', options.allowHostPorts);
     }
 
     // Add -- separator before command

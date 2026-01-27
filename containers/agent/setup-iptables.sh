@@ -173,7 +173,8 @@ if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
     if [[ $port_spec == *"-"* ]]; then
       # Port range (e.g., "3000-3010")
       echo "[iptables]   Redirect port range $port_spec to Squid..."
-      iptables -t nat -A OUTPUT -p tcp -m multiport --dports "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+      # For port ranges, use --dport with range syntax (without multiport)
+      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
     else
       # Single port (e.g., "3000")
       echo "[iptables]   Redirect port $port_spec to Squid..."
