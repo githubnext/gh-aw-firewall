@@ -161,12 +161,23 @@ jobs:
         uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5
         with:
           go-version: '1.23'
+      - name: Setup Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Verify host tools
         run: |
           echo "=== Host tools for chroot testing ==="
           echo "Node.js: $(node --version)"
           echo "Python: $(python3 --version)"
           echo "Go: $(go version)"
+          echo "Java: $(java --version 2>&1 | head -1)"
+          echo ".NET: $(dotnet --version)"
       - name: Install awf dependencies
         run: npm ci
       - name: Build awf
@@ -610,7 +621,7 @@ jobs:
           
           ## Context
           
-          You are testing the `--enable-chroot` feature of the Agentic Workflow Firewall (awf). This feature allows agents to transparently access host binaries (Python, Node, Go, etc.) while maintaining network firewall restrictions and security isolation.
+          You are testing the `--enable-chroot` feature of the Agentic Workflow Firewall (awf). This feature allows agents to transparently access host binaries (Python, Node, Go, Java, .NET, etc.) while maintaining network firewall restrictions and security isolation.
           
           The awf binary has been built locally from this repository and installed at `/usr/local/bin/awf`.
           
@@ -618,21 +629,67 @@ jobs:
           
           Run the following tests using `sudo awf --enable-chroot` and report results:
           
-          ### 1. Host Binary Access Tests
-          Test that host binaries are accessible inside the chroot:
+          ### 1. Language Runtime Version Verification
+          
+          **CRITICAL TEST**: First, capture the host versions of all language runtimes, then verify they match inside the chroot.
+          
+          #### Step 1: Capture Host Versions
+          Run these commands directly on the host (NOT inside awf) and save the versions:
           
           ```bash
-          # Test Python
-          sudo awf --enable-chroot --allow-domains localhost -- python3 --version
-          
-          # Test Node.js
-          sudo awf --enable-chroot --allow-domains localhost -- node --version
-          
-          # Test that Python stdlib works
-          sudo awf --enable-chroot --allow-domains localhost -- python3 -c "import json, os, sys; print('Python stdlib OK')"
+          # Capture host versions
+          echo "=== HOST VERSIONS ==="
+          python3 --version
+          node --version
+          go version
+          java --version 2>&1 | head -1
+          dotnet --version
           ```
           
-          ### 2. Network Firewall Tests
+          #### Step 2: Capture Chroot Versions
+          Run the same commands inside the chroot and compare:
+          
+          ```bash
+          # Python
+          sudo awf --enable-chroot --allow-domains localhost -- python3 --version
+          
+          # Node.js
+          sudo awf --enable-chroot --allow-domains localhost -- node --version
+          
+          # Go
+          sudo awf --enable-chroot --allow-domains localhost -- go version
+          
+          # Java
+          sudo awf --enable-chroot --allow-domains localhost -- java --version 2>&1
+          
+          # .NET
+          sudo awf --enable-chroot --allow-domains localhost -- dotnet --version
+          ```
+          
+          #### Step 3: Verify Versions Match
+          Compare the host versions with chroot versions. They MUST match exactly. Report any mismatches as FAIL.
+          
+          ### 2. Standard Library Access Tests
+          Test that language runtimes can access their standard libraries:
+          
+          ```bash
+          # Python stdlib
+          sudo awf --enable-chroot --allow-domains localhost -- python3 -c "import json, os, sys, http.client; print('Python stdlib OK')"
+          
+          # Node.js builtins
+          sudo awf --enable-chroot --allow-domains localhost -- node -e "require('fs'); require('path'); require('os'); console.log('Node builtins OK')"
+          
+          # Go compilation (create a simple program)
+          sudo awf --enable-chroot --allow-domains localhost -- bash -c 'cd /tmp && echo "package main; func main() { println(\"Go OK\") }" > test.go && go run test.go && rm test.go'
+          
+          # Java compilation
+          sudo awf --enable-chroot --allow-domains localhost -- bash -c 'cd /tmp && echo "public class Test { public static void main(String[] args) { System.out.println(\"Java OK\"); } }" > Test.java && javac Test.java && java Test && rm Test.java Test.class'
+          
+          # .NET execution
+          sudo awf --enable-chroot --allow-domains localhost -- dotnet --list-runtimes
+          ```
+          
+          ### 3. Network Firewall Tests
           Test that network restrictions are enforced:
           
           ```bash
@@ -643,7 +700,7 @@ jobs:
           sudo awf --enable-chroot --allow-domains api.github.com -- curl -s --connect-timeout 5 https://example.com
           ```
           
-          ### 3. Security Boundary Tests
+          ### 4. Security Boundary Tests
           Test that security restrictions are enforced:
           
           ```bash
@@ -660,7 +717,7 @@ jobs:
           sudo awf --enable-chroot --allow-domains localhost -- bash -c "echo test > /tmp/awf-test && cat /tmp/awf-test && rm /tmp/awf-test"
           ```
           
-          ### 4. User Identity Test
+          ### 5. User Identity Test
           Test that user identity is preserved:
           
           ```bash
@@ -672,16 +729,26 @@ jobs:
           
           After running all tests, create a summary with:
           
-          1. **Test Results Table**: List each test category with PASS/FAIL status
-          2. **Versions Found**: Python, Node.js versions detected
-          3. **Security Checks**: Confirmation that Docker socket is hidden, iptables blocked, /usr read-only
-          4. **Any Failures**: Details of any failed tests
+          1. **Version Comparison Table**: Show host version vs chroot version for each runtime (Python, Node, Go, Java, .NET)
+          2. **Version Match Status**: PASS if all versions match, FAIL if any mismatch
+          3. **Standard Library Tests**: PASS/FAIL for each runtime's stdlib test
+          4. **Network Tests**: PASS/FAIL for allowed/blocked domain tests
+          5. **Security Tests**: PASS/FAIL for Docker socket, iptables, read-only /usr, writable /tmp
+          6. **Identity Test**: Confirm user is NOT root
           
-          Add a comment to the current pull request with the test summary. If ALL tests pass, add the label `smoke-chroot`.
+          Add a comment to the current pull request with the test summary table. If ALL tests pass (including version matches), add the label `smoke-chroot`.
           
           ## Expected Results
           
-          - Python and Node.js should be accessible at standard paths
+          | Runtime | Host Version | Chroot Version | Match? |
+          |---------|--------------|----------------|--------|
+          | Python  | 3.12.x       | 3.12.x         | PASS   |
+          | Node.js | 24.x.x       | 24.x.x         | PASS   |
+          | Go      | 1.23.x       | 1.23.x         | PASS   |
+          | Java    | 21.x.x       | 21.x.x         | PASS   |
+          | .NET    | 8.x.x        | 8.x.x          | PASS   |
+          
+          - All stdlib/builtin tests should pass
           - api.github.com requests should succeed
           - example.com requests should be blocked (403)
           - Docker socket should show as /dev/null (character device 1,3)
@@ -809,13 +876,13 @@ jobs:
         # - mcp__github__search_pull_requests
         # - mcp__github__search_repositories
         # - mcp__github__search_users
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
           set -o pipefail
           GH_AW_TOOL_BINS=""; command -v go >/dev/null 2>&1 && GH_AW_TOOL_BINS="$(go env GOROOT)/bin:$GH_AW_TOOL_BINS"; [ -n "$JAVA_HOME" ] && GH_AW_TOOL_BINS="$JAVA_HOME/bin:$GH_AW_TOOL_BINS"; [ -n "$CARGO_HOME" ] && GH_AW_TOOL_BINS="$CARGO_HOME/bin:$GH_AW_TOOL_BINS"; [ -n "$GEM_HOME" ] && GH_AW_TOOL_BINS="$GEM_HOME/bin:$GH_AW_TOOL_BINS"; [ -n "$CONDA" ] && GH_AW_TOOL_BINS="$CONDA/bin:$GH_AW_TOOL_BINS"; [ -n "$PIPX_BIN_DIR" ] && GH_AW_TOOL_BINS="$PIPX_BIN_DIR:$GH_AW_TOOL_BINS"; [ -n "$SWIFT_PATH" ] && GH_AW_TOOL_BINS="$SWIFT_PATH:$GH_AW_TOOL_BINS"; [ -n "$DOTNET_ROOT" ] && GH_AW_TOOL_BINS="$DOTNET_ROOT:$GH_AW_TOOL_BINS"; export GH_AW_TOOL_BINS
           mkdir -p "$HOME/.cache"
           sudo -E awf --env-all --env "ANDROID_HOME=${ANDROID_HOME}" --env "ANDROID_NDK=${ANDROID_NDK}" --env "ANDROID_NDK_HOME=${ANDROID_NDK_HOME}" --env "ANDROID_NDK_LATEST_HOME=${ANDROID_NDK_LATEST_HOME}" --env "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}" --env "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" --env "AZURE_EXTENSION_DIR=${AZURE_EXTENSION_DIR}" --env "CARGO_HOME=${CARGO_HOME}" --env "CHROMEWEBDRIVER=${CHROMEWEBDRIVER}" --env "CONDA=${CONDA}" --env "DOTNET_ROOT=${DOTNET_ROOT}" --env "EDGEWEBDRIVER=${EDGEWEBDRIVER}" --env "GECKOWEBDRIVER=${GECKOWEBDRIVER}" --env "GEM_HOME=${GEM_HOME}" --env "GEM_PATH=${GEM_PATH}" --env "GOPATH=${GOPATH}" --env "GOROOT=${GOROOT}" --env "HOMEBREW_CELLAR=${HOMEBREW_CELLAR}" --env "HOMEBREW_PREFIX=${HOMEBREW_PREFIX}" --env "HOMEBREW_REPOSITORY=${HOMEBREW_REPOSITORY}" --env "JAVA_HOME=${JAVA_HOME}" --env "JAVA_HOME_11_X64=${JAVA_HOME_11_X64}" --env "JAVA_HOME_17_X64=${JAVA_HOME_17_X64}" --env "JAVA_HOME_21_X64=${JAVA_HOME_21_X64}" --env "JAVA_HOME_25_X64=${JAVA_HOME_25_X64}" --env "JAVA_HOME_8_X64=${JAVA_HOME_8_X64}" --env "NVM_DIR=${NVM_DIR}" --env "PIPX_BIN_DIR=${PIPX_BIN_DIR}" --env "PIPX_HOME=${PIPX_HOME}" --env "RUSTUP_HOME=${RUSTUP_HOME}" --env "SELENIUM_JAR_PATH=${SELENIUM_JAR_PATH}" --env "SWIFT_PATH=${SWIFT_PATH}" --env "VCPKG_INSTALLATION_ROOT=${VCPKG_INSTALLATION_ROOT}" --env "GH_AW_TOOL_BINS=$GH_AW_TOOL_BINS" --tty --container-workdir "${GITHUB_WORKSPACE}" --mount /tmp:/tmp:rw --mount "${HOME}/.cache:${HOME}/.cache:rw" --mount "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw" --mount /opt/hostedtoolcache:/opt/hostedtoolcache:ro --mount /opt/gh-aw:/opt/gh-aw:ro --allow-domains '*.githubusercontent.com,anthropic.com,api.anthropic.com,api.github.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,cdn.playwright.dev,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,files.pythonhosted.org,ghcr.io,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,github.githubassets.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,playwright.download.prss.microsoft.com,ppa.launchpad.net,pypi.org,raw.githubusercontent.com,registry.npmjs.org,s.symcb.com,s.symcd.com,security.ubuntu.com,sentry.io,statsig.anthropic.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --enable-host-access --image-tag 0.11.2 --agent-image act \
-            -- /bin/bash -c 'source /opt/gh-aw/actions/sanitize_path.sh "$GH_AW_TOOL_BINS$(find /opt/hostedtoolcache -maxdepth 4 -type d -name bin 2>/dev/null | tr '\''\n'\'' '\'':'\'')$PATH" && claude --print --disable-slash-commands --no-chrome --max-turns 20 --mcp-config /tmp/gh-aw/mcp-config/mcp-servers.json --allowed-tools Bash,BashOutput,Edit,ExitPlanMode,Glob,Grep,KillBash,LS,MultiEdit,NotebookEdit,NotebookRead,Read,Task,TodoWrite,Write,mcp__github__download_workflow_run_artifact,mcp__github__get_code_scanning_alert,mcp__github__get_commit,mcp__github__get_dependabot_alert,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__get_file_contents,mcp__github__get_job_logs,mcp__github__get_label,mcp__github__get_latest_release,mcp__github__get_me,mcp__github__get_notification_details,mcp__github__get_pull_request,mcp__github__get_pull_request_comments,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_release_by_tag,mcp__github__get_secret_scanning_alert,mcp__github__get_tag,mcp__github__get_workflow_run,mcp__github__get_workflow_run_logs,mcp__github__get_workflow_run_usage,mcp__github__issue_read,mcp__github__list_branches,mcp__github__list_code_scanning_alerts,mcp__github__list_commits,mcp__github__list_dependabot_alerts,mcp__github__list_discussion_categories,mcp__github__list_discussions,mcp__github__list_issue_types,mcp__github__list_issues,mcp__github__list_label,mcp__github__list_notifications,mcp__github__list_pull_requests,mcp__github__list_releases,mcp__github__list_secret_scanning_alerts,mcp__github__list_starred_repositories,mcp__github__list_tags,mcp__github__list_workflow_jobs,mcp__github__list_workflow_run_artifacts,mcp__github__list_workflow_runs,mcp__github__list_workflows,mcp__github__pull_request_read,mcp__github__search_code,mcp__github__search_issues,mcp__github__search_orgs,mcp__github__search_pull_requests,mcp__github__search_repositories,mcp__github__search_users --debug-file /tmp/gh-aw/agent-stdio.log --verbose --permission-mode bypassPermissions --output-format json "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_CLAUDE:+ --model "$GH_AW_MODEL_AGENT_CLAUDE"}'
+            -- /bin/bash -c 'source /opt/gh-aw/actions/sanitize_path.sh "$GH_AW_TOOL_BINS$(find /opt/hostedtoolcache -maxdepth 4 -type d -name bin 2>/dev/null | tr '\''\n'\'' '\'':'\'')$PATH" && claude --print --disable-slash-commands --no-chrome --max-turns 25 --mcp-config /tmp/gh-aw/mcp-config/mcp-servers.json --allowed-tools Bash,BashOutput,Edit,ExitPlanMode,Glob,Grep,KillBash,LS,MultiEdit,NotebookEdit,NotebookRead,Read,Task,TodoWrite,Write,mcp__github__download_workflow_run_artifact,mcp__github__get_code_scanning_alert,mcp__github__get_commit,mcp__github__get_dependabot_alert,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__get_file_contents,mcp__github__get_job_logs,mcp__github__get_label,mcp__github__get_latest_release,mcp__github__get_me,mcp__github__get_notification_details,mcp__github__get_pull_request,mcp__github__get_pull_request_comments,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_release_by_tag,mcp__github__get_secret_scanning_alert,mcp__github__get_tag,mcp__github__get_workflow_run,mcp__github__get_workflow_run_logs,mcp__github__get_workflow_run_usage,mcp__github__issue_read,mcp__github__list_branches,mcp__github__list_code_scanning_alerts,mcp__github__list_commits,mcp__github__list_dependabot_alerts,mcp__github__list_discussion_categories,mcp__github__list_discussions,mcp__github__list_issue_types,mcp__github__list_issues,mcp__github__list_label,mcp__github__list_notifications,mcp__github__list_pull_requests,mcp__github__list_releases,mcp__github__list_secret_scanning_alerts,mcp__github__list_starred_repositories,mcp__github__list_tags,mcp__github__list_workflow_jobs,mcp__github__list_workflow_run_artifacts,mcp__github__list_workflow_runs,mcp__github__list_workflows,mcp__github__pull_request_read,mcp__github__search_code,mcp__github__search_issues,mcp__github__search_orgs,mcp__github__search_pull_requests,mcp__github__search_repositories,mcp__github__search_users --debug-file /tmp/gh-aw/agent-stdio.log --verbose --permission-mode bypassPermissions --output-format json "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_AGENT_CLAUDE:+ --model "$GH_AW_MODEL_AGENT_CLAUDE"}'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BASH_DEFAULT_TIMEOUT_MS: 60000
@@ -824,7 +891,7 @@ jobs:
           DISABLE_BUG_COMMAND: 1
           DISABLE_ERROR_REPORTING: 1
           DISABLE_TELEMETRY: 1
-          GH_AW_MAX_TURNS: 20
+          GH_AW_MAX_TURNS: 25
           GH_AW_MCP_CONFIG: /tmp/gh-aw/mcp-config/mcp-servers.json
           GH_AW_MODEL_AGENT_CLAUDE: ${{ vars.GH_AW_MODEL_AGENT_CLAUDE || '' }}
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
@@ -1162,7 +1229,7 @@ jobs:
         run: |
           set -o pipefail
                     # Execute Claude Code CLI with prompt from file
-                    source /opt/gh-aw/actions/sanitize_path.sh "$GH_AW_TOOL_BINS$(find /opt/hostedtoolcache -maxdepth 4 -type d -name bin 2>/dev/null | tr '\n' ':')$PATH" && claude --print --disable-slash-commands --no-chrome --max-turns 20 --allowed-tools 'Bash(cat),Bash(grep),Bash(head),Bash(jq),Bash(ls),Bash(tail),Bash(wc),BashOutput,ExitPlanMode,Glob,Grep,KillBash,LS,NotebookRead,Read,Task,TodoWrite' --debug-file /tmp/gh-aw/threat-detection/detection.log --verbose --permission-mode bypassPermissions --output-format json "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_DETECTION_CLAUDE:+ --model "$GH_AW_MODEL_DETECTION_CLAUDE"}
+                    source /opt/gh-aw/actions/sanitize_path.sh "$GH_AW_TOOL_BINS$(find /opt/hostedtoolcache -maxdepth 4 -type d -name bin 2>/dev/null | tr '\n' ':')$PATH" && claude --print --disable-slash-commands --no-chrome --max-turns 25 --allowed-tools 'Bash(cat),Bash(grep),Bash(head),Bash(jq),Bash(ls),Bash(tail),Bash(wc),BashOutput,ExitPlanMode,Glob,Grep,KillBash,LS,NotebookRead,Read,Task,TodoWrite' --debug-file /tmp/gh-aw/threat-detection/detection.log --verbose --permission-mode bypassPermissions --output-format json "$(cat /tmp/gh-aw/aw-prompts/prompt.txt)"${GH_AW_MODEL_DETECTION_CLAUDE:+ --model "$GH_AW_MODEL_DETECTION_CLAUDE"}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BASH_DEFAULT_TIMEOUT_MS: 60000
@@ -1171,7 +1238,7 @@ jobs:
           DISABLE_BUG_COMMAND: 1
           DISABLE_ERROR_REPORTING: 1
           DISABLE_TELEMETRY: 1
-          GH_AW_MAX_TURNS: 20
+          GH_AW_MAX_TURNS: 25
           GH_AW_MODEL_DETECTION_CLAUDE: ${{ vars.GH_AW_MODEL_DETECTION_CLAUDE || '' }}
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
           GITHUB_WORKSPACE: ${{ github.workspace }}
