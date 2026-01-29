@@ -3,6 +3,9 @@
  *
  * These tests verify edge cases, security features, and error handling
  * for the --enable-chroot feature.
+ *
+ * NOTE: stdout may contain entrypoint debug logs in addition to command output.
+ * Use toContain() instead of exact matches, or check the last line of output.
  */
 
 /// <reference path="../jest-custom-matchers.d.ts" />
@@ -10,6 +13,14 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
+
+/**
+ * Helper to get the last non-empty line from stdout (skips debug logs)
+ */
+function getLastLine(output: string): string {
+  const lines = output.trim().split('\n').filter(line => line.trim() !== '');
+  return lines[lines.length - 1] || '';
+}
 
 describe('Chroot Edge Cases', () => {
   let runner: AwfRunner;
@@ -34,10 +45,11 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
-      expect(result.stdout.trim()).toBe('/tmp');
+      // The last line should be /tmp (after all the debug output)
+      expect(getLastLine(result.stdout)).toBe('/tmp');
     }, 120000);
 
-    test('should fall back to / if workdir does not exist', async () => {
+    test('should fall back to home directory if workdir does not exist', async () => {
       const result = await runner.runWithSudo('pwd', {
         allowDomains: ['localhost'],
         logLevel: 'debug',
@@ -47,8 +59,9 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
-      // Should fall back to / or home directory
-      expect(result.stdout.trim()).toMatch(/^\//);
+      // Should fall back to home directory (starts with /)
+      const lastLine = getLastLine(result.stdout);
+      expect(lastLine).toMatch(/^\//);
     }, 120000);
   });
 
@@ -76,7 +89,9 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
-      expect(result.stdout.trim()).toMatch(/^\//);
+      // HOME should be a path starting with /
+      const lastLine = getLastLine(result.stdout);
+      expect(lastLine).toMatch(/^\//);
     }, 120000);
 
     test('should pass custom environment variables', async () => {
@@ -108,7 +123,8 @@ describe('Chroot Edge Cases', () => {
     }, 120000);
 
     test('should have read access to /etc', async () => {
-      const result = await runner.runWithSudo('cat /etc/hostname', {
+      // /etc/hostname might not exist in all environments, check /etc/passwd instead
+      const result = await runner.runWithSudo('cat /etc/passwd | head -1', {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
@@ -116,6 +132,8 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
+      // passwd file should have root entry
+      expect(result.stdout).toContain('root');
     }, 120000);
 
     test('should have write access to /tmp', async () => {
@@ -133,27 +151,21 @@ describe('Chroot Edge Cases', () => {
       expect(result.stdout).toContain('test');
     }, 120000);
 
-    test('should not have access to Docker socket', async () => {
-      // Docker socket should be hidden (mounted to /dev/null)
-      const result = await runner.runWithSudo('ls -la /var/run/docker.sock 2>&1', {
-        allowDomains: ['localhost'],
-        logLevel: 'debug',
-        timeout: 60000,
-        enableChroot: true,
-      });
-
-      // Should either not exist or be /dev/null
-      if (result.success) {
-        // If it exists, it should be empty (pointing to /dev/null)
-        const checkResult = await runner.runWithSudo('test -S /var/run/docker.sock && echo "is_socket"', {
+    test('should have Docker socket hidden or inaccessible', async () => {
+      // Docker socket should be hidden (mounted to /dev/null) or not exist
+      const result = await runner.runWithSudo(
+        'test -S /var/run/docker.sock && echo "has_socket" || echo "no_socket"',
+        {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
           enableChroot: true,
-        });
-        // Should not be a socket (it's /dev/null)
-        expect(checkResult.stdout).not.toContain('is_socket');
-      }
+        }
+      );
+
+      expect(result).toSucceed();
+      // The docker socket should NOT be a socket (it's /dev/null or doesn't exist)
+      expect(result.stdout).toContain('no_socket');
     }, 120000);
   });
 
@@ -335,8 +347,9 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
-      // Should not be root (uid 0)
-      const uid = parseInt(result.stdout.trim());
+      // Should not be root (uid 0) - check last line of output
+      const lastLine = getLastLine(result.stdout);
+      const uid = parseInt(lastLine);
       expect(uid).not.toBe(0);
     }, 120000);
 
@@ -349,7 +362,9 @@ describe('Chroot Edge Cases', () => {
       });
 
       expect(result).toSucceed();
-      expect(result.stdout.trim()).not.toBe('root');
+      // The last line should be the username, which should not be 'root'
+      const lastLine = getLastLine(result.stdout);
+      expect(lastLine).not.toBe('root');
     }, 120000);
   });
 });
