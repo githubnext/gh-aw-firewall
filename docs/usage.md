@@ -6,7 +6,8 @@
 sudo awf [options] <command>
 
 Options:
-  --allow-domains <domains>  Comma-separated list of allowed domains (required)
+  --allow-domains <domains>  Comma-separated list of allowed domains (optional)
+                             If not specified, all network access is blocked
                              Example: github.com,api.github.com,arxiv.org
   --allow-domains-file <path>  Path to file containing allowed domains
   --block-domains <domains>  Comma-separated list of blocked domains

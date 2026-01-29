@@ -624,10 +624,9 @@ program
       }
     }
 
-    // Ensure at least one domain is specified
+    // Log when no domains are specified (all network access will be blocked)
     if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
-      process.exit(1);
+      logger.debug('No allowed domains specified - all network access will be blocked');
     }
 
     // Remove duplicates (in case domains appear in both sources)

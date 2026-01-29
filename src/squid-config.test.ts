@@ -1374,3 +1374,21 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
     }).not.toThrow();
   });
 });
+
+describe('Empty Domain List', () => {
+  it('should generate config that denies all traffic when no domains are specified', () => {
+    const config = {
+      domains: [],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    // Should deny all traffic when no domains are allowed
+    expect(result).toContain('http_access deny all');
+    // Should have a comment indicating no domains configured
+    expect(result).toContain('# No domains configured');
+    // Should not have any allowed_domains ACL
+    expect(result).not.toContain('acl allowed_domains');
+    expect(result).not.toContain('acl allowed_http_only');
+    expect(result).not.toContain('acl allowed_https_only');
+  });
+});
