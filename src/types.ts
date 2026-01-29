@@ -345,7 +345,8 @@ export interface WrapperConfig {
    *
    * Security protections:
    * - Docker socket hidden (/dev/null mounted over /var/run/docker.sock)
-   * - /etc/shadow, /etc/passwd not mounted
+   * - /etc/shadow NOT mounted (password hashes protected)
+   * - /etc/passwd mounted read-only (required for user lookup in chroot)
    * - CAP_SYS_CHROOT capability added but dropped before user commands
    *
    * @default false

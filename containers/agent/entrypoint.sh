@@ -229,13 +229,24 @@ AWFEOF
   # 2. cd to the working directory
   # 3. Drop capabilities (NET_ADMIN and SYS_CHROOT)
   # 4. Run as the mapped user using capsh --user
-  # 5. Clean up the script file
+  # 5. Clean up the script file and restore resolv.conf
   #
   # Note: We use capsh inside the chroot because it handles the privilege drop
   # and user switch atomically. The host must have capsh installed.
+
+  # Build cleanup command that restores resolv.conf if it was modified
+  # The backup path uses the chroot perspective (no /host prefix)
+  CLEANUP_CMD="rm -f ${SCRIPT_FILE}"
+  if [ "$RESOLV_MODIFIED" = "true" ]; then
+    # Convert backup path from container perspective (/host/etc/...) to chroot perspective (/etc/...)
+    CHROOT_RESOLV_BACKUP="${RESOLV_BACKUP#/host}"
+    CLEANUP_CMD="${CLEANUP_CMD}; mv '${CHROOT_RESOLV_BACKUP}' /etc/resolv.conf 2>/dev/null || true"
+    echo "[entrypoint] DNS configuration will be restored on exit"
+  fi
+
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
-    trap 'rm -f ${SCRIPT_FILE}' EXIT
+    trap '${CLEANUP_CMD}' EXIT
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
   "
 else
