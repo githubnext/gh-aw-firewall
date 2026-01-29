@@ -42,7 +42,7 @@ describe('Chroot Package Manager Support', () => {
 
     test('should show package info without network', async () => {
       const result = await runner.runWithSudo('pip3 show pip', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -92,7 +92,7 @@ describe('Chroot Package Manager Support', () => {
 
     test('should be blocked from npm registry without domain', async () => {
       const result = await runner.runWithSudo('npm view chalk version 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -118,7 +118,7 @@ describe('Chroot Package Manager Support', () => {
 
     test('should execute rustc from host via chroot', async () => {
       const result = await runner.runWithSudo('rustc --version', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -146,7 +146,7 @@ describe('Chroot Package Manager Support', () => {
   describe('Java (maven)', () => {
     test('should execute java from host via chroot', async () => {
       const result = await runner.runWithSudo('java --version 2>&1 || java -version 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -158,7 +158,7 @@ describe('Chroot Package Manager Support', () => {
 
     test('should execute javac from host via chroot', async () => {
       const result = await runner.runWithSudo('javac --version 2>&1 || javac -version 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -188,7 +188,7 @@ describe('Chroot Package Manager Support', () => {
   describe('Ruby (gem/bundler)', () => {
     test('should execute ruby from host via chroot', async () => {
       const result = await runner.runWithSudo('ruby --version', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -212,7 +212,7 @@ describe('Chroot Package Manager Support', () => {
 
     test('should list installed gems', async () => {
       const result = await runner.runWithSudo('gem list --local | head -5', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -267,7 +267,7 @@ describe('Chroot Package Manager Support', () => {
       const result = await runner.runWithSudo(
         'cd /tmp && mkdir -p gotest && cd gotest && go mod init test 2>&1 && go mod tidy 2>&1 && cat go.mod',
         {
-          allowDomains: [],
+          allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
           enableChroot: true,

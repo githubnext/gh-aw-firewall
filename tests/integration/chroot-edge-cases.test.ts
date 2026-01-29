@@ -26,7 +26,7 @@ describe('Chroot Edge Cases', () => {
   describe('Working Directory Handling', () => {
     test('should respect container-workdir in chroot mode', async () => {
       const result = await runner.runWithSudo('pwd', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -39,7 +39,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should fall back to / if workdir does not exist', async () => {
       const result = await runner.runWithSudo('pwd', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -55,7 +55,7 @@ describe('Chroot Edge Cases', () => {
   describe('Environment Variables', () => {
     test('should preserve PATH including tool cache paths', async () => {
       const result = await runner.runWithSudo('echo $PATH', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -69,7 +69,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should have HOME set correctly', async () => {
       const result = await runner.runWithSudo('echo $HOME', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -81,7 +81,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should pass custom environment variables', async () => {
       const result = await runner.runWithSudo('echo $MY_CUSTOM_VAR', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -98,7 +98,7 @@ describe('Chroot Edge Cases', () => {
   describe('File System Access', () => {
     test('should have read access to /usr', async () => {
       const result = await runner.runWithSudo('ls /usr/bin | head -5', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -109,7 +109,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should have read access to /etc', async () => {
       const result = await runner.runWithSudo('cat /etc/hostname', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -122,7 +122,7 @@ describe('Chroot Edge Cases', () => {
       const result = await runner.runWithSudo(
         'echo "test" > /tmp/chroot-test-$$ && cat /tmp/chroot-test-$$ && rm /tmp/chroot-test-$$',
         {
-          allowDomains: [],
+          allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
           enableChroot: true,
@@ -136,7 +136,7 @@ describe('Chroot Edge Cases', () => {
     test('should not have access to Docker socket', async () => {
       // Docker socket should be hidden (mounted to /dev/null)
       const result = await runner.runWithSudo('ls -la /var/run/docker.sock 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -146,7 +146,7 @@ describe('Chroot Edge Cases', () => {
       if (result.success) {
         // If it exists, it should be empty (pointing to /dev/null)
         const checkResult = await runner.runWithSudo('test -S /var/run/docker.sock && echo "is_socket"', {
-          allowDomains: [],
+          allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
           enableChroot: true,
@@ -161,7 +161,7 @@ describe('Chroot Edge Cases', () => {
     test('should not have NET_ADMIN capability', async () => {
       // Try to run iptables - should fail without NET_ADMIN
       const result = await runner.runWithSudo('iptables -L 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -175,7 +175,7 @@ describe('Chroot Edge Cases', () => {
     test('should not be able to use chroot command', async () => {
       // Should not be able to chroot again (capability dropped)
       const result = await runner.runWithSudo('chroot / /bin/true 2>&1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -189,7 +189,7 @@ describe('Chroot Edge Cases', () => {
   describe('Exit Code Propagation', () => {
     test('should propagate exit code 0', async () => {
       const result = await runner.runWithSudo('exit 0', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -200,7 +200,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should propagate exit code 1', async () => {
       const result = await runner.runWithSudo('exit 1', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -211,7 +211,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should propagate exit code from failed command', async () => {
       const result = await runner.runWithSudo('false', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -222,7 +222,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should propagate exit code 127 for command not found', async () => {
       const result = await runner.runWithSudo('nonexistent_command_xyz123', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -273,7 +273,7 @@ describe('Chroot Edge Cases', () => {
   describe('Shell Features', () => {
     test('should support shell pipes', async () => {
       const result = await runner.runWithSudo('echo "hello world" | grep hello', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -287,7 +287,7 @@ describe('Chroot Edge Cases', () => {
       const result = await runner.runWithSudo(
         'echo "redirect test" > /tmp/redirect-test-$$ && cat /tmp/redirect-test-$$ && rm /tmp/redirect-test-$$',
         {
-          allowDomains: [],
+          allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
           enableChroot: true,
@@ -300,7 +300,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should support command substitution', async () => {
       const result = await runner.runWithSudo('echo "Today is $(date +%Y)"', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -312,7 +312,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should support compound commands', async () => {
       const result = await runner.runWithSudo('echo "first" && echo "second" && echo "third"', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -328,7 +328,7 @@ describe('Chroot Edge Cases', () => {
   describe('User Context', () => {
     test('should run as non-root user', async () => {
       const result = await runner.runWithSudo('id -u', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
@@ -342,7 +342,7 @@ describe('Chroot Edge Cases', () => {
 
     test('should have username set', async () => {
       const result = await runner.runWithSudo('whoami', {
-        allowDomains: [],
+        allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
         enableChroot: true,
