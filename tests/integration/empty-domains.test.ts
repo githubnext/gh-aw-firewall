@@ -130,7 +130,7 @@ describe('Empty Domains (No Network Access)', () => {
   });
 
   describe('DNS Behavior', () => {
-    test('should block DNS resolution for external domains', async () => {
+    test('should block network access even when DNS resolution succeeds', async () => {
       // DNS lookups should work (we allow DNS traffic), but connecting should fail
       // because the domain isn't in the allowlist
       const result = await runner.runWithSudo(
