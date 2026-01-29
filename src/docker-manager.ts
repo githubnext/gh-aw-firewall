@@ -85,6 +85,39 @@ export function getSafeHostGid(): string {
 }
 
 /**
+ * Gets the real user's home directory, accounting for sudo.
+ * When running with sudo, uses SUDO_USER to find the actual user's home.
+ * @internal Exported for testing
+ */
+export function getRealUserHome(): string {
+  const uid = process.getuid?.();
+
+  // When running as root (sudo), try to get the original user's home
+  if (!uid || uid === 0) {
+    // Try SUDO_USER first - look up their home directory from passwd
+    const sudoUser = process.env.SUDO_USER;
+    if (sudoUser) {
+      try {
+        // Look up user's home directory from /etc/passwd
+        const passwd = fs.readFileSync('/etc/passwd', 'utf-8');
+        const userLine = passwd.split('\n').find(line => line.startsWith(`${sudoUser}:`));
+        if (userLine) {
+          const parts = userLine.split(':');
+          if (parts.length >= 6 && parts[5]) {
+            return parts[5]; // Home directory is the 6th field
+          }
+        }
+      } catch {
+        // Fall through to use HOME
+      }
+    }
+  }
+
+  // Use HOME environment variable as fallback
+  return process.env.HOME || '/root';
+}
+
+/**
  * Gets existing Docker network subnets to avoid conflicts
  */
 async function getExistingDockerSubnets(): Promise<string[]> {
@@ -289,13 +322,15 @@ export function generateDockerCompose(
   ]);
 
   // Start with required/overridden environment variables
+  // For chroot mode, use the real user's home (not /root when running with sudo)
+  const homeDir = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const environment: Record<string, string> = {
     HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
-    HOME: process.env.HOME || '/root',
+    HOME: homeDir,
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
 
@@ -332,6 +367,20 @@ export function generateDockerCompose(
     environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
   }
 
+  // Pass chroot mode flag to container for entrypoint.sh capability drop
+  if (config.enableChroot) {
+    environment.AWF_CHROOT_ENABLED = 'true';
+    // Pass the container working directory for chroot mode
+    // If containerWorkDir is set, use it; otherwise use home directory
+    // The entrypoint will strip /host prefix to get the correct path inside chroot
+    if (config.containerWorkDir) {
+      environment.AWF_WORKDIR = config.containerWorkDir;
+    } else {
+      // Default to real user's home directory (not /root when running with sudo)
+      environment.AWF_WORKDIR = getRealUserHome();
+    }
+  }
+
   // Pass host UID/GID for runtime user adjustment in entrypoint
   // This ensures awfuser UID/GID matches host user for correct file ownership
   environment.AWF_USER_UID = getSafeHostUid();
@@ -339,13 +388,74 @@ export function generateDockerCompose(
   // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
   // Build volumes list for agent execution container
+  // For chroot mode, use the real user's home (not /root when running with sudo)
+  const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${process.env.HOME}:${process.env.HOME}:rw`,
+    `${effectiveHome}:${effectiveHome}:rw`,
     // Mount agent logs directory to workDir for persistence
-    `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
+    `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
+
+  // Add chroot-related volume mounts when --enable-chroot is specified
+  // These mounts enable chroot /host to work properly for running host binaries
+  if (config.enableChroot) {
+    logger.debug('Chroot mode enabled - using selective path mounts for security');
+
+    // System paths (read-only) - required for binaries and libraries
+    agentVolumes.push(
+      '/usr:/host/usr:ro',
+      '/bin:/host/bin:ro',
+      '/sbin:/host/sbin:ro',
+    );
+
+    // Handle /lib and /lib64 - may be symlinks on some systems
+    // Always mount them to ensure library resolution works
+    agentVolumes.push('/lib:/host/lib:ro');
+    agentVolumes.push('/lib64:/host/lib64:ro');
+
+    // Tool cache - language runtimes from GitHub runners (read-only)
+    // /opt/hostedtoolcache contains Python, Node, Ruby, Go, Java, etc.
+    agentVolumes.push('/opt:/host/opt:ro');
+
+    // Special filesystem mounts for chroot (needed for process info, devices)
+    agentVolumes.push(
+      '/proc:/host/proc:ro',      // Read-only proc for runtime info
+      '/sys:/host/sys:ro',        // Read-only sysfs
+      '/dev:/host/dev:ro',        // Read-only device nodes (needed by some runtimes)
+    );
+
+    // User home directory for project files and Rust/Cargo (read-write)
+    // Note: $HOME is already mounted at the container level, this adds it under /host
+    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
+    const userHome = getRealUserHome();
+    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+
+    // /tmp is needed for chroot mode to write temporary command scripts
+    // The entrypoint.sh writes to /host/tmp/awf-cmd-$$.sh
+    agentVolumes.push('/tmp:/host/tmp:rw');
+
+    // Minimal /etc - only what's needed for runtime
+    // Note: /etc/shadow is NOT mounted (contains password hashes)
+    agentVolumes.push(
+      '/etc/ssl:/host/etc/ssl:ro',                         // SSL certificates
+      '/etc/ca-certificates:/host/etc/ca-certificates:ro', // CA certificates
+      '/etc/alternatives:/host/etc/alternatives:ro',       // For update-alternatives (runtime version switching)
+      '/etc/ld.so.cache:/host/etc/ld.so.cache:ro',         // Dynamic linker cache
+      '/etc/passwd:/host/etc/passwd:ro',                   // User database (needed for getent/user lookup)
+      '/etc/group:/host/etc/group:ro',                     // Group database (needed for getent/group lookup)
+      '/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro',     // Name service switch config
+    );
+
+    // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'
+    // An attacker could otherwise spawn a new container without network restrictions
+    agentVolumes.push('/dev/null:/host/var/run/docker.sock:ro');
+    // Also hide /run/docker.sock (symlink on some systems)
+    agentVolumes.push('/dev/null:/host/run/docker.sock:ro');
+
+    logger.debug('Selective mounts configured: system paths (ro), home (rw), Docker socket hidden');
+  }
 
   // Add SSL CA certificate mount if SSL Bump is enabled
   // This allows the agent container to trust the dynamically-generated CA
@@ -361,8 +471,9 @@ export function generateDockerCompose(
     config.volumeMounts.forEach(mount => {
       agentVolumes.push(mount);
     });
-  } else {
-    // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
+  } else if (!config.enableChroot) {
+    // If no custom mounts specified AND not using chroot mode,
+    // include blanket host filesystem mount for backward compatibility
     logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
     agentVolumes.unshift('/:/host:rw');
   }
@@ -385,10 +496,11 @@ export function generateDockerCompose(
       },
     },
     // NET_ADMIN is required for iptables setup in entrypoint.sh.
-    // Security: The capability is dropped before running user commands
-    // via 'capsh --drop=cap_net_admin' in containers/agent/entrypoint.sh.
-    // This prevents malicious code from modifying iptables rules.
-    cap_add: ['NET_ADMIN'],
+    // SYS_CHROOT is added when --enable-chroot is specified for chroot operations.
+    // Security: Both capabilities are dropped before running user commands
+    // via 'capsh --drop=cap_net_admin,cap_sys_chroot' in containers/agent/entrypoint.sh.
+    // This prevents malicious code from modifying iptables rules or using chroot.
+    cap_add: config.enableChroot ? ['NET_ADMIN', 'SYS_CHROOT'] : ['NET_ADMIN'],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)

@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -169,6 +169,38 @@ describe('docker-manager', () => {
       process.getgid = () => 1001;
       delete process.env.SUDO_GID;
       expect(getSafeHostGid()).toBe('1001');
+    });
+  });
+
+  describe('getRealUserHome', () => {
+    const originalGetuid = process.getuid;
+    const originalSudoUser = process.env.SUDO_USER;
+    const originalHome = process.env.HOME;
+
+    afterEach(() => {
+      process.getuid = originalGetuid;
+      process.env.SUDO_USER = originalSudoUser;
+      process.env.HOME = originalHome;
+    });
+
+    it('should return HOME when running as regular user', () => {
+      process.getuid = () => 1001;
+      process.env.HOME = '/home/testuser';
+      expect(getRealUserHome()).toBe('/home/testuser');
+    });
+
+    it('should return /root as fallback when HOME is not set and running as root', () => {
+      process.getuid = () => 0;
+      delete process.env.SUDO_USER;
+      delete process.env.HOME;
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should use HOME as fallback when running as root without SUDO_USER', () => {
+      process.getuid = () => 0;
+      delete process.env.SUDO_USER;
+      process.env.HOME = '/root';
+      expect(getRealUserHome()).toBe('/root');
     });
   });
 
@@ -460,6 +492,151 @@ describe('docker-manager', () => {
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
+    });
+
+    it('should use selective mounts when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should NOT include blanket /:/host:rw mount
+      expect(volumes).not.toContain('/:/host:rw');
+
+      // Should include system paths (read-only)
+      expect(volumes).toContain('/usr:/host/usr:ro');
+      expect(volumes).toContain('/bin:/host/bin:ro');
+      expect(volumes).toContain('/sbin:/host/sbin:ro');
+      expect(volumes).toContain('/lib:/host/lib:ro');
+      expect(volumes).toContain('/lib64:/host/lib64:ro');
+      expect(volumes).toContain('/opt:/host/opt:ro');
+
+      // Should include special filesystems (read-only)
+      expect(volumes).toContain('/proc:/host/proc:ro');
+      expect(volumes).toContain('/sys:/host/sys:ro');
+      expect(volumes).toContain('/dev:/host/dev:ro');
+
+      // Should include /etc subdirectories (read-only)
+      expect(volumes).toContain('/etc/ssl:/host/etc/ssl:ro');
+      expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
+      expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
+      expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
+
+      // Should still include essential mounts
+      expect(volumes).toContain('/tmp:/tmp:rw');
+      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+    });
+
+    it('should hide Docker socket when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Docker socket should be hidden with /dev/null
+      expect(volumes).toContain('/dev/null:/host/var/run/docker.sock:ro');
+      expect(volumes).toContain('/dev/null:/host/run/docker.sock:ro');
+    });
+
+    it('should mount user home directory under /host when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should mount home directory under /host for chroot access (read-write)
+      const homeDir = process.env.HOME || '/root';
+      expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
+    });
+
+    it('should add SYS_CHROOT capability when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.cap_add).toContain('NET_ADMIN');
+      expect(agent.cap_add).toContain('SYS_CHROOT');
+    });
+
+    it('should not add SYS_CHROOT capability when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.cap_add).toContain('NET_ADMIN');
+      expect(agent.cap_add).not.toContain('SYS_CHROOT');
+    });
+
+    it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_CHROOT_ENABLED).toBe('true');
+    });
+
+    it('should not set AWF_CHROOT_ENABLED when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_CHROOT_ENABLED).toBeUndefined();
+    });
+
+    it('should set AWF_WORKDIR environment variable when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        containerWorkDir: '/workspace/project'
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_WORKDIR).toBe('/workspace/project');
+    });
+
+    it('should mount /tmp under /host for chroot temp scripts', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // /tmp:/host/tmp:rw is required for entrypoint.sh to write command scripts
+      expect(volumes).toContain('/tmp:/host/tmp:rw');
+    });
+
+    it('should mount /etc/passwd and /etc/group for user lookup in chroot mode', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // These are needed for getent/user lookup inside chroot
+      expect(volumes).toContain('/etc/passwd:/host/etc/passwd:ro');
+      expect(volumes).toContain('/etc/group:/host/etc/group:ro');
+      expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
     it('should set agent to depend on healthy squid', () => {

@@ -129,16 +129,124 @@ echo "[entrypoint]   Hostname: $(hostname)"
 runuser -u awfuser -- git config --global --add safe.directory '*' 2>/dev/null || true
 
 echo "[entrypoint] =================================="
-echo "[entrypoint] Dropping CAP_NET_ADMIN capability and privileges to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
+
+# Determine which capabilities to drop
+# - CAP_NET_ADMIN is always dropped (prevents iptables bypass)
+# - CAP_SYS_CHROOT is dropped when chroot mode is enabled (prevents user code from using chroot)
+if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
+  CAPS_TO_DROP="cap_net_admin,cap_sys_chroot"
+  echo "[entrypoint] Chroot mode enabled - dropping CAP_NET_ADMIN and CAP_SYS_CHROOT"
+else
+  CAPS_TO_DROP="cap_net_admin"
+  echo "[entrypoint] Dropping CAP_NET_ADMIN capability"
+fi
+
+echo "[entrypoint] Switching to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
 
-# Drop CAP_NET_ADMIN capability and privileges, then execute the user command
-# This prevents malicious code from modifying iptables rules to bypass the firewall
-# Security note: capsh --drop removes the capability from the bounding set,
-# preventing any process (even if it escalates to root) from acquiring it
-# The order of operations:
-# 1. capsh drops CAP_NET_ADMIN from the bounding set (cannot be regained)
-# 2. gosu switches to awfuser (drops root privileges)
-# 3. exec replaces the current process with the user command
-exec capsh --drop=cap_net_admin -- -c "exec gosu awfuser $(printf '%q ' "$@")"
+# If chroot mode is enabled, run user command INSIDE the chroot /host
+# This provides transparent host binary access - user command sees host filesystem as /
+if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
+  echo "[entrypoint] Chroot mode: running command inside host filesystem (/host)"
+
+  # Verify capsh is available on the host (required for privilege drop)
+  if ! chroot /host which capsh >/dev/null 2>&1; then
+    echo "[entrypoint][ERROR] capsh not found on host system"
+    echo "[entrypoint][ERROR] Install libcap2-bin package: apt-get install libcap2-bin"
+    exit 1
+  fi
+
+  # Backup and copy container's resolv.conf to host (preserves AWF DNS configuration)
+  # This ensures DNS queries inside the chroot use the configured DNS servers
+  # NOTE: We backup the host's original resolv.conf and set up a trap to restore it
+  RESOLV_BACKUP="/host/etc/resolv.conf.awf-backup-$$"
+  RESOLV_MODIFIED=false
+  if cp /host/etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null; then
+    if cp /etc/resolv.conf /host/etc/resolv.conf.awf 2>/dev/null; then
+      mv /host/etc/resolv.conf.awf /host/etc/resolv.conf 2>/dev/null && RESOLV_MODIFIED=true
+      echo "[entrypoint] DNS configuration copied to chroot (backup at $RESOLV_BACKUP)"
+    else
+      echo "[entrypoint][WARN] Could not copy DNS configuration to chroot"
+    fi
+  else
+    echo "[entrypoint][WARN] Could not backup host resolv.conf, skipping DNS override"
+  fi
+
+  # Determine working directory inside the chroot
+  # AWF_WORKDIR is set by docker-manager.ts (containerWorkDir or HOME)
+  # For chroot mode, paths like /home/user stay the same (no /host prefix)
+  CONTAINER_WORKDIR="${AWF_WORKDIR:-${HOME:-/}}"
+  if [ -n "${CONTAINER_WORKDIR}" ] && [ "${CONTAINER_WORKDIR#/host}" != "${CONTAINER_WORKDIR}" ]; then
+    # Strip /host prefix if present (for paths that include it)
+    CHROOT_WORKDIR="${CONTAINER_WORKDIR#/host}"
+    [ -z "${CHROOT_WORKDIR}" ] && CHROOT_WORKDIR="/"
+  else
+    # Use the path as-is (normal paths like /home/user, /tmp, etc.)
+    CHROOT_WORKDIR="${CONTAINER_WORKDIR}"
+  fi
+  echo "[entrypoint] Chroot working directory: ${CHROOT_WORKDIR}"
+
+  # Validate working directory exists in chroot
+  if [ ! -d "/host${CHROOT_WORKDIR}" ]; then
+    echo "[entrypoint][WARN] Working directory ${CHROOT_WORKDIR} does not exist on host, will use /"
+  fi
+
+  # Find the user name on the host system by UID
+  # This allows us to run as the same user inside the chroot
+  HOST_USER_UID="${AWF_USER_UID:-1000}"
+  HOST_USER=$(chroot /host getent passwd "${HOST_USER_UID}" 2>/dev/null | cut -d: -f1 || echo "")
+  if [ -z "${HOST_USER}" ]; then
+    # Fall back to 'nobody' if user not found by UID
+    HOST_USER="nobody"
+    echo "[entrypoint][WARN] Could not find user with UID ${HOST_USER_UID} on host, using ${HOST_USER}"
+  else
+    echo "[entrypoint] Running as host user: ${HOST_USER} (UID: ${HOST_USER_UID})"
+  fi
+
+  # Write the command to a temporary script file in the chroot
+  # This avoids complex quoting issues with nested shells
+  SCRIPT_FILE="/tmp/awf-cmd-$$.sh"
+  cat > "/host${SCRIPT_FILE}" << 'AWFEOF'
+#!/bin/bash
+# Set comprehensive PATH for host binaries
+# Include standard paths plus tool cache locations (GitHub Actions)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Add tool cache paths if they exist (Python, Node, Go, etc.)
+[ -d "/opt/hostedtoolcache" ] && export PATH="/opt/hostedtoolcache/node/*/x64/bin:/opt/hostedtoolcache/Python/*/x64/bin:/opt/hostedtoolcache/go/*/x64/bin:$PATH"
+# Add user's local bin if it exists
+[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
+# Add Cargo bin for Rust (common in development)
+[ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
+AWFEOF
+  # Append the actual command arguments
+  printf '%q ' "$@" >> "/host${SCRIPT_FILE}"
+  echo "" >> "/host${SCRIPT_FILE}"
+  chmod +x "/host${SCRIPT_FILE}"
+
+  # Execute inside chroot:
+  # 1. chroot /host - filesystem root becomes host's /
+  # 2. cd to the working directory
+  # 3. Drop capabilities (NET_ADMIN and SYS_CHROOT)
+  # 4. Run as the mapped user using capsh --user
+  # 5. Clean up the script file
+  #
+  # Note: We use capsh inside the chroot because it handles the privilege drop
+  # and user switch atomically. The host must have capsh installed.
+  exec chroot /host /bin/bash -c "
+    cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
+    trap 'rm -f ${SCRIPT_FILE}' EXIT
+    exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
+  "
+else
+  # Original behavior - run in container filesystem
+  # Drop capabilities and privileges, then execute the user command
+  # This prevents malicious code from modifying iptables rules or using chroot
+  # Security note: capsh --drop removes capabilities from the bounding set,
+  # preventing any process (even if it escalates to root) from acquiring them
+  # The order of operations:
+  # 1. capsh drops capabilities from the bounding set (cannot be regained)
+  # 2. gosu switches to awfuser (drops root privileges)
+  # 3. exec replaces the current process with the user command
+  exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
+fi

@@ -326,6 +326,31 @@ export interface WrapperConfig {
    * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Enable chroot to /host for running host binaries
+   *
+   * When true, uses selective path mounts instead of the blanket /:/host:rw mount,
+   * enabling chroot-based execution of host binaries (Python, Node, Go, Rust, etc.)
+   * while maintaining network isolation through iptables.
+   *
+   * Mounted paths (read-only):
+   * - /usr, /bin, /sbin, /lib, /lib64 - System binaries and libraries
+   * - /opt - Tool cache (Python, Node, Ruby, Go, Java from GitHub runners)
+   * - /etc/ssl, /etc/ca-certificates, /etc/alternatives, /etc/ld.so.cache - Runtime config
+   * - /proc, /sys, /dev - Special filesystems for runtime info
+   *
+   * Mounted paths (read-write):
+   * - $HOME - User home directory for project files and Rust/Cargo
+   *
+   * Security protections:
+   * - Docker socket hidden (/dev/null mounted over /var/run/docker.sock)
+   * - /etc/shadow, /etc/passwd not mounted
+   * - CAP_SYS_CHROOT capability added but dropped before user commands
+   *
+   * @default false
+   */
+  enableChroot?: boolean;
 }
 
 /**
