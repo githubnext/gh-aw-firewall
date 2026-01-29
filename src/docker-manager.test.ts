@@ -181,6 +181,7 @@ describe('docker-manager', () => {
       process.getuid = originalGetuid;
       process.env.SUDO_USER = originalSudoUser;
       process.env.HOME = originalHome;
+      jest.restoreAllMocks();
     });
 
     it('should return HOME when running as regular user', () => {
@@ -200,6 +201,36 @@ describe('docker-manager', () => {
       process.getuid = () => 0;
       delete process.env.SUDO_USER;
       process.env.HOME = '/root';
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should look up user home from /etc/passwd when running as root with SUDO_USER (using real root user)', () => {
+      // Test with actual /etc/passwd by using 'root' user which always exists
+      process.getuid = () => 0;
+      process.env.SUDO_USER = 'root';
+      process.env.HOME = '/some/other/path';
+
+      // Should find root's home directory from /etc/passwd
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should fall back to HOME when SUDO_USER not found in /etc/passwd', () => {
+      process.getuid = () => 0;
+      process.env.SUDO_USER = 'nonexistent_user_12345';
+      process.env.HOME = '/fallback/home';
+
+      // User doesn't exist in /etc/passwd, should fall back to HOME
+      expect(getRealUserHome()).toBe('/fallback/home');
+    });
+
+    it('should handle undefined getuid gracefully (using real /etc/passwd)', () => {
+      // Simulate environment where process.getuid is undefined (e.g., Windows)
+      process.getuid = undefined as any;
+      process.env.SUDO_USER = 'root';
+      process.env.HOME = '/custom/home';
+
+      // With getuid undefined, uid is undefined (falsy), so it attempts passwd lookup
+      // Should find root's home directory from /etc/passwd
       expect(getRealUserHome()).toBe('/root');
     });
   });
