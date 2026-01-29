@@ -539,10 +539,23 @@ export function generateDockerCompose(
   // Use GHCR image or build locally
   // For presets ('default', 'act'), use GHCR images
   // For custom images, build locally with the custom base image
+  // For chroot mode, always build locally with minimal Dockerfile (no Node.js needed)
   const agentImage = config.agentImage || 'default';
   const isPreset = agentImage === 'default' || agentImage === 'act';
-  
-  if (useGHCR && isPreset) {
+
+  if (config.enableChroot) {
+    // Chroot mode: use minimal Dockerfile since user commands run on host
+    // The container only needs iptables and basic utilities for entrypoint
+    logger.debug('Chroot mode: using minimal agent image (no Node.js)');
+    agentService.build = {
+      context: path.join(projectRoot, 'containers/agent'),
+      dockerfile: 'Dockerfile.minimal',
+      args: {
+        USER_UID: getSafeHostUid(),
+        USER_GID: getSafeHostGid(),
+      },
+    };
+  } else if (useGHCR && isPreset) {
     // Use pre-built GHCR image based on preset
     const imageName = agentImage === 'act' ? 'agent-act' : 'agent';
     agentService.image = `${registry}/${imageName}:${tag}`;

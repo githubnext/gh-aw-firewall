@@ -670,6 +670,33 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
+    it('should use minimal Dockerfile when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode should always build locally with minimal Dockerfile
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.image).toBeUndefined();
+    });
+
+    it('should use standard Dockerfile when enableChroot is false and buildLocal is true', () => {
+      const configWithBuildLocal = {
+        ...mockConfig,
+        buildLocal: true,
+        enableChroot: false
+      };
+      const result = generateDockerCompose(configWithBuildLocal, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile');
+    });
+
     it('should set agent to depend on healthy squid', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
