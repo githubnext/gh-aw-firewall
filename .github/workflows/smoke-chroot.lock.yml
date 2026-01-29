@@ -208,6 +208,233 @@ jobs:
           echo "=== Building local containers ==="
           docker build -t ghcr.io/githubnext/gh-aw-firewall/squid:latest containers/squid/
           docker build -t ghcr.io/githubnext/gh-aw-firewall/agent:latest containers/agent/
+      - name: Run chroot smoke tests
+        id: chroot-tests
+        run: |
+          set +e  # Don't exit on error - we want to capture all results
+          mkdir -p /tmp/chroot-test-results
+          RESULTS_FILE="/tmp/chroot-test-results/results.md"
+
+          echo "# Chroot Feature Smoke Test Results" > $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+          echo "## 1. Host vs Chroot Version Comparison" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          # Capture host versions
+          echo "### Host Versions" >> $RESULTS_FILE
+          echo '```' >> $RESULTS_FILE
+          echo "Python: $(python3 --version 2>&1)" >> $RESULTS_FILE
+          echo "Node.js: $(node --version 2>&1)" >> $RESULTS_FILE
+          echo "Go: $(go version 2>&1)" >> $RESULTS_FILE
+          echo "Java: $(java --version 2>&1 | head -1)" >> $RESULTS_FILE
+          echo ".NET: $(dotnet --version 2>&1)" >> $RESULTS_FILE
+          echo '```' >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          # Store host versions for comparison
+          HOST_PYTHON="$(python3 --version 2>&1)"
+          HOST_NODE="$(node --version 2>&1)"
+          HOST_GO="$(go version 2>&1)"
+          HOST_JAVA="$(java --version 2>&1 | head -1)"
+          HOST_DOTNET="$(dotnet --version 2>&1)"
+
+          echo "### Chroot Versions" >> $RESULTS_FILE
+          echo '```' >> $RESULTS_FILE
+
+          # Capture chroot versions
+          CHROOT_PYTHON="$(sudo awf --enable-chroot --allow-domains localhost -- python3 --version 2>&1 | grep -E '^Python' | head -1)"
+          echo "Python: $CHROOT_PYTHON" >> $RESULTS_FILE
+
+          CHROOT_NODE="$(sudo awf --enable-chroot --allow-domains localhost -- node --version 2>&1 | grep -E '^v[0-9]' | head -1)"
+          echo "Node.js: $CHROOT_NODE" >> $RESULTS_FILE
+
+          CHROOT_GO="$(sudo awf --enable-chroot --allow-domains localhost -- go version 2>&1 | grep -E '^go version' | head -1)"
+          echo "Go: $CHROOT_GO" >> $RESULTS_FILE
+
+          CHROOT_JAVA="$(sudo awf --enable-chroot --allow-domains localhost -- java --version 2>&1 | head -1)"
+          echo "Java: $CHROOT_JAVA" >> $RESULTS_FILE
+
+          CHROOT_DOTNET="$(sudo awf --enable-chroot --allow-domains localhost -- dotnet --version 2>&1 | grep -E '^[0-9]' | head -1)"
+          echo ".NET: $CHROOT_DOTNET" >> $RESULTS_FILE
+
+          echo '```' >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          # Version comparison table
+          echo "### Version Comparison" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+          echo "| Runtime | Host | Chroot | Match |" >> $RESULTS_FILE
+          echo "|---------|------|--------|-------|" >> $RESULTS_FILE
+
+          # Compare versions
+          ALL_MATCH="true"
+
+          if [ "$HOST_PYTHON" = "$CHROOT_PYTHON" ]; then
+            echo "| Python | $HOST_PYTHON | $CHROOT_PYTHON | ✅ |" >> $RESULTS_FILE
+          else
+            echo "| Python | $HOST_PYTHON | $CHROOT_PYTHON | ❌ |" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          if [ "$HOST_NODE" = "$CHROOT_NODE" ]; then
+            echo "| Node.js | $HOST_NODE | $CHROOT_NODE | ✅ |" >> $RESULTS_FILE
+          else
+            echo "| Node.js | $HOST_NODE | $CHROOT_NODE | ❌ |" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          if [ "$HOST_GO" = "$CHROOT_GO" ]; then
+            echo "| Go | $HOST_GO | $CHROOT_GO | ✅ |" >> $RESULTS_FILE
+          else
+            echo "| Go | $HOST_GO | $CHROOT_GO | ❌ |" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          if [ "$HOST_JAVA" = "$CHROOT_JAVA" ]; then
+            echo "| Java | $HOST_JAVA | $CHROOT_JAVA | ✅ |" >> $RESULTS_FILE
+          else
+            echo "| Java | $HOST_JAVA | $CHROOT_JAVA | ❌ |" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          if [ "$HOST_DOTNET" = "$CHROOT_DOTNET" ]; then
+            echo "| .NET | $HOST_DOTNET | $CHROOT_DOTNET | ✅ |" >> $RESULTS_FILE
+          else
+            echo "| .NET | $HOST_DOTNET | $CHROOT_DOTNET | ❌ |" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo "" >> $RESULTS_FILE
+
+          # Standard library tests
+          echo "## 2. Standard Library Tests" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          echo -n "- Python stdlib: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- python3 -c "import json, os, sys, http.client; print('OK')" 2>&1 | grep -q "OK"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- Node.js builtins: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- node -e "require('fs'); require('path'); require('os'); console.log('OK')" 2>&1 | grep -q "OK"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- Go compilation: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- bash -c 'cd /tmp && echo "package main; func main() { println(\"OK\") }" > test.go && go run test.go && rm test.go' 2>&1 | grep -q "OK"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- .NET runtime: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- dotnet --list-runtimes 2>&1 | grep -q "Microsoft"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo "" >> $RESULTS_FILE
+
+          # Network firewall tests
+          echo "## 3. Network Firewall Tests" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          echo -n "- Allowed domain (api.github.com): " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains api.github.com -- curl -s https://api.github.com/zen 2>&1 | grep -v "^\[" | grep -v "^$" | head -1 | grep -q "."; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- Blocked domain (example.com): " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains api.github.com -- curl -s --connect-timeout 5 https://example.com 2>&1 | grep -qE "403|TCP_DENIED|Firewall"; then
+            echo "✅ PASS (correctly blocked)" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL (should be blocked)" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo "" >> $RESULTS_FILE
+
+          # Security boundary tests
+          echo "## 4. Security Boundary Tests" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          echo -n "- Docker socket hidden: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- ls -la /var/run/docker.sock 2>&1 | grep -q "1, 3"; then
+            echo "✅ PASS (mapped to /dev/null)" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- iptables blocked: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- iptables -L 2>&1 | grep -qE "Permission denied|not permitted"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- /usr read-only: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- touch /usr/testfile 2>&1 | grep -q "Read-only"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo -n "- /tmp writable: " >> $RESULTS_FILE
+          if sudo awf --enable-chroot --allow-domains localhost -- bash -c "echo test > /tmp/awf-test && cat /tmp/awf-test && rm /tmp/awf-test" 2>&1 | grep -q "test"; then
+            echo "✅ PASS" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo "" >> $RESULTS_FILE
+
+          # User identity test
+          echo "## 5. User Identity Test" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+
+          CHROOT_USER="$(sudo awf --enable-chroot --allow-domains localhost -- whoami 2>&1 | grep -E '^[a-z]' | head -1)"
+          echo -n "- User is not root: " >> $RESULTS_FILE
+          if [ "$CHROOT_USER" != "root" ] && [ -n "$CHROOT_USER" ]; then
+            echo "✅ PASS (user: $CHROOT_USER)" >> $RESULTS_FILE
+          else
+            echo "❌ FAIL (user: $CHROOT_USER)" >> $RESULTS_FILE
+            ALL_MATCH="false"
+          fi
+
+          echo "" >> $RESULTS_FILE
+
+          # Overall result
+          echo "## Overall Result" >> $RESULTS_FILE
+          echo "" >> $RESULTS_FILE
+          if [ "$ALL_MATCH" = "true" ]; then
+            echo "**✅ ALL TESTS PASSED**" >> $RESULTS_FILE
+            echo "all_passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "**❌ SOME TESTS FAILED**" >> $RESULTS_FILE
+            echo "all_passed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Print results to log
+          cat $RESULTS_FILE
+
+          # Copy to workspace for agent access
+          cp $RESULTS_FILE $GITHUB_WORKSPACE/chroot-test-results.md
       - name: Install Claude Code CLI
         run: npm install -g --silent @anthropic-ai/claude-code@2.1.22
       - name: Determine automatic lockdown mode for GitHub MCP server
