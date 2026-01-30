@@ -19,7 +19,7 @@ permissions:
 name: Smoke Chroot
 engine:
   id: claude
-  max-turns: 10
+  max-turns: 15
 strict: true
 network:
   allowed:
@@ -48,33 +48,94 @@ timeout-minutes: 20
 
 # Smoke Test: Chroot Feature Validation
 
-**IMPORTANT: The chroot tests have already been run in a previous step. Your job is to read and report the results.**
+**IMPORTANT: You are running inside awf with `--enable-chroot` enabled. You have direct access to host binaries.**
 
 ## Context
 
-The `--enable-chroot` feature of the Agentic Workflow Firewall (awf) has been tested in a previous workflow step. The tests ran with sudo privileges outside the sandbox container.
+The `--enable-chroot` feature allows you to transparently access host binaries (Python, Node, Go, Java, .NET) at their standard paths. You can run these directly without any special commands.
 
-The test results are available at: `chroot-test-results.md` in the workspace root.
+## Test Tasks
 
-## Your Task
+### 1. Language Runtime Version Tests
+Run each runtime and capture its version:
 
-1. **Read the test results file**:
-   ```bash
-   cat chroot-test-results.md
-   ```
+```bash
+python3 --version
+node --version
+go version
+java --version 2>&1 | head -1
+dotnet --version
+```
 
-2. **Add a PR comment** with the full test results. The comment should include:
-   - The version comparison table
-   - Standard library test results
-   - Network firewall test results
-   - Security boundary test results
-   - User identity test results
-   - Overall pass/fail status
+### 2. Standard Library Tests
+Verify each runtime can access its standard libraries:
 
-3. **Add the label** `smoke-chroot` if ALL tests passed.
+```bash
+# Python stdlib
+python3 -c "import json, os, sys, http.client; print('Python stdlib OK')"
 
-## Important Notes
+# Node.js builtins
+node -e "require('fs'); require('path'); require('os'); console.log('Node builtins OK')"
 
-- Do NOT try to run `sudo awf --enable-chroot` commands yourself - they won't work in this sandbox environment
-- Just read the pre-generated results and report them
-- The test results markdown is already formatted nicely - you can include it directly in the PR comment
+# Go compilation
+cd /tmp && echo 'package main; func main() { println("Go OK") }' > test.go && go run test.go && rm test.go
+
+# .NET runtime list
+dotnet --list-runtimes
+```
+
+### 3. Security Boundary Tests
+Verify security restrictions are in place:
+
+```bash
+# Check Docker socket is hidden
+ls -la /var/run/docker.sock
+
+# Check iptables is blocked
+iptables -L 2>&1
+
+# Check /usr is read-only
+touch /usr/testfile 2>&1
+
+# Check /tmp is writable
+echo test > /tmp/awf-test && cat /tmp/awf-test && rm /tmp/awf-test
+```
+
+### 4. User Identity Test
+```bash
+whoami
+id
+```
+
+## Output Requirements
+
+Create a PR comment with a summary table:
+
+| Test | Result |
+|------|--------|
+| Python version | [version] |
+| Node.js version | [version] |
+| Go version | [version] |
+| Java version | [version] |
+| .NET version | [version] |
+| Python stdlib | PASS/FAIL |
+| Node builtins | PASS/FAIL |
+| Go compilation | PASS/FAIL |
+| .NET runtime | PASS/FAIL |
+| Docker socket hidden | PASS/FAIL |
+| iptables blocked | PASS/FAIL |
+| /usr read-only | PASS/FAIL |
+| /tmp writable | PASS/FAIL |
+| User not root | PASS/FAIL |
+
+If ALL tests pass, add the label `smoke-chroot`.
+
+## Expected Results
+
+- All runtimes should be accessible at standard paths
+- Standard library tests should all pass
+- Docker socket should be mapped to /dev/null
+- iptables commands should fail with "Permission denied"
+- /usr should be read-only
+- /tmp should be writable
+- User should NOT be root
