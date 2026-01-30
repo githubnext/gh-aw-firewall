@@ -104,11 +104,33 @@ sudo awf --enable-chroot --env-all --allow-domains api.github.com \
 
 Environment variables preserved include:
 - `GOPATH`, `PYTHONPATH`, `NODE_PATH` (tool configuration)
+- `GOROOT` (automatically passed for Go support on GitHub Actions)
 - `HOME` (user's real home directory)
 - `GITHUB_TOKEN`, `GH_TOKEN` (credentials)
 - Custom environment variables
 
 **Note**: System variables like `PATH`, `PWD`, and `SUDO_*` are excluded for security. PATH is reconstructed inside the chroot.
+
+### Go Runtime Support
+
+Go on GitHub Actions uses "trimmed" binaries that require `GOROOT` to be explicitly set. AWF automatically handles this:
+
+1. If `GOROOT` is set in the environment, it's passed to the chroot via `AWF_GOROOT`
+2. The entrypoint script exports `GOROOT` in the command script
+3. Go commands work transparently in chroot mode
+
+For GitHub Actions workflows, ensure GOROOT is captured after `actions/setup-go`:
+
+```yaml
+- name: Setup Go
+  uses: actions/setup-go@v5
+  with:
+    go-version: '1.22'
+
+- name: Capture GOROOT
+  run: |
+    echo "GOROOT=$(go env GOROOT)" >> $GITHUB_ENV
+```
 
 ### GitHub Actions Example
 

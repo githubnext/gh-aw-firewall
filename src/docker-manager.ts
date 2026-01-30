@@ -341,8 +341,9 @@ export function generateDockerCompose(
       environment.AWF_HOST_PATH = process.env.PATH;
     }
     // Go on GitHub Actions uses trimmed binaries that require GOROOT to be set
+    // Pass GOROOT as AWF_GOROOT so entrypoint.sh can export it in the chroot script
     if (process.env.GOROOT) {
-      environment.GOROOT = process.env.GOROOT;
+      environment.AWF_GOROOT = process.env.GOROOT;
     }
   }
 

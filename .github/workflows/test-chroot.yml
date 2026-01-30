@@ -36,6 +36,16 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Capture GOROOT for chroot tests
+        id: go-env
+        run: |
+          # Go on GitHub Actions uses trimmed binaries that require GOROOT
+          # Capture it here so we can pass it to chroot tests
+          GOROOT_VALUE=$(go env GOROOT)
+          echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_OUTPUT
+          echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_ENV
+          echo "Captured GOROOT: ${GOROOT_VALUE}"
+
       - name: Verify host tools are available
         run: |
           echo "=== Verifying host tools ==="
@@ -44,6 +54,7 @@ jobs:
           echo "Python: $(python3 --version)"
           echo "pip: $(pip3 --version)"
           echo "Go: $(go version)"
+          echo "GOROOT: $GOROOT"
           echo "Git: $(git --version)"
           echo "curl: $(curl --version | head -1)"
 
@@ -127,6 +138,16 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Capture GOROOT for chroot tests
+        id: go-env
+        run: |
+          # Go on GitHub Actions uses trimmed binaries that require GOROOT
+          # Capture it here so we can pass it to chroot tests
+          GOROOT_VALUE=$(go env GOROOT)
+          echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_OUTPUT
+          echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_ENV
+          echo "Captured GOROOT: ${GOROOT_VALUE}"
+
       - name: Verify host tools are available
         run: |
           echo "=== Verifying host tools ==="
@@ -135,6 +156,7 @@ jobs:
           echo "Python: $(python3 --version)"
           echo "pip: $(pip3 --version)"
           echo "Go: $(go version)"
+          echo "GOROOT: $GOROOT"
           echo "Ruby: $(ruby --version)"
           echo "Gem: $(gem --version)"
           echo "Rust: $(rustc --version)"

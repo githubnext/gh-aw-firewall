@@ -217,6 +217,11 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
 # Use the host's actual PATH (passed via AWF_HOST_PATH)
 export PATH="${AWF_HOST_PATH}"
 AWFEOF
+    # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
+    if [ -n "${AWF_GOROOT}" ]; then
+      echo "[entrypoint] Using host GOROOT for chroot: ${AWF_GOROOT}"
+      echo "export GOROOT=\"${AWF_GOROOT}\"" >> "/host${SCRIPT_FILE}"
+    fi
   else
     echo "[entrypoint] Constructing default PATH for chroot"
     cat > "/host${SCRIPT_FILE}" << 'AWFEOF'
@@ -231,6 +236,11 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Add Cargo bin for Rust (common in development)
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
 AWFEOF
+    # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
+    if [ -n "${AWF_GOROOT}" ]; then
+      echo "[entrypoint] Using host GOROOT for chroot: ${AWF_GOROOT}"
+      echo "export GOROOT=\"${AWF_GOROOT}\"" >> "/host${SCRIPT_FILE}"
+    fi
   fi
   # Append the actual command arguments
   printf '%q ' "$@" >> "/host${SCRIPT_FILE}"
