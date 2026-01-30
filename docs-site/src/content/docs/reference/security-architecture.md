@@ -318,7 +318,6 @@ A common question: "If the command runs in the host filesystem, doesn't it escap
 | Aspect | Impact | Mitigation |
 |--------|--------|------------|
 | **Host $HOME access** | Can read `.ssh/`, `.aws/` | Use env vars for secrets, not files |
-| **Host /proc visible** | Can enumerate processes | Read-only, cannot modify |
 | **DNS override** | Host's resolv.conf modified | Backup created, restored on exit |
 
 ### When to Use Chroot Mode

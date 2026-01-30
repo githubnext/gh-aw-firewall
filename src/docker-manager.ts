@@ -419,9 +419,9 @@ export function generateDockerCompose(
     // /opt/hostedtoolcache contains Python, Node, Ruby, Go, Java, etc.
     agentVolumes.push('/opt:/host/opt:ro');
 
-    // Special filesystem mounts for chroot (needed for process info, devices)
+    // Special filesystem mounts for chroot (needed for devices)
+    // NOTE: /proc is NOT mounted to prevent exposure of host process environment variables
     agentVolumes.push(
-      '/proc:/host/proc:ro',      // Read-only proc for runtime info
       '/sys:/host/sys:ro',        // Read-only sysfs
       '/dev:/host/dev:ro',        // Read-only device nodes (needed by some runtimes)
     );

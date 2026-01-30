@@ -142,7 +142,6 @@ In chroot mode, selective paths are mounted for security instead of the entire f
 | `/etc/ca-certificates` | `/host/etc/ca-certificates:ro` | CA certificates |
 | `/etc/passwd` | `/host/etc/passwd:ro` | User lookup |
 | `/etc/group` | `/host/etc/group:ro` | Group lookup |
-| `/proc` | `/host/proc:ro` | Process info (read-only) |
 
 ### Read-Write Mounts
 
@@ -214,7 +213,6 @@ Linux namespaces operate independently:
 | Risk | Severity | Description | Mitigation |
 |------|----------|-------------|------------|
 | Host file access | HIGH | `$HOME` is read-write | CI/CD secrets should use env vars, not files |
-| /proc visibility | MEDIUM | Can enumerate host processes | Read-only mount, cannot modify |
 | DNS override | LOW | Host's `/etc/resolv.conf` temporarily modified | Backup created, restored on exit |
 | /dev visibility | LOW | Device nodes visible | Read-only, cannot create new devices |
 
@@ -234,21 +232,6 @@ With chroot mode, the agent can read/write to the user's home directory:
 - Use GitHub Secrets (env vars, not files)
 - Use short-lived tokens (`GITHUB_TOKEN` expires)
 - Consider what files exist on your runners
-
-### Process Visibility
-
-Inside the chroot, `/proc` shows host processes:
-
-```bash
-# Inside chroot
-ls /proc/
-1  2  3  ...  # Host PIDs visible
-
-cat /proc/1/cmdline
-/sbin/init  # Host's init process
-```
-
-**Mitigation**: `/proc` is mounted read-only. Cannot modify kernel parameters or send signals to host processes.
 
 ### DNS Configuration
 

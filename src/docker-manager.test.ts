@@ -546,7 +546,8 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/opt:/host/opt:ro');
 
       // Should include special filesystems (read-only)
-      expect(volumes).toContain('/proc:/host/proc:ro');
+      // NOTE: /proc is NOT mounted to prevent exposure of host process environment variables
+      expect(volumes).not.toContain('/proc:/host/proc:ro');
       expect(volumes).toContain('/sys:/host/sys:ro');
       expect(volumes).toContain('/dev:/host/dev:ro');
 
