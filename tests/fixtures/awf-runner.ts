@@ -163,8 +163,24 @@ export class AwfRunner {
   async runWithSudo(command: string, options: AwfOptions = {}): Promise<AwfResult> {
     const args: string[] = [];
 
-    // Preserve environment variables
+    // Preserve environment variables using both -E and --preserve-env for critical vars
+    // This is needed because sudo's env_reset may strip vars even with -E
     args.push('-E');
+
+    // Explicitly preserve PATH and tool-specific environment variables
+    // These are needed for chroot mode to find binaries on GitHub Actions runners
+    const criticalEnvVars = [
+      'PATH',
+      'HOME',
+      'USER',
+      'GOROOT',
+      'CARGO_HOME',
+      'JAVA_HOME',
+    ].filter(v => process.env[v]);
+
+    if (criticalEnvVars.length > 0) {
+      args.push('--preserve-env=' + criticalEnvVars.join(','));
+    }
 
     // Add awf path
     args.push('node', this.awfPath);

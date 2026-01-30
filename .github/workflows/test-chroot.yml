@@ -138,8 +138,8 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Capture GOROOT for chroot tests
-        id: go-env
+      - name: Capture tool paths for chroot tests
+        id: tool-paths
         run: |
           # Go on GitHub Actions uses trimmed binaries that require GOROOT
           # Capture it here so we can pass it to chroot tests
@@ -147,6 +147,20 @@ jobs:
           echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_OUTPUT
           echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_ENV
           echo "Captured GOROOT: ${GOROOT_VALUE}"
+
+          # Rust/Cargo: CARGO_HOME is needed so entrypoint can add $CARGO_HOME/bin to PATH
+          # The rust-toolchain action sets CARGO_HOME but sudo may not preserve it
+          if [ -n "$CARGO_HOME" ]; then
+            echo "CARGO_HOME=${CARGO_HOME}" >> $GITHUB_ENV
+            echo "Captured CARGO_HOME: ${CARGO_HOME}"
+          fi
+
+          # Java: JAVA_HOME is needed so entrypoint can add $JAVA_HOME/bin to PATH
+          # The setup-java action sets JAVA_HOME but sudo may not preserve it
+          if [ -n "$JAVA_HOME" ]; then
+            echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+            echo "Captured JAVA_HOME: ${JAVA_HOME}"
+          fi
 
       - name: Verify host tools are available
         run: |
@@ -161,7 +175,9 @@ jobs:
           echo "Gem: $(gem --version)"
           echo "Rust: $(rustc --version)"
           echo "Cargo: $(cargo --version)"
+          echo "CARGO_HOME: $CARGO_HOME"
           echo "Java: $(java --version 2>&1 | head -1)"
+          echo "JAVA_HOME: $JAVA_HOME"
 
       - name: Install dependencies
         run: npm ci
