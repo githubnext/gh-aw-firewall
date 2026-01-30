@@ -217,9 +217,12 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 **Agent Execution Container** (`containers/agent/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
-- Mounts entire host filesystem at `/host` and user home directory for full access
+- Mounts entire host filesystem at `/host` **read-only** for security
 - `NET_ADMIN` capability required for iptables setup during initialization
-- **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
+- **Security:** 
+  - Host filesystem mounted read-only (`/:/host:ro`) prevents accidental or malicious writes
+  - `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
+  - Use `--enable-chroot` flag if you need to run host binaries not available in the container
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
   2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user

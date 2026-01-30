@@ -288,14 +288,17 @@ AWFEOF
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
   "
 else
-  # Original behavior - run in container filesystem
+  # Non-chroot mode - run in container filesystem with read-only host mount
   # Drop capabilities and privileges, then execute the user command
-  # This prevents malicious code from modifying iptables rules or using chroot
+  # This prevents malicious code from modifying iptables rules
   # Security note: capsh --drop removes capabilities from the bounding set,
   # preventing any process (even if it escalates to root) from acquiring them
   # The order of operations:
   # 1. capsh drops capabilities from the bounding set (cannot be regained)
   # 2. gosu switches to awfuser (drops root privileges)
   # 3. exec replaces the current process with the user command
+  #
+  # Note: Host filesystem is mounted read-only at /host for security.
+  # If you need to run host binaries, use --enable-chroot flag instead.
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi
