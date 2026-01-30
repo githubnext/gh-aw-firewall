@@ -4,7 +4,21 @@ This document describes the testing infrastructure and coverage goals for the Gi
 
 ## Overview
 
-The project uses Jest as the testing framework with TypeScript support via ts-jest. All tests are located in the `src/` directory alongside their corresponding source files using the `.test.ts` suffix.
+The project uses Jest as the testing framework with TypeScript support via ts-jest and Babel for ESM module transformation. All tests are located in the `src/` directory alongside their corresponding source files using the `.test.ts` suffix.
+
+### ESM Module Support
+
+The test infrastructure is configured to handle ESM-only dependencies (like chalk 5.x, execa 9.x, commander 14.x) through:
+
+- **babel.config.js**: Transforms ESM syntax to CommonJS for Jest compatibility
+- **jest.config.js**: Includes `transformIgnorePatterns` to transform ESM packages in node_modules
+- **babel-jest**: Handles JavaScript module transformation
+- **@babel/preset-env**: Targets current Node.js version for optimal transformation
+
+This configuration allows the project to:
+- Use modern ESM-only npm packages in tests
+- Mock ESM modules with Jest's standard mocking API
+- Maintain compatibility with the existing TypeScript + CommonJS codebase
 
 ## Running Tests
 
@@ -258,6 +272,7 @@ The project includes the following test files:
 - `cli.test.ts`: Tests for CLI argument parsing and command execution
 - `docker-manager.test.ts`: Tests for Docker container management
 - `host-iptables.test.ts`: Tests for iptables firewall configuration
+- `jest-esm-config.test.ts`: Tests for Jest ESM configuration and module transformation
 - `logger.test.ts`: Tests for logging functionality
 - `squid-config.test.ts`: Tests for Squid proxy configuration generation
 
