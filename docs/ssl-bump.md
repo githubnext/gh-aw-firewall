@@ -1,12 +1,11 @@
 # SSL Bump: HTTPS Content Inspection
 
 > ⚠️ **Power-User Feature**: SSL Bump is an advanced feature that intercepts HTTPS traffic. It requires local Docker image builds and adds performance overhead. Only enable this when you need URL path filtering for HTTPS traffic. For most use cases, domain-based filtering (default mode) is sufficient.
-
+>
 > 🔐 **Security Warning**: SSL Bump fundamentally changes the security model by performing HTTPS interception. **Do not use SSL Bump for:**
 > - Multi-tenant environments (other tenants could potentially access the CA key)
 > - Untrusted workloads (malicious code with container access could extract the CA key)
 > - Multi-user systems where `/tmp` may be readable by other users
->
 > See [Security Considerations](#security-considerations) below for details.
 
 SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering instead of just domain-based filtering.

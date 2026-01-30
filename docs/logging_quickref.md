@@ -138,6 +138,7 @@ awf logs -f --with-pid --format json
 ```
 
 **Additional fields when `--with-pid` is enabled:**
+
 | Field | Description |
 |-------|-------------|
 | `pid` | Process ID that made the request |
