@@ -55,7 +55,7 @@ npm link
 awf --version
 ```
 
-You should see: `0.1.0`
+You should see the current version (e.g., `0.13.0`)
 
 ## Your First Command
 
@@ -166,6 +166,16 @@ awf \
 awf --allow-domains " GitHub.COM. " 'curl https://api.github.com'
 ```
 
+### Wildcard Patterns
+
+```bash
+# Use wildcards to match multiple domains
+awf --allow-domains '*.github.com' 'curl https://api.github.com'  # ✓ works
+
+# Match API subdomains
+awf --allow-domains 'api-*.example.com' 'curl https://api-v1.example.com'  # ✓ works
+```
+
 ## What Gets Blocked
 
 ```bash
@@ -178,10 +188,6 @@ awf --allow-domains github.com \
 ## Limitations
 
 ```bash
-# ✗ No wildcard syntax (use base domain instead)
---allow-domains '*.github.com'
---allow-domains github.com        # ✓ matches subdomains automatically
-
 # ✗ No internationalized domains (use punycode)
 --allow-domains bücher.ch
 --allow-domains xn--bcher-kva.ch  # ✓ use in URL too: https://xn--bcher-kva.ch

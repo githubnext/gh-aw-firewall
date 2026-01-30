@@ -6,21 +6,29 @@
 sudo awf [options] <command>
 
 Options:
-  --allow-domains <domains>  Comma-separated list of allowed domains (required)
+  --allow-domains <domains>  Comma-separated list of allowed domains
                              Example: github.com,api.github.com,arxiv.org
+                             Supports wildcards: *.github.com, api-*.example.com
+                             Protocol prefixes: https://secure.com, http://legacy.com
   --allow-domains-file <path>  Path to file containing allowed domains
   --block-domains <domains>  Comma-separated list of blocked domains
-                             Takes precedence over allowed domains
+                             Takes precedence over allowed domains. Supports wildcards.
   --block-domains-file <path>  Path to file containing blocked domains
   --enable-host-access       Enable access to host services via host.docker.internal
                              (see "Host Access" section for security implications)
+  --allow-host-ports <ports> Comma-separated list of ports/ranges for host access
+                             Example: 3000,8080 or 3000-3010,8000-8090
   --ssl-bump                 Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
                              Example: https://github.com/githubnext/*,https://api.github.com/repos/*
+  --enable-chroot            Enable chroot to /host for running host binaries
+                             Uses selective path mounts, hides Docker socket
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
+  --container-workdir <dir>  Working directory inside the container
   --dns-servers <servers>    Comma-separated list of DNS servers (default: 8.8.8.8,8.8.4.4)
+  --proxy-logs-dir <path>    Directory to save Squid proxy logs to
   -e, --env <KEY=VALUE>      Additional environment variables (can repeat)
   --env-all                  Pass all host environment variables to container
   -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
@@ -28,6 +36,8 @@ Options:
   --build-local              Build containers locally instead of using GHCR images
   --agent-image <value>      Agent container image (default: "default")
                              See "Agent Image" section for available options
+  --image-registry <url>     Container image registry (default: ghcr.io/githubnext/gh-aw-firewall)
+  --image-tag <tag>          Container image tag (default: latest)
   -V, --version              Output the version number
   -h, --help                 Display help for command
 
