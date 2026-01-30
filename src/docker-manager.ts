@@ -419,11 +419,13 @@ export function generateDockerCompose(
     // /opt/hostedtoolcache contains Python, Node, Ruby, Go, Java, etc.
     agentVolumes.push('/opt:/host/opt:ro');
 
-    // Special filesystem mounts for chroot (needed for devices)
-    // NOTE: /proc is NOT mounted to prevent exposure of host process environment variables
+    // Special filesystem mounts for chroot (needed for devices and runtime introspection)
+    // NOTE: Only /proc/self is mounted (not full /proc) to prevent exposure of other
+    // processes' environment variables while still allowing binaries like Go to find themselves
     agentVolumes.push(
-      '/sys:/host/sys:ro',        // Read-only sysfs
-      '/dev:/host/dev:ro',        // Read-only device nodes (needed by some runtimes)
+      '/proc/self:/host/proc/self:ro', // Process self-info only (needed by Go to find GOROOT)
+      '/sys:/host/sys:ro',             // Read-only sysfs
+      '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
 
     // User home directory for project files and Rust/Cargo (read-write)

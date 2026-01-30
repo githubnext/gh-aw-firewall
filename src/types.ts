@@ -338,7 +338,7 @@ export interface WrapperConfig {
    * - /usr, /bin, /sbin, /lib, /lib64 - System binaries and libraries
    * - /opt - Tool cache (Python, Node, Ruby, Go, Java from GitHub runners)
    * - /etc/ssl, /etc/ca-certificates, /etc/alternatives, /etc/ld.so.cache - Runtime config
-   * - /sys, /dev - Special filesystems for runtime info (NOT /proc - security)
+   * - /proc/self, /sys, /dev - Special filesystems (only /proc/self, not full /proc)
    *
    * Mounted paths (read-write):
    * - $HOME - User home directory for project files and Rust/Cargo

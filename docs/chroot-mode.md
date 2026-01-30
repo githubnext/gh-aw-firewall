@@ -142,6 +142,7 @@ In chroot mode, selective paths are mounted for security instead of the entire f
 | `/etc/ca-certificates` | `/host/etc/ca-certificates:ro` | CA certificates |
 | `/etc/passwd` | `/host/etc/passwd:ro` | User lookup |
 | `/etc/group` | `/host/etc/group:ro` | Group lookup |
+| `/proc/self` | `/host/proc/self:ro` | Process self-info (needed by Go) |
 
 ### Read-Write Mounts
 
