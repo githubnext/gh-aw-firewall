@@ -48,16 +48,23 @@ timeout-minutes: 20
 
 # Smoke Test: Chroot Feature Validation
 
-**IMPORTANT: You are running inside awf with `--enable-chroot` enabled. You have direct access to host binaries.**
+**IMPORTANT: You are running inside awf with `--enable-chroot` enabled. Host binaries are available at their standard paths. Run commands directly - do NOT use `sudo awf` or any wrapper.**
 
 ## Context
 
 The `--enable-chroot` feature allows you to transparently access host binaries (Python, Node, Go, Java, .NET) at their standard paths. You can run these directly without any special commands.
 
+The expected host versions are set up by the workflow:
+- Python: 3.12.x
+- Node.js: 24.x.x
+- Go: 1.23.x
+- Java: 21.x.x (Temurin)
+- .NET: 8.x.x
+
 ## Test Tasks
 
 ### 1. Language Runtime Version Tests
-Run each runtime and capture its version:
+Run each runtime and capture its version. These should match the host versions above.
 
 ```bash
 python3 --version
@@ -77,10 +84,10 @@ python3 -c "import json, os, sys, http.client; print('Python stdlib OK')"
 # Node.js builtins
 node -e "require('fs'); require('path'); require('os'); console.log('Node builtins OK')"
 
-# Go compilation
-cd /tmp && echo 'package main; func main() { println("Go OK") }' > test.go && go run test.go && rm test.go
+# Go compilation (needs init for modules)
+cd /tmp && rm -rf gotest && mkdir gotest && cd gotest && go mod init test && echo 'package main; func main() { println("Go OK") }' > main.go && go run main.go
 
-# .NET runtime list
+# .NET runtime check
 dotnet --list-runtimes
 ```
 
@@ -88,16 +95,16 @@ dotnet --list-runtimes
 Verify security restrictions are in place:
 
 ```bash
-# Check Docker socket is hidden
-ls -la /var/run/docker.sock
+# Docker socket should NOT exist or be /dev/null
+ls -la /var/run/docker.sock 2>&1
 
-# Check iptables is blocked
+# iptables should fail (no NET_ADMIN capability)
 iptables -L 2>&1
 
-# Check /usr is read-only
+# /usr should be read-only
 touch /usr/testfile 2>&1
 
-# Check /tmp is writable
+# /tmp should be writable
 echo test > /tmp/awf-test && cat /tmp/awf-test && rm /tmp/awf-test
 ```
 
@@ -109,15 +116,15 @@ id
 
 ## Output Requirements
 
-Create a PR comment with a summary table:
+Create a PR comment with a summary table. Keep it concise.
 
 | Test | Result |
 |------|--------|
-| Python version | [version] |
-| Node.js version | [version] |
-| Go version | [version] |
-| Java version | [version] |
-| .NET version | [version] |
+| Python version | [version] - PASS if 3.12.x |
+| Node.js version | [version] - PASS if 24.x |
+| Go version | [version] - PASS if 1.23.x |
+| Java version | [version] - PASS if 21.x |
+| .NET version | [version] - PASS if 8.x |
 | Python stdlib | PASS/FAIL |
 | Node builtins | PASS/FAIL |
 | Go compilation | PASS/FAIL |
@@ -132,10 +139,10 @@ If ALL tests pass, add the label `smoke-chroot`.
 
 ## Expected Results
 
-- All runtimes should be accessible at standard paths
+- All runtimes should be accessible at standard paths with matching versions
 - Standard library tests should all pass
-- Docker socket should be mapped to /dev/null
-- iptables commands should fail with "Permission denied"
+- Docker socket should not exist or be mapped to /dev/null
+- iptables commands should fail with "Permission denied" or "Operation not permitted"
 - /usr should be read-only
 - /tmp should be writable
-- User should NOT be root
+- User should NOT be root (should be awfuser or similar)
