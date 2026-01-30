@@ -18,8 +18,7 @@ permissions:
 
 name: Smoke Chroot
 engine:
-  id: claude
-  max-turns: 15
+  id: copilot
 strict: true
 network:
   allowed:
