@@ -207,7 +207,19 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   # Write the command to a temporary script file in the chroot
   # This avoids complex quoting issues with nested shells
   SCRIPT_FILE="/tmp/awf-cmd-$$.sh"
-  cat > "/host${SCRIPT_FILE}" << 'AWFEOF'
+
+  # Use host's actual PATH if provided, otherwise construct a default
+  # This ensures we use the same Python/Node/Go versions as the host
+  if [ -n "${AWF_HOST_PATH}" ]; then
+    echo "[entrypoint] Using host PATH for chroot"
+    cat > "/host${SCRIPT_FILE}" << AWFEOF
+#!/bin/bash
+# Use the host's actual PATH (passed via AWF_HOST_PATH)
+export PATH="${AWF_HOST_PATH}"
+AWFEOF
+  else
+    echo "[entrypoint] Constructing default PATH for chroot"
+    cat > "/host${SCRIPT_FILE}" << 'AWFEOF'
 #!/bin/bash
 # Set comprehensive PATH for host binaries
 # Include standard paths plus tool cache locations (GitHub Actions)
@@ -219,6 +231,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Add Cargo bin for Rust (common in development)
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
 AWFEOF
+  fi
   # Append the actual command arguments
   printf '%q ' "$@" >> "/host${SCRIPT_FILE}"
   echo "" >> "/host${SCRIPT_FILE}"

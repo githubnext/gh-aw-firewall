@@ -334,6 +334,12 @@ export function generateDockerCompose(
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
 
+  // For chroot mode, pass the host's actual PATH so the entrypoint can use it
+  // This ensures toolcache paths (Python, Node, Go) are correctly resolved
+  if (config.enableChroot && process.env.PATH) {
+    environment.AWF_HOST_PATH = process.env.PATH;
+  }
+
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
   if (config.envAll) {
     for (const [key, value] of Object.entries(process.env)) {
