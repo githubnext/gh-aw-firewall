@@ -30,6 +30,7 @@ awf [options] -- <command>
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
 | `--work-dir <dir>` | string | `/tmp/awf-<timestamp>` | Working directory for temporary files |
 | `--build-local` | flag | `false` | Build containers locally instead of pulling from registry |
+| `--agent-image <value>` | string | `default` | Agent container image preset or custom base image |
 | `--image-registry <url>` | string | `ghcr.io/githubnext/gh-aw-firewall` | Container image registry |
 | `--image-tag <tag>` | string | `latest` | Container image tag |
 | `-e, --env <KEY=VALUE>` | string | `[]` | Environment variable (repeatable) |
@@ -37,6 +38,9 @@ awf [options] -- <command>
 | `-v, --mount <host:container[:mode]>` | string | `[]` | Volume mount (repeatable) |
 | `--container-workdir <dir>` | string | User home | Working directory inside container |
 | `--dns-servers <servers>` | string | `8.8.8.8,8.8.4.4` | Trusted DNS servers (comma-separated) |
+| `--proxy-logs-dir <path>` | string | — | Directory to save Squid proxy logs to |
+| `--enable-host-access` | flag | `false` | Enable access to host services via host.docker.internal |
+| `--allow-host-ports <ports>` | string | — | Allowed ports for host access (e.g., 3000,8080 or 3000-3010) |
 | `--enable-chroot` | flag | `false` | Run command inside chroot to host filesystem |
 | `-V, --version` | flag | — | Display version |
 | `-h, --help` | flag | — | Display help |
