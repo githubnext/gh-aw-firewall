@@ -9,6 +9,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
+- **Chroot Mode**: Optional `--enable-chroot` for transparent access to host binaries (Python, Node.js, Go) while maintaining network isolation
 
 ## Requirements
 
@@ -121,6 +122,7 @@ sudo awf --help
 
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
+- [Chroot mode](docs/chroot-mode.md) — use host binaries with network isolation
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
