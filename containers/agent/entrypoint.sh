@@ -224,10 +224,13 @@ AWFEOF
       echo "export CARGO_HOME=\"${AWF_CARGO_HOME}\"" >> "/host${SCRIPT_FILE}"
     fi
     # Add JAVA_HOME/bin to PATH if provided (for Java on GitHub Actions)
+    # Also set LD_LIBRARY_PATH to include Java's lib directory for libjli.so
     if [ -n "${AWF_JAVA_HOME}" ]; then
       echo "[entrypoint] Adding JAVA_HOME/bin to PATH: ${AWF_JAVA_HOME}/bin"
       echo "export PATH=\"${AWF_JAVA_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export JAVA_HOME=\"${AWF_JAVA_HOME}\"" >> "/host${SCRIPT_FILE}"
+      # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
+      echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
     fi
     # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
     if [ -n "${AWF_GOROOT}" ]; then
