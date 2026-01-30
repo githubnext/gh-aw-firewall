@@ -217,6 +217,18 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
 # Use the host's actual PATH (passed via AWF_HOST_PATH)
 export PATH="${AWF_HOST_PATH}"
 AWFEOF
+    # Add CARGO_HOME/bin to PATH if provided (for Rust/Cargo on GitHub Actions)
+    if [ -n "${AWF_CARGO_HOME}" ]; then
+      echo "[entrypoint] Adding CARGO_HOME/bin to PATH: ${AWF_CARGO_HOME}/bin"
+      echo "export PATH=\"${AWF_CARGO_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export CARGO_HOME=\"${AWF_CARGO_HOME}\"" >> "/host${SCRIPT_FILE}"
+    fi
+    # Add JAVA_HOME/bin to PATH if provided (for Java on GitHub Actions)
+    if [ -n "${AWF_JAVA_HOME}" ]; then
+      echo "[entrypoint] Adding JAVA_HOME/bin to PATH: ${AWF_JAVA_HOME}/bin"
+      echo "export PATH=\"${AWF_JAVA_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export JAVA_HOME=\"${AWF_JAVA_HOME}\"" >> "/host${SCRIPT_FILE}"
+    fi
     # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
     if [ -n "${AWF_GOROOT}" ]; then
       echo "[entrypoint] Using host GOROOT for chroot: ${AWF_GOROOT}"

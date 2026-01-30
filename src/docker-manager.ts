@@ -334,8 +334,8 @@ export function generateDockerCompose(
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
 
-  // For chroot mode, pass the host's actual PATH and GOROOT so the entrypoint can use them
-  // This ensures toolcache paths (Python, Node, Go) are correctly resolved
+  // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
+  // This ensures toolcache paths (Python, Node, Go, Rust, Java) are correctly resolved
   if (config.enableChroot) {
     if (process.env.PATH) {
       environment.AWF_HOST_PATH = process.env.PATH;
@@ -344,6 +344,14 @@ export function generateDockerCompose(
     // Pass GOROOT as AWF_GOROOT so entrypoint.sh can export it in the chroot script
     if (process.env.GOROOT) {
       environment.AWF_GOROOT = process.env.GOROOT;
+    }
+    // Rust: Pass CARGO_HOME so entrypoint can add $CARGO_HOME/bin to PATH
+    if (process.env.CARGO_HOME) {
+      environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
+    }
+    // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
+    if (process.env.JAVA_HOME) {
+      environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
     }
   }
 
