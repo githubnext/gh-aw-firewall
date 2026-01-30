@@ -296,7 +296,9 @@ else
   # The order of operations:
   # 1. capsh drops capabilities from the bounding set (cannot be regained)
   # 2. gosu switches to awfuser (drops root privileges)
-  # 3. isolate.sh wraps the command to provide host binary fallback (via chroot to /host)
-  # 4. exec replaces the current process with the user command
-  exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser /usr/local/bin/isolate.sh $(printf '%q ' "$@")"
+  # 3. exec replaces the current process with the user command
+  #
+  # Note: Host filesystem is mounted read-only at /host for security.
+  # If you need to run host binaries, use --enable-chroot flag instead.
+  exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi
