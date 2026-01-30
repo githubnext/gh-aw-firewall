@@ -334,10 +334,16 @@ export function generateDockerCompose(
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
 
-  // For chroot mode, pass the host's actual PATH so the entrypoint can use it
+  // For chroot mode, pass the host's actual PATH and GOROOT so the entrypoint can use them
   // This ensures toolcache paths (Python, Node, Go) are correctly resolved
-  if (config.enableChroot && process.env.PATH) {
-    environment.AWF_HOST_PATH = process.env.PATH;
+  if (config.enableChroot) {
+    if (process.env.PATH) {
+      environment.AWF_HOST_PATH = process.env.PATH;
+    }
+    // Go on GitHub Actions uses trimmed binaries that require GOROOT to be set
+    if (process.env.GOROOT) {
+      environment.GOROOT = process.env.GOROOT;
+    }
   }
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
