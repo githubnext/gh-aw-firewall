@@ -1,0 +1,40 @@
+# CODEOWNERS - Automatic reviewer assignment for PRs
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Order matters: The last matching pattern takes precedence.
+# Patterns follow .gitignore syntax.
+
+# Global default owners - all files unless a more specific pattern matches
+* @githubnext/gh-aw-firewall-maintainers
+
+# Container security and configuration
+/containers/ @githubnext/gh-aw-firewall-maintainers
+
+# CI/CD workflows and automation
+/.github/workflows/ @githubnext/gh-aw-firewall-maintainers
+
+# Documentation site (Astro/Starlight)
+/docs-site/ @githubnext/gh-aw-firewall-maintainers
+
+# Core TypeScript source code
+/src/ @githubnext/gh-aw-firewall-maintainers
+
+# Documentation files
+/docs/ @githubnext/gh-aw-firewall-maintainers
+*.md @githubnext/gh-aw-firewall-maintainers
+
+# Build and dependency configuration
+package.json @githubnext/gh-aw-firewall-maintainers
+package-lock.json @githubnext/gh-aw-firewall-maintainers
+tsconfig*.json @githubnext/gh-aw-firewall-maintainers
+
+# CI/CD scripts
+/scripts/ci/ @githubnext/gh-aw-firewall-maintainers
+
+# Test infrastructure
+/tests/ @githubnext/gh-aw-firewall-maintainers
+jest.config.js @githubnext/gh-aw-firewall-maintainers
+
+# Security and policy files
+SECURITY.md @githubnext/gh-aw-firewall-maintainers
+CODE_OF_CONDUCT.md @githubnext/gh-aw-firewall-maintainers
