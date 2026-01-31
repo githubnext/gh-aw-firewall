@@ -36,7 +36,8 @@ SQUID_PORT="${SQUID_PROXY_PORT:-3128}"
 echo "[iptables] Squid proxy: ${SQUID_HOST}:${SQUID_PORT}"
 
 # Resolve Squid hostname to IP
-SQUID_IP=$(getent hosts "$SQUID_HOST" | awk '{ print $1 }' | head -n 1)
+# Use awk's NR to get first line to avoid host binary dependency in chroot mode
+SQUID_IP=$(getent hosts "$SQUID_HOST" | awk 'NR==1 { print $1 }')
 if [ -z "$SQUID_IP" ]; then
   echo "[iptables] ERROR: Could not resolve Squid proxy hostname: $SQUID_HOST"
   exit 1
