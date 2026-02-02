@@ -122,7 +122,7 @@ sudo awf \
   --allow-domains api.github.com \
   --ssl-bump \
   --allow-urls "https://api.github.com/repos/githubnext/*,https://api.github.com/users/*" \
-  -- curl https://api.github.com/repos/githubnext/gh-aw-firewall
+  -- curl https://api.github.com/repos/github/gh-aw-firewall
 ```
 
 Allow only specific API endpoint patterns while blocking others.
@@ -135,7 +135,7 @@ sudo awf \
   --ssl-bump \
   --allow-urls "https://github.com/*" \
   --log-level debug \
-  -- curl https://github.com/githubnext/gh-aw-firewall
+  -- curl https://github.com/github/gh-aw-firewall
 
 # View full URL paths in Squid logs
 sudo cat /tmp/squid-logs-*/access.log

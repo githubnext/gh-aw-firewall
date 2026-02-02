@@ -48,7 +48,7 @@ never_direct allow all' /tmp/awf-XXXXX/squid.conf
 ### 5. Add host.docker.internal to Squid container
 
 ```bash
-sudo sed -i '/image: ghcr.io\/githubnext\/gh-aw-firewall\/squid:latest/a\    extra_hosts:\n      - host.docker.internal:host-gateway' /tmp/awf-XXXXX/docker-compose.yml
+sudo sed -i '/image: ghcr.io\/github\/gh-aw-firewall\/squid:latest/a\    extra_hosts:\n      - host.docker.internal:host-gateway' /tmp/awf-XXXXX/docker-compose.yml
 ```
 
 ### 6. Change agent command to stay alive

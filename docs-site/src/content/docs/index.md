@@ -6,7 +6,7 @@ description: Network firewall for AI agents with domain whitelisting - control e
 A network firewall designed specifically for AI agents and agentic workflows. Control which domains your AI agents can access while maintaining full filesystem access in a containerized environment.
 
 :::tip[Part of GitHub Next]
-This project is part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). Learn more on the [GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
+This project is part of GitHub Next's explorations of [Agentic Workflows](https://github.com/github/gh-aw). Learn more on the [GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
 :::
 
 ## What Is This?
@@ -42,11 +42,11 @@ Download the latest release binary:
 
 ```bash
 # One-line installer with SHA verification (recommended)
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
 
 # Or manual installation
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
+curl -fL https://github.com/github/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+curl -fL https://github.com/github/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
 sha256sum -c checksums.txt --ignore-missing
 chmod +x awf
 sudo mv awf /usr/local/bin/
@@ -175,7 +175,7 @@ The firewall uses a containerized architecture with three security layers:
 
 4. **Debug Issues**
    
-   Check the [troubleshooting guide](https://github.com/githubnext/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
+   Check the [troubleshooting guide](https://github.com/github/gh-aw-firewall/blob/main/docs/troubleshooting.md) for common problems and solutions.
 
 </div>
 
@@ -286,7 +286,7 @@ Half measures are as bad as nothing at all.
 ## Get Help
 
 - **Documentation**: Browse the guides and reference pages in the sidebar
-- **GitHub**: [Report issues](https://github.com/githubnext/gh-aw-firewall/issues) or contribute
-- **Examples**: Check the [examples directory](https://github.com/githubnext/gh-aw-firewall/tree/main/examples)
+- **GitHub**: [Report issues](https://github.com/github/gh-aw-firewall/issues) or contribute
+- **Examples**: Check the [examples directory](https://github.com/github/gh-aw-firewall/tree/main/examples)
 
-Ready to dive deeper? Read the [full documentation on GitHub](https://github.com/githubnext/gh-aw-firewall#readme).
+Ready to dive deeper? Read the [full documentation on GitHub](https://github.com/github/gh-aw-firewall#readme).
