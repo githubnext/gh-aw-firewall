@@ -672,7 +672,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
-    it('should use minimal Dockerfile when enableChroot is true', () => {
+    it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
       const configWithChroot = {
         ...mockConfig,
         enableChroot: true
@@ -680,7 +680,52 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // Chroot mode should always build locally with minimal Dockerfile
+      // Chroot mode with preset image should use GHCR (not build locally)
+      // This fixes the bug where packaged binaries couldn't find containers/agent directory
+      expect(agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(agent.build).toBeUndefined();
+    });
+
+    it('should use GHCR agent-act image when enableChroot is true with act preset', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        agentImage: 'act'
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode with 'act' preset should use GHCR agent-act image
+      expect(agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(agent.build).toBeUndefined();
+    });
+
+    it('should build locally with minimal Dockerfile when enableChroot with custom image', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        agentImage: 'ubuntu:24.04' // Custom (non-preset) image
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode with custom image should build locally with minimal Dockerfile
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.build.args.BASE_IMAGE).toBe('ubuntu:24.04');
+      expect(agent.image).toBeUndefined();
+    });
+
+    it('should build locally with minimal Dockerfile when buildLocal and enableChroot are both true', () => {
+      const configWithChrootAndBuildLocal = {
+        ...mockConfig,
+        enableChroot: true,
+        buildLocal: true
+      };
+      const result = generateDockerCompose(configWithChrootAndBuildLocal, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // When both buildLocal and enableChroot are set, should build locally
       expect(agent.build).toBeDefined();
       expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
       expect(agent.image).toBeUndefined();
