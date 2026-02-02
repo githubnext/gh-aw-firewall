@@ -125,7 +125,7 @@ jobs:
           go-version: '1.22'
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@a4effe49ee8ee5b8b5091268c473a4628afb5651 # v1
+        uses: ruby/setup-ruby@8d27f39a5e7ad39aebbcbd1324f7af020229645c # v1
         with:
           ruby-version: '3.2'
 
