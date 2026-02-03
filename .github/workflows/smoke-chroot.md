@@ -71,13 +71,13 @@ Run the same version commands through `awf --enable-chroot` and verify they matc
 
 ```bash
 # Test Python version matches host
-sudo awf --enable-chroot --allow-domains localhost -- python3 --version
+sudo -E awf --enable-chroot --allow-domains localhost -- python3 --version
 
 # Test Node version matches host
-sudo awf --enable-chroot --allow-domains localhost -- node --version
+sudo -E awf --enable-chroot --allow-domains localhost -- node --version
 
 # Test Go version matches host
-sudo awf --enable-chroot --allow-domains localhost -- go version
+sudo -E awf --enable-chroot --allow-domains localhost -- go version
 ```
 
 ## Step 3: Verify Versions Match
