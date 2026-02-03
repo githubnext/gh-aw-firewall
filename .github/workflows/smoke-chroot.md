@@ -26,7 +26,7 @@ network:
     - github
 sandbox:
   mcp:
-    container: "ghcr.io/githubnext/gh-aw-mcpg"
+    container: "ghcr.io/github/gh-aw-mcpg"
 tools:
   github:
     toolsets: [repos, pull_requests]

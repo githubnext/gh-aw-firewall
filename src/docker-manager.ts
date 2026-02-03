@@ -237,7 +237,7 @@ export function generateDockerCompose(
 
   // Default to GHCR images unless buildLocal is explicitly set
   const useGHCR = !config.buildLocal;
-  const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
+  const registry = config.imageRegistry || 'ghcr.io/github/gh-aw-firewall';
   const tag = config.imageTag || 'latest';
 
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs

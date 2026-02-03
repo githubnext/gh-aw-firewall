@@ -500,7 +500,7 @@ program
   .option(
     '--image-registry <registry>',
     'Container image registry',
-    'ghcr.io/githubnext/gh-aw-firewall'
+    'ghcr.io/github/gh-aw-firewall'
   )
   .option(
     '--image-tag <tag>',

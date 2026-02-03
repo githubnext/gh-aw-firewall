@@ -249,7 +249,7 @@ describe('docker-manager', () => {
       keepContainers: false,
       workDir: '/tmp/awf-test',
       buildLocal: false,
-      imageRegistry: 'ghcr.io/githubnext/gh-aw-firewall',
+      imageRegistry: 'ghcr.io/github/gh-aw-firewall',
       imageTag: 'latest',
     };
 
@@ -262,8 +262,8 @@ describe('docker-manager', () => {
     it('should generate docker-compose config with GHCR images by default', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
-      expect(result.services['squid-proxy'].image).toBe('ghcr.io/githubnext/gh-aw-firewall/squid:latest');
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services['squid-proxy'].image).toBe('ghcr.io/github/gh-aw-firewall/squid:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services['squid-proxy'].build).toBeUndefined();
       expect(result.services.agent.build).toBeUndefined();
     });
@@ -341,7 +341,7 @@ describe('docker-manager', () => {
       };
       const result = generateDockerCompose(actPresetConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent-act:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 
@@ -352,14 +352,14 @@ describe('docker-manager', () => {
       };
       const result = generateDockerCompose(defaultPresetConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 
     it('should use agent GHCR image when agentImage is undefined', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 

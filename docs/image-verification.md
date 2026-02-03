@@ -33,18 +33,18 @@ All images are signed using GitHub Actions OIDC tokens, ensuring they come from 
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
+  --certificate-identity-regexp 'https://github.com/github/gh-aw-firewall/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  ghcr.io/githubnext/gh-aw-firewall/squid:latest
+  ghcr.io/github/gh-aw-firewall/squid:latest
 ```
 
 ### Verify Agent Image
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
+  --certificate-identity-regexp 'https://github.com/github/gh-aw-firewall/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  ghcr.io/githubnext/gh-aw-firewall/agent:latest
+  ghcr.io/github/gh-aw-firewall/agent:latest
 ```
 
 ## Verifying SBOM Attestations
@@ -53,10 +53,10 @@ Images include Software Bill of Materials (SBOM) attestations for supply chain t
 
 ```bash
 cosign verify-attestation \
-  --certificate-identity-regexp 'https://github.com/githubnext/gh-aw-firewall/.*' \
+  --certificate-identity-regexp 'https://github.com/github/gh-aw-firewall/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   --type spdxjson \
-  ghcr.io/githubnext/gh-aw-firewall/squid:latest
+  ghcr.io/github/gh-aw-firewall/squid:latest
 ```
 
 ## What Gets Signed
