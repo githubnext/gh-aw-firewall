@@ -20,7 +20,7 @@ Options:
                              Example: 3000,8080 or 3000-3010,8000-8090
   --ssl-bump                 Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
-                             Example: https://github.com/githubnext/*,https://api.github.com/repos/*
+                             Example: https://github.com/myorg/*,https://api.github.com/repos/*
   --enable-chroot            Enable chroot to /host for running host binaries
                              Uses selective path mounts, hides Docker socket
   --log-level <level>        Log level: debug, info, warn, error (default: info)
@@ -316,8 +316,8 @@ By default, awf filters HTTPS traffic based on domain names only (using SNI). En
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*" \
-  'curl https://github.com/githubnext/some-repo'
+  --allow-urls "https://github.com/myorg/*" \
+  'curl https://github.com/myorg/some-repo'
 ```
 
 ### URL Pattern Syntax
@@ -326,7 +326,7 @@ URL patterns support wildcards:
 
 ```bash
 # Match any path under an organization
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Match specific API endpoints
 --allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"
