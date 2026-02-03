@@ -30,7 +30,7 @@ awf [options] -- <command>
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
 | `--work-dir <dir>` | string | `/tmp/awf-<timestamp>` | Working directory for temporary files |
 | `--build-local` | flag | `false` | Build containers locally instead of pulling from registry |
-| `--image-registry <url>` | string | `ghcr.io/githubnext/gh-aw-firewall` | Container image registry |
+| `--image-registry <url>` | string | `ghcr.io/github/gh-aw-firewall` | Container image registry |
 | `--image-tag <tag>` | string | `latest` | Container image tag |
 | `-e, --env <KEY=VALUE>` | string | `[]` | Environment variable (repeatable) |
 | `--env-all` | flag | `false` | Pass all host environment variables |
@@ -106,7 +106,7 @@ Path to file with blocked domains. Supports the same format as `--allow-domains-
 Enable SSL Bump for HTTPS content inspection. When enabled, the firewall generates a per-session CA certificate and intercepts HTTPS connections, allowing URL path filtering.
 
 ```bash
---ssl-bump --allow-urls "https://github.com/githubnext/*"
+--ssl-bump --allow-urls "https://github.com/myorg/*"
 ```
 
 :::caution[HTTPS Interception]
@@ -127,7 +127,7 @@ Comma-separated list of allowed URL patterns for HTTPS traffic. Requires `--ssl-
 
 ```bash
 # Single pattern
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Multiple patterns
 --allow-urls "https://github.com/org1/*,https://api.github.com/repos/*"

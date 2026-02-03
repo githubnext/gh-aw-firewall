@@ -237,7 +237,7 @@ export function generateDockerCompose(
 
   // Default to GHCR images unless buildLocal is explicitly set
   const useGHCR = !config.buildLocal;
-  const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
+  const registry = config.imageRegistry || 'ghcr.io/github/gh-aw-firewall';
   const tag = config.imageTag || 'latest';
 
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
@@ -560,35 +560,36 @@ export function generateDockerCompose(
   }
 
   // Use GHCR image or build locally
-  // For presets ('default', 'act'), use GHCR images
-  // For custom images, build locally with the custom base image
-  // For chroot mode, always build locally with minimal Dockerfile (no Node.js needed)
+  // Priority: GHCR preset images > local build (when requested) > custom images
+  // For presets ('default', 'act'), use GHCR images (even in chroot mode)
+  // This fixes a bug where --enable-chroot would ignore --agent-image preset
   const agentImage = config.agentImage || 'default';
   const isPreset = agentImage === 'default' || agentImage === 'act';
 
-  if (config.enableChroot) {
-    // Chroot mode: use minimal Dockerfile since user commands run on host
-    // The container only needs iptables and basic utilities for entrypoint
-    logger.debug('Chroot mode: using minimal agent image (no Node.js)');
-    agentService.build = {
-      context: path.join(projectRoot, 'containers/agent'),
-      dockerfile: 'Dockerfile.minimal',
-      args: {
-        USER_UID: getSafeHostUid(),
-        USER_GID: getSafeHostGid(),
-      },
-    };
-  } else if (useGHCR && isPreset) {
-    // Use pre-built GHCR image based on preset
+  if (useGHCR && isPreset) {
+    // Use pre-built GHCR image for preset images (works in both normal and chroot mode)
+    // The GHCR images already have the necessary setup for chroot mode
     const imageName = agentImage === 'act' ? 'agent-act' : 'agent';
     agentService.image = `${registry}/${imageName}:${tag}`;
-  } else {
+    if (config.enableChroot) {
+      logger.debug(`Chroot mode: using GHCR image ${imageName}:${tag}`);
+    }
+  } else if (config.buildLocal || (config.enableChroot && !isPreset)) {
+    // Build locally when:
+    // 1. --build-local is explicitly specified, OR
+    // 2. --enable-chroot with a custom (non-preset) image
     const buildArgs: Record<string, string> = {
-      // Pass host UID/GID to match file ownership in container
-      // This prevents permission issues with mounted volumes
       USER_UID: getSafeHostUid(),
       USER_GID: getSafeHostGid(),
     };
+
+    // Determine dockerfile based on chroot mode
+    let dockerfile = 'Dockerfile';
+    if (config.enableChroot) {
+      // Chroot mode: use minimal Dockerfile since user commands run on host
+      dockerfile = 'Dockerfile.minimal';
+      logger.debug('Chroot mode: building minimal agent image locally');
+    }
 
     // For custom images (not presets), pass as BASE_IMAGE build arg
     // For 'act' preset with --build-local, use the act base image
@@ -602,9 +603,13 @@ export function generateDockerCompose(
 
     agentService.build = {
       context: path.join(projectRoot, 'containers/agent'),
-      dockerfile: 'Dockerfile',
+      dockerfile,
       args: buildArgs,
     };
+  } else {
+    // Custom image specified without --build-local
+    // Use the image directly (user is responsible for ensuring compatibility)
+    agentService.image = agentImage;
   }
 
   return {

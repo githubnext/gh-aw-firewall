@@ -55,4 +55,4 @@ Workflow: `.github/workflows/deploy-docs.yml`
 
 - [Astro Documentation](https://docs.astro.build/)
 - [Starlight Documentation](https://starlight.astro.build/)
-- [Live Site](https://githubnext.github.io/gh-aw-firewall/)
+- [Live Site](https://github.github.io/gh-aw-firewall/)

@@ -22,7 +22,7 @@ tools:
 network:
   allowed:
     - github
-    - "githubnext.github.io"
+    - "github.github.io"
 safe-outputs:
   create-discussion:
     title-prefix: "[Pelis Agent Factory Advisor] "
@@ -41,7 +41,7 @@ You are an expert advisor on agentic workflows, specializing in patterns and bes
 **IMPORTANT**: You must thoroughly crawl and read the Pelis Agent Factory documentation site to understand the common patterns and best practices for agentic workflows.
 
 Start from the main blog post and explore ALL linked pages:
-- Start at: https://githubnext.github.io/gh-aw/blog/2026-01-12-welcome-to-pelis-agent-factory/
+- Start at: https://github.github.io/gh-aw/blog/2026-01-12-welcome-to-pelis-agent-factory/
 - Use `web-fetch` to retrieve each page
 - Follow ALL internal links to other pages on the site
 - Read the documentation sections, guides, and examples
