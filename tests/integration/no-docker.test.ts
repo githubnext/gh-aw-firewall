@@ -1,6 +1,6 @@
 /**
  * Docker-in-Docker Removal Regression Tests
- * Tests for PR #205: https://github.com/githubnext/gh-aw-firewall/pull/205
+ * Tests for PR #205: https://github.com/github/gh-aw-firewall/pull/205
  *
  * These tests verify that Docker commands fail gracefully after Docker-in-Docker
  * support was removed in v0.9.1. The agent container should NOT have:
@@ -9,7 +9,7 @@
  * - Docker daemon running
  *
  * IMPORTANT: These tests require container images built from commit 8d81fe4 or later.
- * If using registry images (ghcr.io/githubnext/gh-aw-firewall), ensure they have been
+ * If using registry images (ghcr.io/github/gh-aw-firewall), ensure they have been
  * rebuilt after PR #205 was merged. Otherwise, use `buildLocal: true` in test options
  * to build fresh images from the current codebase.
  *

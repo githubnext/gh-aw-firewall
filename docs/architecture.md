@@ -79,6 +79,7 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 - Mounts entire host filesystem at `/host` and user home directory for full access
 - `NET_ADMIN` capability required for iptables setup during initialization
 - **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
+- **Chroot Mode:** With `--enable-chroot`, user commands run inside `chroot /host` for transparent host binary access. See [Chroot Mode](./chroot-mode.md) for details.
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
   2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user

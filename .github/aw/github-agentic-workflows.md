@@ -138,6 +138,20 @@ The YAML frontmatter supports these fields:
   - Enables searching and retrieving assets associated with this workflow
   - Examples: `"workflow-2024-q1"`, `"team-alpha-bot"`, `"security_audit_v2"`
 
+- **`project:`** - GitHub Projects integration configuration (string or object)
+  - String format: `"https://github.com/orgs/myorg/projects/42"` - Project URL only
+  - Object format for advanced configuration:
+    ```yaml
+    project:
+      url: "https://github.com/orgs/myorg/projects/42"  # Required: full project URL
+      scope: ["owner/repo", "org:name"]                  # Optional: repositories/organizations workflow can operate on
+      max-updates: 100                                   # Optional: max project updates per run (default: 100)
+      max-status-updates: 1                              # Optional: max status updates per run (default: 1)
+      github-token: ${{ secrets.PROJECTS_PAT }}          # Optional: custom token for project operations
+    ```
+  - When configured, enables project board management operations
+  - Works with `update-project` safe-output for automated project tracking
+
 - **`secret-masking:`** - Configuration for secret redaction behavior in workflow outputs and artifacts (object)
   - `steps:` - Additional secret redaction steps to inject after the built-in secret redaction (array)
   - Use this to mask secrets in generated files using custom patterns
@@ -323,6 +337,19 @@ The YAML frontmatter supports these fields:
   - `web-search:` - Web search tools
   - `bash:` - Shell command tools
   - `playwright:` - Browser automation tools
+  - `serena:` - AI-powered code intelligence with language service integration
+    - Array format: `["go", "typescript"]` - Enable specific languages
+    - Object format for advanced configuration:
+      ```yaml
+      serena:
+        version: "latest"
+        languages:
+          go:
+            version: "1.21"
+          typescript:
+            version: "5.0"
+      ```
+    - Supported languages: `go`, `typescript`, `python`, `java`, `rust`, `csharp`
   - Custom tool names for MCP servers
 
 - **`safe-outputs:`** - Safe output processing configuration (preferred way to handle GitHub API write operations)
@@ -455,6 +482,17 @@ The YAML frontmatter supports these fields:
         target-repo: "owner/repo"           # Optional: cross-repository
     ```
     When using `safe-outputs.close-pull-request`, the main job does **not** need `pull-requests: write` permission since PR closing is handled by a separate job with appropriate permissions.
+  - `mark-pull-request-as-ready-for-review:` - Mark draft PRs as ready for review
+    ```yaml
+    safe-outputs:
+      mark-pull-request-as-ready-for-review:
+        max: 1                              # Optional: max operations (default: 1)
+        target: "*"                         # Optional: "triggering" (default), "*", or number
+        required-labels: [automated]        # Optional: only mark PRs with these labels
+        required-title-prefix: "[bot]"      # Optional: only mark PRs with this prefix
+        target-repo: "owner/repo"           # Optional: cross-repository
+    ```
+    When using `safe-outputs.mark-pull-request-as-ready-for-review`, the main job does **not** need `pull-requests: write` permission since marking as ready is handled by a separate job with appropriate permissions.
   - `add-labels:` - Safe label addition to issues or PRs
     ```yaml
     safe-outputs:
@@ -465,6 +503,16 @@ The YAML frontmatter supports these fields:
         target-repo: "owner/repo"                   # Optional: cross-repository
     ```
     When using `safe-outputs.add-labels`, the main job does **not** need `issues: write` or `pull-requests: write` permission since label addition is handled by a separate job with appropriate permissions.
+  - `remove-labels:` - Safe label removal from issues or PRs
+    ```yaml
+    safe-outputs:
+      remove-labels:
+        allowed: [automated, stale]  # Optional: restrict to specific labels
+        max: 3                       # Optional: maximum number of operations (default: 3)
+        target: "*"                  # Optional: "triggering" (default), "*" (any issue/PR), or number
+        target-repo: "owner/repo"    # Optional: cross-repository
+    ```
+    When `allowed` is omitted, any labels can be removed. Use `allowed` to restrict removal to specific labels. When using `safe-outputs.remove-labels`, the main job does **not** need `issues: write` or `pull-requests: write` permission since label removal is handled by a separate job with appropriate permissions.
   - `add-reviewer:` - Add reviewers to pull requests
     ```yaml
     safe-outputs:
@@ -495,6 +543,16 @@ The YAML frontmatter supports these fields:
         target-repo: "owner/repo"          # Optional: cross-repository
     ```
     Links issues as sub-issues using GitHub's parent-child relationships. Agent output includes `parent_issue_number` and `sub_issue_number`. Use with `create-issue` temporary IDs or existing issue numbers.
+  - `create-project:` - Create GitHub Projects V2
+    ```yaml
+    safe-outputs:
+      create-project:
+        max: 1                          # Optional: max projects (default: 1)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
+        target-owner: "org-or-user"     # Optional: owner for created projects
+        title-prefix: "[ai] "           # Optional: prefix for project titles
+    ```
+    Not supported for cross-repository operations.
   - `update-project:` - Manage GitHub Projects boards
     ```yaml
     safe-outputs:
@@ -514,6 +572,14 @@ The YAML frontmatter supports these fields:
     {"type": "update_project", "project": "https://github.com/orgs/myorg/projects/42", "content_type": "draft_issue", "draft_title": "Task title", "draft_body": "Task description", "fields": {"Status": "Todo"}}
     ```
 
+    Not supported for cross-repository operations.
+  - `create-project-status-update:` - Create GitHub project status updates
+    ```yaml
+    safe-outputs:
+      create-project-status-update:
+        max: 10                         # Optional: max status updates (default: 10)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
+    ```
     Not supported for cross-repository operations.
   - `push-to-pull-request-branch:` - Push changes to PR branch
     ```yaml
@@ -558,6 +624,14 @@ The YAML frontmatter supports these fields:
         target-repo: "owner/repo"       # Optional: cross-repository
     ```
     Publishes workflow artifacts to an orphaned git branch for persistent storage. Default allowed extensions include common non-executable types. Maximum file size is 50MB (51200 KB).
+  - `dispatch-workflow:` - Trigger other workflows with inputs
+    ```yaml
+    safe-outputs:
+      dispatch-workflow:
+        workflows: [workflow-name]          # Required: list of workflow names to allow
+        max: 3                              # Optional: max dispatches (default: 1, max: 3)
+    ```
+    Triggers other agentic workflows in the same repository using workflow_dispatch. Agent output includes `workflow_name` (without .md extension) and optional `inputs` (key-value pairs). Not supported for cross-repository operations.
   - `create-code-scanning-alert:` - Generate SARIF security advisories
     ```yaml
     safe-outputs:
@@ -565,6 +639,13 @@ The YAML frontmatter supports these fields:
         max: 50                         # Optional: max findings (default: unlimited)
     ```
     Severity levels: error, warning, info, note.
+  - `autofix-code-scanning-alert:` - Add autofixes to code scanning alerts
+    ```yaml
+    safe-outputs:
+      autofix-code-scanning-alert:
+        max: 10                         # Optional: max autofixes (default: 10)
+    ```
+    Provides automated fixes for code scanning alerts.
   - `create-agent-session:` - Create GitHub Copilot agent sessions
     ```yaml
     safe-outputs:
@@ -578,6 +659,9 @@ The YAML frontmatter supports these fields:
     safe-outputs:
       assign-to-agent:
         name: "copilot"                 # Optional: agent name
+        allowed: [copilot]              # Optional: restrict to specific agent names
+        max: 1                          # Optional: max assignments (default: 1)
+        target: "*"                     # Optional: "triggering" (default), "*", or number
         target-repo: "owner/repo"       # Optional: cross-repository
     ```
     Requires PAT with elevated permissions as `GH_AW_AGENT_TOKEN`.
@@ -615,6 +699,15 @@ The YAML frontmatter supports these fields:
       missing-tool:
     ```
     The missing-tool safe-output allows agents to report when they need tools or functionality not currently available. This is automatically enabled by default and helps track feature requests from agents.
+  - `missing-data:` - Report missing data required to complete tasks (auto-enabled)
+    ```yaml
+    safe-outputs:
+      missing-data:
+        create-issue: true              # Optional: create issues for missing data (default: true)
+        title-prefix: "[missing data]"  # Optional: prefix for issue titles
+        labels: [data-request]          # Optional: labels for created issues
+    ```
+    The missing-data safe-output allows agents to report when required data or information is unavailable. This is automatically enabled by default. When `create-issue` is true, missing data reports create or update GitHub issues for tracking.
 
   **Global Safe Output Configuration:**
   - `github-token:` - Custom GitHub token for all safe output jobs
@@ -644,6 +737,41 @@ The YAML frontmatter supports these fields:
           target-repo: "my-org/main-repo"
       ```
       With `[]`, references like `#123` become `` `#123` `` and `other/repo#456` becomes `` `other/repo#456` ``, preventing timeline clutter while preserving information.
+  - `messages:` - Custom message templates for safe-output footer and notification messages (object)
+    - Available placeholders: `{workflow_name}`, `{run_url}`, `{triggering_number}`, `{workflow_source}`, `{workflow_source_url}`, `{operation}`, `{event_type}`, `{status}`
+    - Message types:
+      - `footer:` - Custom footer for AI-generated content
+      - `footer-install:` - Installation instructions appended to footer
+      - `run-started:` - Workflow activation notification
+      - `run-success:` - Successful completion message
+      - `run-failure:` - Failure notification message
+      - `detection-failure:` - Detection job failure message
+      - `staged-title:` - Staged mode preview title
+      - `staged-description:` - Staged mode preview description
+    - Example:
+      ```yaml
+      safe-outputs:
+        messages:
+          footer: "> Generated by [{workflow_name}]({run_url})"
+          run-started: "[{workflow_name}]({run_url}) started processing this {event_type}."
+      ```
+  - `mentions:` - Configuration for @mention filtering in safe outputs (boolean or object)
+    - Boolean format: `false` - Always escape mentions; `true` - Always allow (error in strict mode)
+    - Object format for fine-grained control:
+      ```yaml
+      safe-outputs:
+        mentions:
+          allow-team-members: true    # Allow repository collaborators (default: true)
+          allow-context: true          # Allow mentions from event context (default: true)
+          allowed: [copilot, user1]    # Always allow specific users/bots
+          max: 50                      # Maximum mentions per message (default: 50)
+      ```
+    - Team members include collaborators with any permission level (excluding bots unless explicitly listed)
+    - Context mentions include issue/PR authors, assignees, and commenters
+  - `runs-on:` - Runner specification for all safe-outputs jobs (string)
+    - Defaults to `ubuntu-slim` (1-vCPU runner)
+    - Examples: `ubuntu-latest`, `windows-latest`, `self-hosted`
+    - Applies to activation, create-issue, add-comment, and other safe-output jobs
 
 - **`safe-inputs:`** - Define custom lightweight MCP tools as JavaScript, shell, or Python scripts (object)
   - Tools mounted in MCP server with access to specified secrets
@@ -1438,7 +1566,7 @@ gh aw logs --start-date -1mo         # Last month's runs
 gh aw logs --start-date -2w3d        # 2 weeks 3 days ago
 
 # Filter staged logs
-gw aw logs --no-staged               # ignore workflows with safe output staged true
+gh aw logs --no-staged               # ignore workflows with safe output staged true
 
 # Download to custom directory
 gh aw logs -o ./workflow-logs
@@ -1629,13 +1757,13 @@ Use `gh aw compile --verbose` to see detailed validation messages, or `gh aw com
 ### Installation
 
 ```bash
-gh extension install githubnext/gh-aw
+gh extension install github/gh-aw
 ```
 
 If there are authentication issues, use the standalone installer:
 
 ```bash
-curl -O https://raw.githubusercontent.com/githubnext/gh-aw/main/install-gh-aw.sh
+curl -O https://raw.githubusercontent.com/github/gh-aw/main/install-gh-aw.sh
 chmod +x install-gh-aw.sh
 ./install-gh-aw.sh
 ```
@@ -1664,4 +1792,4 @@ gh aw logs <workflow-id>
 
 ### Documentation
 
-For complete CLI documentation, see: https://githubnext.github.io/gh-aw/setup/cli/
+For complete CLI documentation, see: https://github.github.com/gh-aw/setup/cli/
