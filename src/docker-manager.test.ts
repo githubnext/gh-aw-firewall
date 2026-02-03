@@ -623,6 +623,47 @@ describe('docker-manager', () => {
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME to container when enableChroot is true and env vars are set', () => {
+      const originalGoroot = process.env.GOROOT;
+      const originalCargoHome = process.env.CARGO_HOME;
+      const originalJavaHome = process.env.JAVA_HOME;
+
+      process.env.GOROOT = '/usr/local/go';
+      process.env.CARGO_HOME = '/home/user/.cargo';
+      process.env.JAVA_HOME = '/usr/lib/jvm/java-17';
+
+      try {
+        const configWithChroot = {
+          ...mockConfig,
+          enableChroot: true
+        };
+        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const agent = result.services.agent;
+        const environment = agent.environment as Record<string, string>;
+
+        expect(environment.AWF_GOROOT).toBe('/usr/local/go');
+        expect(environment.AWF_CARGO_HOME).toBe('/home/user/.cargo');
+        expect(environment.AWF_JAVA_HOME).toBe('/usr/lib/jvm/java-17');
+      } finally {
+        // Restore original values
+        if (originalGoroot !== undefined) {
+          process.env.GOROOT = originalGoroot;
+        } else {
+          delete process.env.GOROOT;
+        }
+        if (originalCargoHome !== undefined) {
+          process.env.CARGO_HOME = originalCargoHome;
+        } else {
+          delete process.env.CARGO_HOME;
+        }
+        if (originalJavaHome !== undefined) {
+          process.env.JAVA_HOME = originalJavaHome;
+        } else {
+          delete process.env.JAVA_HOME;
+        }
+      }
+    });
+
     it('should not set AWF_CHROOT_ENABLED when enableChroot is false', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
@@ -929,6 +970,24 @@ describe('docker-manager', () => {
 
         expect(agent.extra_hosts).toBeUndefined();
         expect(squid.extra_hosts).toBeUndefined();
+      });
+    });
+
+    describe('allowHostPorts option', () => {
+      it('should set AWF_ALLOW_HOST_PORTS when allowHostPorts is specified', () => {
+        const config = { ...mockConfig, enableHostAccess: true, allowHostPorts: '8080,3000' };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ALLOW_HOST_PORTS).toBe('8080,3000');
+      });
+
+      it('should NOT set AWF_ALLOW_HOST_PORTS when allowHostPorts is undefined', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ALLOW_HOST_PORTS).toBeUndefined();
       });
     });
 
@@ -1246,11 +1305,53 @@ describe('docker-manager', () => {
       );
     });
 
+    it('should continue when removing existing containers fails', async () => {
+      // First call (docker rm) throws an error, but we should continue
+      mockExecaFn.mockRejectedValueOnce(new Error('No such container'));
+      // Second call (docker compose up) succeeds
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com']);
+
+      // Should still call docker compose up even if rm failed
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
     it('should run docker compose up', async () => {
       mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
       mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
 
       await startContainers(testDir, ['github.com']);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should run docker compose up with --pull never when skipPull is true', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, true);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d', '--pull', 'never'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should run docker compose up without --pull never when skipPull is false', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, false);
 
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
