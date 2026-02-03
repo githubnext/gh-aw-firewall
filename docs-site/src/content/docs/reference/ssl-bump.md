@@ -20,7 +20,7 @@ SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering i
 
 ## Overview
 
-By default, awf filters HTTPS traffic based on domain names using SNI (Server Name Indication). You can allow `github.com`, but cannot restrict access to specific paths like `https://github.com/githubnext/*`.
+By default, awf filters HTTPS traffic based on domain names using SNI (Server Name Indication). You can allow `github.com`, but cannot restrict access to specific paths like `https://github.com/myorg/*`.
 
 With SSL Bump enabled, the firewall generates a per-session CA certificate and intercepts HTTPS connections, enabling:
 
@@ -39,8 +39,8 @@ SSL Bump intercepts and decrypts HTTPS traffic. The proxy can see full request U
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*,https://api.github.com/repos/*" \
-  -- curl https://github.com/githubnext/some-repo
+  --allow-urls "https://github.com/myorg/*,https://api.github.com/repos/*" \
+  -- curl https://github.com/myorg/some-repo
 ```
 
 ## CLI Flags
@@ -77,13 +77,13 @@ Comma-separated list of allowed URL patterns for HTTPS traffic.
 
 ```bash
 # Allow specific repository paths
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Allow API endpoints
 --allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"
 
 # Combine with domain allowlist
---allow-domains github.com --ssl-bump --allow-urls "https://github.com/githubnext/*"
+--allow-domains github.com --ssl-bump --allow-urls "https://github.com/myorg/*"
 ```
 
 ## How It Works
@@ -103,7 +103,7 @@ Squid sees only the domain from the TLS ClientHello SNI extension. The URL path 
 Agent → CONNECT github.com:443 → Squid intercepts TLS
       → Squid presents session CA certificate
       → Agent trusts session CA (injected into trust store)
-      → Full HTTPS request visible: GET /githubnext/repo
+      → Full HTTPS request visible: GET /myorg/repo
       → Squid checks URL pattern ACL → Pass/Block
 ```
 
@@ -189,11 +189,11 @@ To prevent security bypasses, URL patterns (`--allow-urls`) are validated:
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*,https://github.com/github/*" \
-  -- copilot --prompt "Clone the githubnext/copilot-workspace repo"
+  --allow-urls "https://github.com/myorg/*,https://github.com/github/*" \
+  -- copilot --prompt "Clone the myorg/copilot-workspace repo"
 ```
 
-Allows access to `githubnext` and `github` organizations while blocking other repositories.
+Allows access to `myorg` and `github` organizations while blocking other repositories.
 
 ### API Endpoint Restrictions
 
@@ -201,8 +201,8 @@ Allows access to `githubnext` and `github` organizations while blocking other re
 sudo awf \
   --allow-domains api.github.com \
   --ssl-bump \
-  --allow-urls "https://api.github.com/repos/githubnext/*,https://api.github.com/users/*" \
-  -- curl https://api.github.com/repos/githubnext/gh-aw-firewall
+  --allow-urls "https://api.github.com/repos/myorg/*,https://api.github.com/users/*" \
+  -- curl https://api.github.com/repos/github/gh-aw-firewall
 ```
 
 ### Debug with Verbose Logging
@@ -213,7 +213,7 @@ sudo awf \
   --ssl-bump \
   --allow-urls "https://github.com/*" \
   --log-level debug \
-  -- curl https://github.com/githubnext/gh-aw-firewall
+  -- curl https://github.com/github/gh-aw-firewall
 
 # View full URL paths in Squid logs
 sudo cat /tmp/squid-logs-*/access.log
@@ -261,8 +261,8 @@ sudo awf --log-level debug --ssl-bump --allow-urls "..." -- your-command
 sudo cat /tmp/squid-logs-*/access.log | grep your-domain
 
 # Ensure patterns include scheme (https://)
-# ✗ Wrong: github.com/githubnext/*
-# ✓ Correct: https://github.com/githubnext/*
+# ✗ Wrong: github.com/myorg/*
+# ✓ Correct: https://github.com/myorg/*
 ```
 
 ## Known Limitations

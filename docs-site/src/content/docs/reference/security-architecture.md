@@ -212,7 +212,7 @@ Only enable SSL Bump when you specifically need URL path filtering. For most use
 ### SSL Bump Threat Considerations
 
 **What SSL Bump enables:**
-- Fine-grained access control (e.g., allow only `/githubnext/*` paths)
+- Fine-grained access control (e.g., allow only `/myorg/*` paths)
 - Better audit logging with full URLs
 - Detection of path-based exfiltration attempts
 
