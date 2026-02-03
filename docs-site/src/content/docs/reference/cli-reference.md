@@ -32,6 +32,7 @@ awf [options] -- <command>
 | `--build-local` | flag | `false` | Build containers locally instead of pulling from registry |
 | `--image-registry <url>` | string | `ghcr.io/github/gh-aw-firewall` | Container image registry |
 | `--image-tag <tag>` | string | `latest` | Container image tag |
+| `--skip-pull` | flag | `false` | Use local images without pulling from registry |
 | `-e, --env <KEY=VALUE>` | string | `[]` | Environment variable (repeatable) |
 | `--env-all` | flag | `false` | Pass all host environment variables |
 | `-v, --mount <host:container[:mode]>` | string | `[]` | Volume mount (repeatable) |
@@ -180,6 +181,31 @@ Custom container image registry URL.
 ### `--image-tag <tag>`
 
 Container image tag to use.
+
+### `--skip-pull`
+
+Use local images without pulling from the registry. This is useful for:
+
+- **Air-gapped environments** where registry access is unavailable
+- **CI systems with pre-warmed image caches** to avoid unnecessary network calls
+- **Local development** when images are already cached
+
+```bash
+# Pre-pull images first
+docker pull ghcr.io/github/gh-aw-firewall/squid:latest
+docker pull ghcr.io/github/gh-aw-firewall/agent:latest
+
+# Use with --skip-pull to avoid re-pulling
+sudo awf --skip-pull --allow-domains github.com -- curl https://api.github.com
+```
+
+:::caution[Image Verification]
+When using `--skip-pull`, you are responsible for verifying image authenticity. The firewall cannot verify that locally cached images haven't been tampered with. See [Image Verification](/gh-aw-firewall/docs/image-verification/) for cosign verification instructions.
+:::
+
+:::note[Incompatible with --build-local]
+The `--skip-pull` flag cannot be used with `--build-local` since building images requires pulling base images from the registry.
+:::
 
 ### `-e, --env <KEY=VALUE>`
 

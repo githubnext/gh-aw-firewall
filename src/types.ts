@@ -138,14 +138,27 @@ export interface WrapperConfig {
 
   /**
    * Whether to build container images locally instead of pulling from registry
-   * 
+   *
    * When true, Docker images are built from local Dockerfiles in containers/squid
    * and containers/agent directories. When false (default), images are pulled
    * from the configured registry.
-   * 
+   *
    * @default false
    */
   buildLocal?: boolean;
+
+  /**
+   * Whether to skip pulling images from the registry
+   *
+   * When true, Docker Compose will use locally available images without
+   * attempting to pull from the registry. This is useful when images are
+   * pre-downloaded or in air-gapped environments.
+   *
+   * If the required images are not available locally, container startup will fail.
+   *
+   * @default false
+   */
+  skipPull?: boolean;
 
   /**
    * Agent container image preset or custom base image

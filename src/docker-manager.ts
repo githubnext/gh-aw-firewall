@@ -802,8 +802,12 @@ async function checkSquidLogs(workDir: string, proxyLogsDir?: string): Promise<{
 
 /**
  * Starts Docker Compose services
+ * @param workDir - Working directory containing Docker Compose config
+ * @param allowedDomains - List of allowed domains for error reporting
+ * @param proxyLogsDir - Optional custom directory for proxy logs
+ * @param skipPull - If true, use local images without pulling from registry
  */
-export async function startContainers(workDir: string, allowedDomains: string[], proxyLogsDir?: string): Promise<void> {
+export async function startContainers(workDir: string, allowedDomains: string[], proxyLogsDir?: string, skipPull?: boolean): Promise<void> {
   logger.info('Starting containers...');
 
   // Force remove any existing containers with these names to avoid conflicts
@@ -819,7 +823,12 @@ export async function startContainers(workDir: string, allowedDomains: string[],
   }
 
   try {
-    await execa('docker', ['compose', 'up', '-d'], {
+    const composeArgs = ['compose', 'up', '-d'];
+    if (skipPull) {
+      composeArgs.push('--pull', 'never');
+      logger.debug('Using --pull never (skip-pull mode)');
+    }
+    await execa('docker', composeArgs, {
       cwd: workDir,
       stdio: 'inherit',
     });
