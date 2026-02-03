@@ -9,6 +9,7 @@ This is a firewall for GitHub Copilot CLI (package name: `@github/awf`) that pro
 ### Documentation Files
 
 - **[README.md](README.md)** - Main project documentation and usage guide
+- **[docs/chroot-mode.md](docs/chroot-mode.md)** - Chroot mode for transparent host binary access
 - **[LOGGING.md](LOGGING.md)** - Comprehensive logging documentation
 - **[docs/logging_quickref.md](docs/logging_quickref.md)** - Quick reference for log queries and monitoring
 
@@ -479,7 +480,7 @@ The agent container mounts the HOME directory, so this config file is automatica
 - ✅ **MCP server name** - Use `"github"` as the server name (must match `--allow-tool` flag)
 - ✅ **npx availability** - The agent container includes Node.js 22 with npx pre-installed
 
-**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/githubnext/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
+**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/github/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
 
 ### Running Copilot CLI with Local MCP Through Firewall
 

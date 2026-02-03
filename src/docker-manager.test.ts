@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -172,6 +172,69 @@ describe('docker-manager', () => {
     });
   });
 
+  describe('getRealUserHome', () => {
+    const originalGetuid = process.getuid;
+    const originalSudoUser = process.env.SUDO_USER;
+    const originalHome = process.env.HOME;
+
+    afterEach(() => {
+      process.getuid = originalGetuid;
+      process.env.SUDO_USER = originalSudoUser;
+      process.env.HOME = originalHome;
+      jest.restoreAllMocks();
+    });
+
+    it('should return HOME when running as regular user', () => {
+      process.getuid = () => 1001;
+      process.env.HOME = '/home/testuser';
+      expect(getRealUserHome()).toBe('/home/testuser');
+    });
+
+    it('should return /root as fallback when HOME is not set and running as root', () => {
+      process.getuid = () => 0;
+      delete process.env.SUDO_USER;
+      delete process.env.HOME;
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should use HOME as fallback when running as root without SUDO_USER', () => {
+      process.getuid = () => 0;
+      delete process.env.SUDO_USER;
+      process.env.HOME = '/root';
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should look up user home from /etc/passwd when running as root with SUDO_USER (using real root user)', () => {
+      // Test with actual /etc/passwd by using 'root' user which always exists
+      process.getuid = () => 0;
+      process.env.SUDO_USER = 'root';
+      process.env.HOME = '/some/other/path';
+
+      // Should find root's home directory from /etc/passwd
+      expect(getRealUserHome()).toBe('/root');
+    });
+
+    it('should fall back to HOME when SUDO_USER not found in /etc/passwd', () => {
+      process.getuid = () => 0;
+      process.env.SUDO_USER = 'nonexistent_user_12345';
+      process.env.HOME = '/fallback/home';
+
+      // User doesn't exist in /etc/passwd, should fall back to HOME
+      expect(getRealUserHome()).toBe('/fallback/home');
+    });
+
+    it('should handle undefined getuid gracefully (using real /etc/passwd)', () => {
+      // Simulate environment where process.getuid is undefined (e.g., Windows)
+      process.getuid = undefined as any;
+      process.env.SUDO_USER = 'root';
+      process.env.HOME = '/custom/home';
+
+      // With getuid undefined, uid is undefined (falsy), so it attempts passwd lookup
+      // Should find root's home directory from /etc/passwd
+      expect(getRealUserHome()).toBe('/root');
+    });
+  });
+
   describe('MIN_REGULAR_UID constant', () => {
     it('should be 1000 (standard Linux regular user UID threshold)', () => {
       expect(MIN_REGULAR_UID).toBe(1000);
@@ -186,7 +249,7 @@ describe('docker-manager', () => {
       keepContainers: false,
       workDir: '/tmp/awf-test',
       buildLocal: false,
-      imageRegistry: 'ghcr.io/githubnext/gh-aw-firewall',
+      imageRegistry: 'ghcr.io/github/gh-aw-firewall',
       imageTag: 'latest',
     };
 
@@ -199,8 +262,8 @@ describe('docker-manager', () => {
     it('should generate docker-compose config with GHCR images by default', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
-      expect(result.services['squid-proxy'].image).toBe('ghcr.io/githubnext/gh-aw-firewall/squid:latest');
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services['squid-proxy'].image).toBe('ghcr.io/github/gh-aw-firewall/squid:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services['squid-proxy'].build).toBeUndefined();
       expect(result.services.agent.build).toBeUndefined();
     });
@@ -278,7 +341,7 @@ describe('docker-manager', () => {
       };
       const result = generateDockerCompose(actPresetConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent-act:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 
@@ -289,14 +352,14 @@ describe('docker-manager', () => {
       };
       const result = generateDockerCompose(defaultPresetConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 
     it('should use agent GHCR image when agentImage is undefined', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
-      expect(result.services.agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(result.services.agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(result.services.agent.build).toBeUndefined();
     });
 
@@ -462,6 +525,227 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/:/host:rw');
     });
 
+    it('should use selective mounts when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should NOT include blanket /:/host:rw mount
+      expect(volumes).not.toContain('/:/host:rw');
+
+      // Should include system paths (read-only)
+      expect(volumes).toContain('/usr:/host/usr:ro');
+      expect(volumes).toContain('/bin:/host/bin:ro');
+      expect(volumes).toContain('/sbin:/host/sbin:ro');
+      expect(volumes).toContain('/lib:/host/lib:ro');
+      expect(volumes).toContain('/lib64:/host/lib64:ro');
+      expect(volumes).toContain('/opt:/host/opt:ro');
+
+      // Should include special filesystems (read-only)
+      // NOTE: Only /proc/self is mounted (not full /proc) to prevent exposure of other processes' env vars
+      expect(volumes).not.toContain('/proc:/host/proc:ro');
+      expect(volumes).toContain('/proc/self:/host/proc/self:ro');
+      expect(volumes).toContain('/sys:/host/sys:ro');
+      expect(volumes).toContain('/dev:/host/dev:ro');
+
+      // Should include /etc subdirectories (read-only)
+      expect(volumes).toContain('/etc/ssl:/host/etc/ssl:ro');
+      expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
+      expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
+      expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
+
+      // Should still include essential mounts
+      expect(volumes).toContain('/tmp:/tmp:rw');
+      expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+    });
+
+    it('should hide Docker socket when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Docker socket should be hidden with /dev/null
+      expect(volumes).toContain('/dev/null:/host/var/run/docker.sock:ro');
+      expect(volumes).toContain('/dev/null:/host/run/docker.sock:ro');
+    });
+
+    it('should mount user home directory under /host when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should mount home directory under /host for chroot access (read-write)
+      const homeDir = process.env.HOME || '/root';
+      expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
+    });
+
+    it('should add SYS_CHROOT capability when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      // With init container pattern, agent only has SYS_CHROOT (not NET_ADMIN)
+      expect(agent.cap_add).not.toContain('NET_ADMIN');
+      expect(agent.cap_add).toContain('SYS_CHROOT');
+    });
+
+    it('should not add SYS_CHROOT capability when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      // With init container pattern, agent never has NET_ADMIN
+      expect(agent.cap_add).not.toContain('NET_ADMIN');
+      expect(agent.cap_add).not.toContain('SYS_CHROOT');
+    });
+
+    it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_CHROOT_ENABLED).toBe('true');
+    });
+
+    it('should not set AWF_CHROOT_ENABLED when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_CHROOT_ENABLED).toBeUndefined();
+    });
+
+    it('should set AWF_WORKDIR environment variable when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        containerWorkDir: '/workspace/project'
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const environment = agent.environment as Record<string, string>;
+
+      expect(environment.AWF_WORKDIR).toBe('/workspace/project');
+    });
+
+    it('should mount /tmp under /host for chroot temp scripts', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // /tmp:/host/tmp:rw is required for entrypoint.sh to write command scripts
+      expect(volumes).toContain('/tmp:/host/tmp:rw');
+    });
+
+    it('should mount /etc/passwd and /etc/group for user lookup in chroot mode', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // These are needed for getent/user lookup inside chroot
+      expect(volumes).toContain('/etc/passwd:/host/etc/passwd:ro');
+      expect(volumes).toContain('/etc/group:/host/etc/group:ro');
+      expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
+    });
+
+    it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode with preset image should use GHCR (not build locally)
+      // This fixes the bug where packaged binaries couldn't find containers/agent directory
+      expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
+      expect(agent.build).toBeUndefined();
+    });
+
+    it('should use GHCR agent-act image when enableChroot is true with act preset', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        agentImage: 'act'
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode with 'act' preset should use GHCR agent-act image
+      expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent-act:latest');
+      expect(agent.build).toBeUndefined();
+    });
+
+    it('should build locally with minimal Dockerfile when enableChroot with custom image', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        agentImage: 'ubuntu:24.04' // Custom (non-preset) image
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // Chroot mode with custom image should build locally with minimal Dockerfile
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.build.args.BASE_IMAGE).toBe('ubuntu:24.04');
+      expect(agent.image).toBeUndefined();
+    });
+
+    it('should build locally with minimal Dockerfile when buildLocal and enableChroot are both true', () => {
+      const configWithChrootAndBuildLocal = {
+        ...mockConfig,
+        enableChroot: true,
+        buildLocal: true
+      };
+      const result = generateDockerCompose(configWithChrootAndBuildLocal, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      // When both buildLocal and enableChroot are set, should build locally
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.image).toBeUndefined();
+    });
+
+    it('should use standard Dockerfile when enableChroot is false and buildLocal is true', () => {
+      const configWithBuildLocal = {
+        ...mockConfig,
+        buildLocal: true,
+        enableChroot: false
+      };
+      const result = generateDockerCompose(configWithBuildLocal, mockNetworkConfig);
+      const agent = result.services.agent as any;
+
+      expect(agent.build).toBeDefined();
+      expect(agent.build.dockerfile).toBe('Dockerfile');
+    });
+
     it('should set agent to depend on healthy squid and completed iptables setup', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
@@ -477,7 +761,9 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
-      expect(agent.cap_add).toBeUndefined();
+      // cap_add should be empty array when no chroot mode (no capabilities needed)
+      expect(agent.cap_add).toEqual([]);
+      expect(agent.cap_add).not.toContain('NET_ADMIN');
     });
 
     it('should configure iptables-setup init container', () => {
@@ -506,7 +792,7 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const setup = result.services['iptables-setup'];
 
-      expect(setup.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-setup:latest');
+      expect(setup.image).toBe('ghcr.io/github/gh-aw-firewall/agent-setup:latest');
       expect(setup.build).toBeUndefined();
     });
 
@@ -765,7 +1051,8 @@ describe('docker-manager', () => {
         // Verify other config is still present
         expect(result.services.agent.container_name).toBe('awf-agent');
         // Agent no longer has NET_ADMIN (handled by init container)
-        expect(result.services.agent.cap_add).toBeUndefined();
+        // cap_add should be empty array when no chroot mode
+        expect(result.services.agent.cap_add).toEqual([]);
       });
 
       it('should handle empty string containerWorkDir by not setting working_dir', () => {

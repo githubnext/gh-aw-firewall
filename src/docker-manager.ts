@@ -85,6 +85,39 @@ export function getSafeHostGid(): string {
 }
 
 /**
+ * Gets the real user's home directory, accounting for sudo.
+ * When running with sudo, uses SUDO_USER to find the actual user's home.
+ * @internal Exported for testing
+ */
+export function getRealUserHome(): string {
+  const uid = process.getuid?.();
+
+  // When running as root (sudo), try to get the original user's home
+  if (!uid || uid === 0) {
+    // Try SUDO_USER first - look up their home directory from passwd
+    const sudoUser = process.env.SUDO_USER;
+    if (sudoUser) {
+      try {
+        // Look up user's home directory from /etc/passwd
+        const passwd = fs.readFileSync('/etc/passwd', 'utf-8');
+        const userLine = passwd.split('\n').find(line => line.startsWith(`${sudoUser}:`));
+        if (userLine) {
+          const parts = userLine.split(':');
+          if (parts.length >= 6 && parts[5]) {
+            return parts[5]; // Home directory is the 6th field
+          }
+        }
+      } catch {
+        // Fall through to use HOME
+      }
+    }
+  }
+
+  // Use HOME environment variable as fallback
+  return process.env.HOME || '/root';
+}
+
+/**
  * Gets existing Docker network subnets to avoid conflicts
  */
 async function getExistingDockerSubnets(): Promise<string[]> {
@@ -204,7 +237,7 @@ export function generateDockerCompose(
 
   // Default to GHCR images unless buildLocal is explicitly set
   const useGHCR = !config.buildLocal;
-  const registry = config.imageRegistry || 'ghcr.io/githubnext/gh-aw-firewall';
+  const registry = config.imageRegistry || 'ghcr.io/github/gh-aw-firewall';
   const tag = config.imageTag || 'latest';
 
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
@@ -289,15 +322,38 @@ export function generateDockerCompose(
   ]);
 
   // Start with required/overridden environment variables
+  // For chroot mode, use the real user's home (not /root when running with sudo)
+  const homeDir = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const environment: Record<string, string> = {
     HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
-    HOME: process.env.HOME || '/root',
+    HOME: homeDir,
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
+
+  // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
+  // This ensures toolcache paths (Python, Node, Go, Rust, Java) are correctly resolved
+  if (config.enableChroot) {
+    if (process.env.PATH) {
+      environment.AWF_HOST_PATH = process.env.PATH;
+    }
+    // Go on GitHub Actions uses trimmed binaries that require GOROOT to be set
+    // Pass GOROOT as AWF_GOROOT so entrypoint.sh can export it in the chroot script
+    if (process.env.GOROOT) {
+      environment.AWF_GOROOT = process.env.GOROOT;
+    }
+    // Rust: Pass CARGO_HOME so entrypoint can add $CARGO_HOME/bin to PATH
+    if (process.env.CARGO_HOME) {
+      environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
+    }
+    // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
+    if (process.env.JAVA_HOME) {
+      environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
+    }
+  }
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
   if (config.envAll) {
@@ -330,6 +386,20 @@ export function generateDockerCompose(
   // Pass allowed ports to container for setup-iptables.sh (if specified)
   if (config.allowHostPorts) {
     environment.AWF_ALLOW_HOST_PORTS = config.allowHostPorts;
+  }
+
+  // Pass chroot mode flag to container for entrypoint.sh capability drop
+  if (config.enableChroot) {
+    environment.AWF_CHROOT_ENABLED = 'true';
+    // Pass the container working directory for chroot mode
+    // If containerWorkDir is set, use it; otherwise use home directory
+    // The entrypoint will strip /host prefix to get the correct path inside chroot
+    if (config.containerWorkDir) {
+      environment.AWF_WORKDIR = config.containerWorkDir;
+    } else {
+      // Default to real user's home directory (not /root when running with sudo)
+      environment.AWF_WORKDIR = getRealUserHome();
+    }
   }
 
   // Pass host UID/GID for runtime user adjustment in entrypoint
@@ -382,13 +452,76 @@ export function generateDockerCompose(
   }
 
   // Build volumes list for agent execution container
+  // For chroot mode, use the real user's home (not /root when running with sudo)
+  const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${process.env.HOME}:${process.env.HOME}:rw`,
+    `${effectiveHome}:${effectiveHome}:rw`,
     // Mount agent logs directory to workDir for persistence
-    `${config.workDir}/agent-logs:${process.env.HOME}/.copilot/logs:rw`,
+    `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
+
+  // Add chroot-related volume mounts when --enable-chroot is specified
+  // These mounts enable chroot /host to work properly for running host binaries
+  if (config.enableChroot) {
+    logger.debug('Chroot mode enabled - using selective path mounts for security');
+
+    // System paths (read-only) - required for binaries and libraries
+    agentVolumes.push(
+      '/usr:/host/usr:ro',
+      '/bin:/host/bin:ro',
+      '/sbin:/host/sbin:ro',
+    );
+
+    // Handle /lib and /lib64 - may be symlinks on some systems
+    // Always mount them to ensure library resolution works
+    agentVolumes.push('/lib:/host/lib:ro');
+    agentVolumes.push('/lib64:/host/lib64:ro');
+
+    // Tool cache - language runtimes from GitHub runners (read-only)
+    // /opt/hostedtoolcache contains Python, Node, Ruby, Go, Java, etc.
+    agentVolumes.push('/opt:/host/opt:ro');
+
+    // Special filesystem mounts for chroot (needed for devices and runtime introspection)
+    // NOTE: Only /proc/self is mounted (not full /proc) to prevent exposure of other
+    // processes' environment variables while still allowing binaries like Go to find themselves
+    agentVolumes.push(
+      '/proc/self:/host/proc/self:ro', // Process self-info only (needed by Go to find GOROOT)
+      '/sys:/host/sys:ro',             // Read-only sysfs
+      '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
+    );
+
+    // User home directory for project files and Rust/Cargo (read-write)
+    // Note: $HOME is already mounted at the container level, this adds it under /host
+    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
+    const userHome = getRealUserHome();
+    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+
+    // /tmp is needed for chroot mode to write temporary command scripts
+    // The entrypoint.sh writes to /host/tmp/awf-cmd-$$.sh
+    agentVolumes.push('/tmp:/host/tmp:rw');
+
+    // Minimal /etc - only what's needed for runtime
+    // Note: /etc/shadow is NOT mounted (contains password hashes)
+    agentVolumes.push(
+      '/etc/ssl:/host/etc/ssl:ro',                         // SSL certificates
+      '/etc/ca-certificates:/host/etc/ca-certificates:ro', // CA certificates
+      '/etc/alternatives:/host/etc/alternatives:ro',       // For update-alternatives (runtime version switching)
+      '/etc/ld.so.cache:/host/etc/ld.so.cache:ro',         // Dynamic linker cache
+      '/etc/passwd:/host/etc/passwd:ro',                   // User database (needed for getent/user lookup)
+      '/etc/group:/host/etc/group:ro',                     // Group database (needed for getent/group lookup)
+      '/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro',     // Name service switch config
+    );
+
+    // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'
+    // An attacker could otherwise spawn a new container without network restrictions
+    agentVolumes.push('/dev/null:/host/var/run/docker.sock:ro');
+    // Also hide /run/docker.sock (symlink on some systems)
+    agentVolumes.push('/dev/null:/host/run/docker.sock:ro');
+
+    logger.debug('Selective mounts configured: system paths (ro), home (rw), Docker socket hidden');
+  }
 
   // Add SSL CA certificate mount if SSL Bump is enabled
   // This allows the agent container to trust the dynamically-generated CA
@@ -404,8 +537,9 @@ export function generateDockerCompose(
     config.volumeMounts.forEach(mount => {
       agentVolumes.push(mount);
     });
-  } else {
-    // If no custom mounts specified, include blanket host filesystem mount for backward compatibility
+  } else if (!config.enableChroot) {
+    // If no custom mounts specified AND not using chroot mode,
+    // include blanket host filesystem mount for backward compatibility
     logger.debug('No custom mounts specified, using blanket /:/host:rw mount');
     agentVolumes.unshift('/:/host:rw');
   }
@@ -430,8 +564,12 @@ export function generateDockerCompose(
         condition: 'service_completed_successfully',
       },
     },
-    // Security: NO NET_ADMIN capability - iptables setup handled by separate init container
-    // This is the key security improvement: agent container never has NET_ADMIN, even at startup
+    // Security: NET_ADMIN is NOT granted to agent container
+    // - iptables setup is handled by separate 'iptables-setup' init container
+    // - SYS_CHROOT is added when --enable-chroot is specified for chroot operations
+    // - In chroot mode, SYS_CHROOT is dropped before running user commands via capsh in entrypoint.sh
+    // This is the key security improvement: agent container never has NET_ADMIN capability
+    cap_add: config.enableChroot ? ['SYS_CHROOT'] : [],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
@@ -468,22 +606,36 @@ export function generateDockerCompose(
   }
 
   // Use GHCR image or build locally
-  // For presets ('default', 'act'), use GHCR images
-  // For custom images, build locally with the custom base image
+  // Priority: GHCR preset images > local build (when requested) > custom images
+  // For presets ('default', 'act'), use GHCR images (even in chroot mode)
+  // This fixes a bug where --enable-chroot would ignore --agent-image preset
   const agentImage = config.agentImage || 'default';
   const isPreset = agentImage === 'default' || agentImage === 'act';
-  
+
   if (useGHCR && isPreset) {
-    // Use pre-built GHCR image based on preset
+    // Use pre-built GHCR image for preset images (works in both normal and chroot mode)
+    // The GHCR images already have the necessary setup for chroot mode
     const imageName = agentImage === 'act' ? 'agent-act' : 'agent';
     agentService.image = `${registry}/${imageName}:${tag}`;
-  } else {
+    if (config.enableChroot) {
+      logger.debug(`Chroot mode: using GHCR image ${imageName}:${tag}`);
+    }
+  } else if (config.buildLocal || (config.enableChroot && !isPreset)) {
+    // Build locally when:
+    // 1. --build-local is explicitly specified, OR
+    // 2. --enable-chroot with a custom (non-preset) image
     const buildArgs: Record<string, string> = {
-      // Pass host UID/GID to match file ownership in container
-      // This prevents permission issues with mounted volumes
       USER_UID: getSafeHostUid(),
       USER_GID: getSafeHostGid(),
     };
+
+    // Determine dockerfile based on chroot mode
+    let dockerfile = 'Dockerfile';
+    if (config.enableChroot) {
+      // Chroot mode: use minimal Dockerfile since user commands run on host
+      dockerfile = 'Dockerfile.minimal';
+      logger.debug('Chroot mode: building minimal agent image locally');
+    }
 
     // For custom images (not presets), pass as BASE_IMAGE build arg
     // For 'act' preset with --build-local, use the act base image
@@ -497,9 +649,13 @@ export function generateDockerCompose(
 
     agentService.build = {
       context: path.join(projectRoot, 'containers/agent'),
-      dockerfile: 'Dockerfile',
+      dockerfile,
       args: buildArgs,
     };
+  } else {
+    // Custom image specified without --build-local
+    // Use the image directly (user is responsible for ensuring compatibility)
+    agentService.image = agentImage;
   }
 
   return {
