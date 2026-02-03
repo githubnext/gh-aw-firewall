@@ -122,7 +122,7 @@ export interface WrapperConfig {
    * Allows overriding the default GitHub Container Registry with custom registries
    * for development, testing, or air-gapped environments.
    * 
-   * @default 'ghcr.io/githubnext/gh-aw-firewall'
+   * @default 'ghcr.io/github/gh-aw-firewall'
    * @example 'my-registry.example.com/awf'
    */
   imageRegistry?: string;
@@ -323,7 +323,7 @@ export interface WrapperConfig {
    *
    * If not specified, falls back to domain-only filtering.
    *
-   * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
+   * @example ['https://github.com/myorg/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
 
@@ -539,7 +539,7 @@ export interface DockerService {
    * from the registry (local or remote).
    * 
    * @example 'ubuntu/squid:latest'
-   * @example 'ghcr.io/githubnext/gh-aw-firewall/agent:latest'
+   * @example 'ghcr.io/github/gh-aw-firewall/agent:latest'
    */
   image?: string;
 

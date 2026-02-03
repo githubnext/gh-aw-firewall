@@ -67,8 +67,8 @@ jobs:
       - name: Build local containers
         run: |
           echo "=== Building local containers ==="
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/squid:latest containers/squid/
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/agent:latest containers/agent/
+          docker build -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
+          docker build -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
 
       - name: Pre-test cleanup
         run: |
@@ -188,8 +188,8 @@ jobs:
       - name: Build local containers
         run: |
           echo "=== Building local containers ==="
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/squid:latest containers/squid/
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/agent:latest containers/agent/
+          docker build -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
+          docker build -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
 
       - name: Pre-test cleanup
         run: |
@@ -244,8 +244,8 @@ jobs:
       - name: Build local containers
         run: |
           echo "=== Building local containers ==="
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/squid:latest containers/squid/
-          docker build -t ghcr.io/githubnext/gh-aw-firewall/agent:latest containers/agent/
+          docker build -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
+          docker build -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
 
       - name: Pre-test cleanup
         run: |
