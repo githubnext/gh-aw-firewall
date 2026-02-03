@@ -122,7 +122,7 @@ export interface WrapperConfig {
    * Allows overriding the default GitHub Container Registry with custom registries
    * for development, testing, or air-gapped environments.
    * 
-   * @default 'ghcr.io/githubnext/gh-aw-firewall'
+   * @default 'ghcr.io/github/gh-aw-firewall'
    * @example 'my-registry.example.com/awf'
    */
   imageRegistry?: string;
@@ -323,9 +323,35 @@ export interface WrapperConfig {
    *
    * If not specified, falls back to domain-only filtering.
    *
-   * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
+   * @example ['https://github.com/myorg/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Enable chroot to /host for running host binaries
+   *
+   * When true, uses selective path mounts instead of the blanket /:/host:rw mount,
+   * enabling chroot-based execution of host binaries (Python, Node, Go, Rust, etc.)
+   * while maintaining network isolation through iptables.
+   *
+   * Mounted paths (read-only):
+   * - /usr, /bin, /sbin, /lib, /lib64 - System binaries and libraries
+   * - /opt - Tool cache (Python, Node, Ruby, Go, Java from GitHub runners)
+   * - /etc/ssl, /etc/ca-certificates, /etc/alternatives, /etc/ld.so.cache - Runtime config
+   * - /proc/self, /sys, /dev - Special filesystems (only /proc/self, not full /proc)
+   *
+   * Mounted paths (read-write):
+   * - $HOME - User home directory for project files and Rust/Cargo
+   *
+   * Security protections:
+   * - Docker socket hidden (/dev/null mounted over /var/run/docker.sock)
+   * - /etc/shadow NOT mounted (password hashes protected)
+   * - /etc/passwd mounted read-only (required for user lookup in chroot)
+   * - CAP_SYS_CHROOT capability added but dropped before user commands
+   *
+   * @default false
+   */
+  enableChroot?: boolean;
 }
 
 /**
@@ -513,7 +539,7 @@ export interface DockerService {
    * from the registry (local or remote).
    * 
    * @example 'ubuntu/squid:latest'
-   * @example 'ghcr.io/githubnext/gh-aw-firewall/agent:latest'
+   * @example 'ghcr.io/github/gh-aw-firewall/agent:latest'
    */
   image?: string;
 

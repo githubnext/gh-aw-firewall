@@ -16,6 +16,7 @@ export interface AwfOptions {
   containerWorkDir?: string; // Working directory inside the container
   tty?: boolean; // Allocate pseudo-TTY (required for interactive tools like Claude Code)
   dnsServers?: string[]; // DNS servers to use (e.g., ['8.8.8.8', '2001:4860:4860::8888'])
+  enableChroot?: boolean; // Enable chroot to /host for transparent host binary execution
 }
 
 export interface AwfResult {
@@ -92,6 +93,11 @@ export class AwfRunner {
       args.push('--dns-servers', options.dnsServers.join(','));
     }
 
+    // Add enable-chroot flag
+    if (options.enableChroot) {
+      args.push('--enable-chroot');
+    }
+
     // Add -- separator before command
     args.push('--');
 
@@ -157,8 +163,24 @@ export class AwfRunner {
   async runWithSudo(command: string, options: AwfOptions = {}): Promise<AwfResult> {
     const args: string[] = [];
 
-    // Preserve environment variables
+    // Preserve environment variables using both -E and --preserve-env for critical vars
+    // This is needed because sudo's env_reset may strip vars even with -E
     args.push('-E');
+
+    // Explicitly preserve PATH and tool-specific environment variables
+    // These are needed for chroot mode to find binaries on GitHub Actions runners
+    const criticalEnvVars = [
+      'PATH',
+      'HOME',
+      'USER',
+      'GOROOT',
+      'CARGO_HOME',
+      'JAVA_HOME',
+    ].filter(v => process.env[v]);
+
+    if (criticalEnvVars.length > 0) {
+      args.push('--preserve-env=' + criticalEnvVars.join(','));
+    }
 
     // Add awf path
     args.push('node', this.awfPath);
@@ -209,6 +231,11 @@ export class AwfRunner {
     // Add DNS servers
     if (options.dnsServers && options.dnsServers.length > 0) {
       args.push('--dns-servers', options.dnsServers.join(','));
+    }
+
+    // Add enable-chroot flag
+    if (options.enableChroot) {
+      args.push('--enable-chroot');
     }
 
     // Add -- separator before command
