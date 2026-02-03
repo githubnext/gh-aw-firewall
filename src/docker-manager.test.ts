@@ -682,7 +682,7 @@ describe('docker-manager', () => {
 
       // Chroot mode with preset image should use GHCR (not build locally)
       // This fixes the bug where packaged binaries couldn't find containers/agent directory
-      expect(agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent:latest');
+      expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(agent.build).toBeUndefined();
     });
 
@@ -696,7 +696,7 @@ describe('docker-manager', () => {
       const agent = result.services.agent as any;
 
       // Chroot mode with 'act' preset should use GHCR agent-act image
-      expect(agent.image).toBe('ghcr.io/githubnext/gh-aw-firewall/agent-act:latest');
+      expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent-act:latest');
       expect(agent.build).toBeUndefined();
     });
 
