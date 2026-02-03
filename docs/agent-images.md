@@ -2,7 +2,7 @@
 
 Reference guide for the development tools, utilities, and runtime versions pre-installed in the `agent` and `agent-act` container images used by the firewall.
 
-> 📘 **Note:** This document is also available in the [online documentation](https://githubnext.github.io/gh-aw-firewall/reference/agent-images/).
+> 📘 **Note:** This document is also available in the [online documentation](https://github.github.io/gh-aw-firewall/reference/agent-images/).
 
 ## Overview
 
