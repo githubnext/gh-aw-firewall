@@ -323,7 +323,7 @@ export interface WrapperConfig {
    *
    * If not specified, falls back to domain-only filtering.
    *
-   * @example ['https://github.com/githubnext/*', 'https://api.example.com/v1/*']
+   * @example ['https://github.com/myorg/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
 

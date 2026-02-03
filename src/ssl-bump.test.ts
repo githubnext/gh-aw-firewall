@@ -11,8 +11,8 @@ describe('SSL Bump', () => {
     });
 
     it('should convert * wildcard to safe regex pattern', () => {
-      const patterns = parseUrlPatterns(['https://github.com/githubnext/*']);
-      expect(patterns).toEqual([`^https://github\\.com/githubnext/${URL_CHAR_PATTERN}`]);
+      const patterns = parseUrlPatterns(['https://github.com/myorg/*']);
+      expect(patterns).toEqual([`^https://github\\.com/myorg/${URL_CHAR_PATTERN}`]);
     });
 
     it('should handle multiple wildcards', () => {
@@ -42,11 +42,11 @@ describe('SSL Bump', () => {
 
     it('should handle multiple patterns', () => {
       const patterns = parseUrlPatterns([
-        'https://github.com/githubnext/*',
+        'https://github.com/myorg/*',
         'https://api.example.com/v1/*',
       ]);
       expect(patterns).toHaveLength(2);
-      expect(patterns[0]).toBe(`^https://github\\.com/githubnext/${URL_CHAR_PATTERN}`);
+      expect(patterns[0]).toBe(`^https://github\\.com/myorg/${URL_CHAR_PATTERN}`);
       expect(patterns[1]).toBe(`^https://api\\.example\\.com/v1/${URL_CHAR_PATTERN}`);
     });
 
