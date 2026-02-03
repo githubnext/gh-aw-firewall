@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, validateSkipPullWithBuildLocal } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1138,6 +1138,50 @@ describe('cli', () => {
         const result = processAgentImageOption('alpine:latest', true);
         expect(result.error).toContain('Invalid agent image');
       });
+    });
+  });
+
+  describe('validateSkipPullWithBuildLocal', () => {
+    it('should return valid when both flags are false', () => {
+      const result = validateSkipPullWithBuildLocal(false, false);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return valid when both flags are undefined', () => {
+      const result = validateSkipPullWithBuildLocal(undefined, undefined);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return valid when only skipPull is true', () => {
+      const result = validateSkipPullWithBuildLocal(true, false);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return valid when only buildLocal is true', () => {
+      const result = validateSkipPullWithBuildLocal(false, true);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return invalid when both skipPull and buildLocal are true', () => {
+      const result = validateSkipPullWithBuildLocal(true, true);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('--skip-pull cannot be used with --build-local');
+    });
+
+    it('should return valid when skipPull is true and buildLocal is undefined', () => {
+      const result = validateSkipPullWithBuildLocal(true, undefined);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return valid when skipPull is undefined and buildLocal is true', () => {
+      const result = validateSkipPullWithBuildLocal(undefined, true);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
     });
   });
 });

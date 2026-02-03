@@ -244,6 +244,35 @@ export function processAgentImageOption(
 }
 
 /**
+ * Result of validating flag combinations
+ */
+export interface FlagValidationResult {
+  /** Whether the validation passed */
+  valid: boolean;
+  /** Error message if validation failed */
+  error?: string;
+}
+
+/**
+ * Validates that --skip-pull is not used with --build-local
+ * @param skipPull - Whether --skip-pull flag was provided
+ * @param buildLocal - Whether --build-local flag was provided
+ * @returns FlagValidationResult with validation status and error message
+ */
+export function validateSkipPullWithBuildLocal(
+  skipPull: boolean | undefined,
+  buildLocal: boolean | undefined
+): FlagValidationResult {
+  if (skipPull && buildLocal) {
+    return {
+      valid: false,
+      error: '--skip-pull cannot be used with --build-local. Building images requires pulling base images from the registry.',
+    };
+  }
+  return { valid: true };
+}
+
+/**
  * Parses and validates DNS servers from a comma-separated string
  * @param input - Comma-separated DNS server string (e.g., "8.8.8.8,1.1.1.1")
  * @returns Array of validated DNS server IP addresses
