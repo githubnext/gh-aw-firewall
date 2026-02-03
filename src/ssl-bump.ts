@@ -78,7 +78,6 @@ export async function generateSessionCa(config: SslBumpConfig): Promise<CaFiles>
       '-days', validityDays.toString(),
       '-nodes', // No password on private key
       '-x509',
-      // eslint-disable-next-line rulesdir/no-unsafe-execa
       '-subj', `/CN=${commonName}`,
       '-keyout', keyPath,
       '-out', certPath,

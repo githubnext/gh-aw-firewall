@@ -17,7 +17,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:lint-rules": "node eslint-rules/no-unsafe-execa.test.js",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "clean": "rm -rf dist",
     "prepare": "husky",
     "docs:dev": "cd docs-site && npm run dev",
@@ -49,20 +49,24 @@
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^9.39.2",
     "@types/glob": "^8.1.0",
     "@types/jest": "^29.0.0",
     "@types/js-yaml": "^4.0.5",
     "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.39.2",
     "eslint-plugin-rulesdir": "^0.2.2",
     "eslint-plugin-security": "^3.0.1",
     "glob": "^10.5.0",
+    "globals": "^17.3.0",
     "husky": "^9.1.7",
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.54.0"
   },
   "engines": {
     "node": ">=18.0.0"

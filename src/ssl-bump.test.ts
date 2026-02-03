@@ -16,7 +16,7 @@ jest.mock('execa', () => {
 });
 
 // Get the mocked execa after jest.mock hoisting
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockExeca = require('execa').default as jest.Mock;
 
 // Default mock implementation for execa
