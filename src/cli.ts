@@ -852,18 +852,10 @@ program
     }
 
     // Error if --skip-pull is used with --build-local (incompatible flags)
-    if (config.skipPull && config.buildLocal) {
-      logger.error('❌ --skip-pull cannot be used with --build-local');
-      logger.error('   Building images requires pulling base images from the registry');
-      logger.error('   Use --skip-pull only with pre-built GHCR images');
+    const skipPullValidation = validateSkipPullWithBuildLocal(config.skipPull, config.buildLocal);
+    if (!skipPullValidation.valid) {
+      logger.error(`❌ ${skipPullValidation.error}`);
       process.exit(1);
-    }
-
-    // Warn about security implications when using --skip-pull
-    if (config.skipPull) {
-      logger.warn('⚠️  Using --skip-pull: Local images will be used without pulling from registry');
-      logger.warn('   You are responsible for verifying image authenticity');
-      logger.warn('   See: docs/image-verification.md for verification instructions');
     }
 
     // Warn if --enable-host-access is used with host.docker.internal in allowed domains
