@@ -8,13 +8,13 @@ set -e
 #
 # Usage:
 #   # Install latest version
-#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
 #
 #   # Install specific version
-#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
+#   curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
 #
 #   # Or with environment variable
-#   curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
+#   curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
 #
 # Security features:
 #   - Uses curl -f to fail on HTTP errors (404, 403, etc.)
@@ -28,10 +28,10 @@ set -e
 #   - file
 #   - sudo/root access
 #
-# Repository: https://github.com/githubnext/gh-aw-firewall
-# Issue #107: https://github.com/githubnext/gh-aw-firewall/issues/107
+# Repository: https://github.com/github/gh-aw-firewall
+# Issue #107: https://github.com/github/gh-aw-firewall/issues/107
 
-REPO="githubnext/gh-aw-firewall"
+REPO="github/gh-aw-firewall"
 BINARY_NAME="awf-linux-x64"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_NAME="awf"

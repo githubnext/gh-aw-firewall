@@ -15,7 +15,7 @@ set -e
 # Default values
 DEFAULT_WORKFLOW=".github/workflows/test-coverage.yml"
 DEFAULT_ARTIFACT="coverage-report"
-DEFAULT_REPO="githubnext/gh-aw-firewall"
+DEFAULT_REPO="github/gh-aw-firewall"
 
 # Parse arguments
 SPECIFIC_RUN_ID="${1:-}"
