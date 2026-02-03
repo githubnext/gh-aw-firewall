@@ -17,7 +17,7 @@ See [Compatibility](compatibility.md) for full version details and tested config
 
 ```bash
 # Install latest version
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
 
 # Verify installation
 sudo awf --version
@@ -27,7 +27,7 @@ sudo awf --version
 
 ```yaml
 - name: Setup awf
-  uses: githubnext/gh-aw-firewall@main
+  uses: github/gh-aw-firewall@main
 ```
 
 See [GitHub Actions Integration](github_actions.md) for more details.
@@ -36,7 +36,7 @@ See [GitHub Actions Integration](github_actions.md) for more details.
 
 ```bash
 # Clone the repository
-git clone https://github.com/githubnext/gh-aw-firewall.git awf
+git clone https://github.com/github/gh-aw-firewall.git awf
 cd awf
 
 # Install dependencies

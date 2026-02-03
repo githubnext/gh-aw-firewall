@@ -16,7 +16,7 @@ Options:
                              (see "Host Access" section for security implications)
   --ssl-bump                 Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
-                             Example: https://github.com/githubnext/*,https://api.github.com/repos/*
+                             Example: https://github.com/myorg/*,https://api.github.com/repos/*
   --log-level <level>        Log level: debug, info, warn, error (default: info)
   --keep-containers          Keep containers running after command exits
   --work-dir <dir>           Working directory for temporary files
@@ -307,8 +307,8 @@ By default, awf filters HTTPS traffic based on domain names only (using SNI). En
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*" \
-  'curl https://github.com/githubnext/some-repo'
+  --allow-urls "https://github.com/myorg/*" \
+  'curl https://github.com/myorg/some-repo'
 ```
 
 ### URL Pattern Syntax
@@ -317,7 +317,7 @@ URL patterns support wildcards:
 
 ```bash
 # Match any path under an organization
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Match specific API endpoints
 --allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"

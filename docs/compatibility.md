@@ -120,7 +120,7 @@ sudo systemctl enable docker
 If you encounter compatibility issues with a supported configuration, please:
 
 1. Check the [Troubleshooting Guide](troubleshooting.md)
-2. Search existing [GitHub Issues](https://github.com/githubnext/gh-aw-firewall/issues)
+2. Search existing [GitHub Issues](https://github.com/github/gh-aw-firewall/issues)
 3. Open a new issue with:
    - Node.js version (`node --version`)
    - Docker version (`docker --version`)
