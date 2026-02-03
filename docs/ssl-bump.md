@@ -13,7 +13,7 @@ SSL Bump enables deep inspection of HTTPS traffic, allowing URL path filtering i
 
 ## Overview
 
-By default, awf filters HTTPS traffic based on domain names using SNI (Server Name Indication). This means you can allow or block `github.com`, but you cannot restrict access to specific paths like `https://github.com/githubnext/*`.
+By default, awf filters HTTPS traffic based on domain names using SNI (Server Name Indication). This means you can allow or block `github.com`, but you cannot restrict access to specific paths like `https://github.com/myorg/*`.
 
 With SSL Bump enabled (`--ssl-bump`), the firewall generates a per-session CA certificate and intercepts HTTPS connections. This allows:
 
@@ -28,8 +28,8 @@ With SSL Bump enabled (`--ssl-bump`), the firewall generates a per-session CA ce
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*,https://api.github.com/repos/*" \
-  -- curl https://github.com/githubnext/some-repo
+  --allow-urls "https://github.com/myorg/*,https://api.github.com/repos/*" \
+  -- curl https://github.com/myorg/some-repo
 ```
 
 ## CLI Flags
@@ -61,13 +61,13 @@ Comma-separated list of allowed URL patterns for HTTPS traffic. Requires `--ssl-
 **Examples:**
 ```bash
 # Allow specific repository paths
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Allow API endpoints
 --allow-urls "https://api.github.com/repos/*,https://api.github.com/users/*"
 
 # Combine with domain allowlist
---allow-domains github.com --ssl-bump --allow-urls "https://github.com/githubnext/*"
+--allow-domains github.com --ssl-bump --allow-urls "https://github.com/myorg/*"
 ```
 
 ## How It Works
@@ -87,7 +87,7 @@ Squid sees only the domain from the TLS ClientHello SNI extension. The URL path 
 Agent → CONNECT github.com:443 → Squid intercepts TLS
       → Squid presents session CA certificate
       → Agent trusts session CA (injected into trust store)
-      → Full HTTPS request visible: GET /githubnext/repo
+      → Full HTTPS request visible: GET /myorg/repo
       → Squid checks URL pattern ACL → Pass/Block
 ```
 
@@ -109,11 +109,11 @@ Squid terminates the TLS connection and establishes a new encrypted connection t
 sudo awf \
   --allow-domains github.com \
   --ssl-bump \
-  --allow-urls "https://github.com/githubnext/*,https://github.com/github/*" \
-  -- copilot --prompt "Clone the githubnext/copilot-workspace repo"
+  --allow-urls "https://github.com/myorg/*,https://github.com/github/*" \
+  -- copilot --prompt "Clone the myorg/copilot-workspace repo"
 ```
 
-This allows access to repositories under `githubnext` and `github` organizations, but blocks access to other GitHub repositories.
+This allows access to repositories under `myorg` and `github` organizations, but blocks access to other GitHub repositories.
 
 ### API Endpoint Restrictions
 
@@ -121,8 +121,8 @@ This allows access to repositories under `githubnext` and `github` organizations
 sudo awf \
   --allow-domains api.github.com \
   --ssl-bump \
-  --allow-urls "https://api.github.com/repos/githubnext/*,https://api.github.com/users/*" \
-  -- curl https://api.github.com/repos/githubnext/gh-aw-firewall
+  --allow-urls "https://api.github.com/repos/myorg/*,https://api.github.com/users/*" \
+  -- curl https://api.github.com/repos/github/gh-aw-firewall
 ```
 
 Allow only specific API endpoint patterns while blocking others.
@@ -135,7 +135,7 @@ sudo awf \
   --ssl-bump \
   --allow-urls "https://github.com/*" \
   --log-level debug \
-  -- curl https://github.com/githubnext/gh-aw-firewall
+  -- curl https://github.com/github/gh-aw-firewall
 
 # View full URL paths in Squid logs
 sudo cat /tmp/squid-logs-*/access.log
@@ -261,8 +261,8 @@ sudo awf --log-level debug --ssl-bump --allow-urls "..." -- your-command
 sudo cat /tmp/squid-logs-*/access.log | grep your-domain
 
 # Ensure patterns include scheme (https://)
-# ✗ Wrong: github.com/githubnext/*
-# ✓ Correct: https://github.com/githubnext/*
+# ✗ Wrong: github.com/myorg/*
+# ✓ Correct: https://github.com/myorg/*
 ```
 
 ### Performance Impact

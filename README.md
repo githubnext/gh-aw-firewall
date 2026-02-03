@@ -3,7 +3,7 @@
 A network firewall for agentic workflows with domain whitelisting. This tool provides L7 (HTTP/HTTPS) egress control using [Squid proxy](https://www.squid-cache.org/) and Docker containers, restricting network access to a whitelist of approved domains for AI agents and their MCP servers.
 
 > [!TIP]
-> This project is a part of GitHub Next's explorations of [Agentic Workflows](https://github.com/githubnext/gh-aw). For more background, check out the [project page on the GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
+> This project is a part of GitHub's explorations of [Agentic Workflows](https://github.com/github/gh-aw). For more background, check out the [project page](https://github.github.io/gh-aw/)! ✨
 
 ## What it does
 
@@ -24,7 +24,7 @@ See [Compatibility](docs/compatibility.md) for full details on supported version
 - **Prerequisite:** Docker is running
 - **Install:**
   ```bash
-  curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+  curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
   ```
 - **Run your first command:**
   ```bash
@@ -49,7 +49,7 @@ Use the setup action in your workflows:
 ```yaml
 steps:
   - name: Setup awf
-    uses: githubnext/gh-aw-firewall@main
+    uses: github/gh-aw-firewall@main
     with:
       # version: 'v1.0.0'    # Optional: defaults to latest
       # pull-images: 'true'  # Optional: pre-pull Docker images for the version
@@ -64,7 +64,7 @@ To pin Docker images to match the installed version, use `pull-images: 'true'` a
 steps:
   - name: Setup awf
     id: setup-awf
-    uses: githubnext/gh-aw-firewall@main
+    uses: github/gh-aw-firewall@main
     with:
       version: 'v0.7.0'
       pull-images: 'true'
@@ -80,13 +80,13 @@ steps:
 
 ```bash
 # Install latest version
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
 
 # Install a specific version
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash -s -- v1.0.0
 
 # Or using environment variable
-curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo AWF_VERSION=v1.0.0 bash
 ```
 
 The shell installer automatically:
@@ -100,10 +100,10 @@ The shell installer automatically:
 
 ```bash
 # Download the latest release binary
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+curl -fL https://github.com/github/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
 
 # Download checksums for verification
-curl -fL https://github.com/githubnext/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
+curl -fL https://github.com/github/gh-aw-firewall/releases/latest/download/checksums.txt -o checksums.txt
 
 # Verify SHA256 checksum
 sha256sum -c checksums.txt --ignore-missing
