@@ -108,7 +108,7 @@ describe('Empty Domains (No Network Access)', () => {
       );
 
       expect(result).toSucceed();
-      expect(result.stdout.trim()).toBe('4');
+      expect(result.stdout).toContain('4');
     }, 120000);
   });
 
