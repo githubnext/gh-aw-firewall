@@ -558,7 +558,7 @@ program
   .option(
     '--allow-urls <urls>',
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
-    '                                   Supports wildcards: https://github.com/githubnext/*'
+    '                                   Supports wildcards: https://github.com/myorg/*'
   )
   .option(
     '--enable-chroot',
@@ -756,7 +756,7 @@ program
         if (!urlWithoutScheme.includes('/')) {
           logger.error(`URL pattern "${url}" must include a path component`);
           logger.error('For domain-only filtering, use --allow-domains instead');
-          logger.error('Example: https://github.com/githubnext/* (includes path)');
+          logger.error('Example: https://github.com/myorg/* (includes path)');
           process.exit(1);
         }
       }

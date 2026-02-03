@@ -184,7 +184,7 @@ const URL_CHAR_PATTERN = '[^\\s]*';
  * Converts user-friendly URL patterns into Squid url_regex ACL patterns.
  *
  * Examples:
- * - `https://github.com/githubnext/*` → `^https://github\.com/githubnext/[^\s]*`
+ * - `https://github.com/myorg/*` → `^https://github\.com/myorg/[^\s]*`
  * - `https://api.example.com/v1/users` → `^https://api\.example\.com/v1/users$`
  *
  * @param patterns - Array of URL patterns (can include wildcards)

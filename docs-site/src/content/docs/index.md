@@ -6,7 +6,7 @@ description: Network firewall for AI agents with domain whitelisting - control e
 A network firewall designed specifically for AI agents and agentic workflows. Control which domains your AI agents can access while maintaining full filesystem access in a containerized environment.
 
 :::tip[Part of GitHub Next]
-This project is part of GitHub Next's explorations of [Agentic Workflows](https://github.com/github/gh-aw). Learn more on the [GitHub Next website](https://githubnext.com/projects/agentic-workflows/)! ✨
+This project is part of GitHub's explorations of [Agentic Workflows](https://github.com/github/gh-aw). Learn more on the [project page](https://github.github.io/gh-aw/)! ✨
 :::
 
 ## What Is This?
