@@ -480,7 +480,7 @@ The agent container mounts the HOME directory, so this config file is automatica
 - ✅ **MCP server name** - Use `"github"` as the server name (must match `--allow-tool` flag)
 - ✅ **npx availability** - The agent container includes Node.js 22 with npx pre-installed
 
-**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/githubnext/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
+**Note:** As of v0.9.1, Docker-in-Docker support was removed ([PR #205](https://github.com/github/gh-aw-firewall/pull/205)). Use stdio-based MCP servers instead of Docker-based ones.
 
 ### Running Copilot CLI with Local MCP Through Firewall
 
