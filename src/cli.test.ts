@@ -666,6 +666,7 @@ describe('cli', () => {
         expect(result.invalidMount).toBe('invalid-mount');
       }
     });
+
   });
 
   describe('IPv4 validation', () => {

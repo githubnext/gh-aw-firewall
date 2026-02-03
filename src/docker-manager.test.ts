@@ -932,6 +932,24 @@ describe('docker-manager', () => {
       });
     });
 
+    describe('allowHostPorts option', () => {
+      it('should set AWF_ALLOW_HOST_PORTS when allowHostPorts is specified', () => {
+        const config = { ...mockConfig, enableHostAccess: true, allowHostPorts: '8080,3000' };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ALLOW_HOST_PORTS).toBe('8080,3000');
+      });
+
+      it('should NOT set AWF_ALLOW_HOST_PORTS when allowHostPorts is undefined', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ALLOW_HOST_PORTS).toBeUndefined();
+      });
+    });
+
     it('should override environment variables with additionalEnv', () => {
       const originalEnv = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'original_token';
@@ -1243,6 +1261,22 @@ describe('docker-manager', () => {
         'docker',
         ['rm', '-f', 'awf-squid', 'awf-agent'],
         { reject: false }
+      );
+    });
+
+    it('should continue when removing existing containers fails', async () => {
+      // First call (docker rm) throws an error, but we should continue
+      mockExecaFn.mockRejectedValueOnce(new Error('No such container'));
+      // Second call (docker compose up) succeeds
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com']);
+
+      // Should still call docker compose up even if rm failed
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
       );
     });
 
