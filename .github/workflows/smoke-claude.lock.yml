@@ -25,7 +25,7 @@
 #   Imports:
 #     - shared/mcp-pagination.md
 #
-# frontmatter-hash: 257b4a9543af02635d46eef5e18709834e31ced34ddb095ffe34a8482c3004d6
+# frontmatter-hash: f71ae93514bc6d8288ca00db26343a04c1f1d793eba3941217934bf1a57d0526
 
 name: "Smoke Claude"
 "on":
@@ -167,8 +167,31 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.1
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Install Claude Code CLI
         run: npm install -g --silent @anthropic-ai/claude-code@2.1.29
       - name: Determine automatic lockdown mode for GitHub MCP server
@@ -972,9 +995,6 @@ jobs:
         with:
           name: cache-memory
           path: /tmp/gh-aw/cache-memory
-      - name: Install awf from source
-        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version"
-
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true

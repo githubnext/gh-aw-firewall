@@ -43,21 +43,6 @@ safe-outputs:
       run-success: "**Chroot tests passed!** [{workflow_name}]({run_url}) - All security and functionality tests succeeded."
       run-failure: "**Chroot tests failed** [{workflow_name}]({run_url}) {status} - See logs for details."
 timeout-minutes: 20
-post-steps:
-  - name: Install awf from source
-    run: |
-      echo "=== Installing awf from source code ==="
-      cd ${{ github.workspace }}
-      npm ci
-      npm run build
-      
-      # Create symlink to override installed binary
-      sudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf
-      sudo chmod +x ${{ github.workspace }}/dist/cli.js
-      
-      # Verify installation
-      echo "awf version after source install:"
-      awf --version || node ${{ github.workspace }}/dist/cli.js --version
 steps:
   - name: Capture host versions for verification
     run: |

@@ -21,7 +21,7 @@
 #
 # Smoke test workflow that validates the --enable-chroot feature by testing host binary access, network firewall, and security boundaries
 #
-# frontmatter-hash: 5b978c37fcfa8686f3f66523960a1bdbffd7e7a3137aced4a4feb1dfc80a3402
+# frontmatter-hash: fd4c28677cd91a033746443cec4ce46888adc86a792883deb7b3a28ce6ae7390
 
 name: "Smoke Chroot"
 "on":
@@ -159,8 +159,31 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.400
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.1
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:
@@ -750,9 +773,6 @@ jobs:
           # AWF runs with sudo, creating files owned by root
           sudo chmod -R a+r /tmp/gh-aw/sandbox/firewall/logs 2>/dev/null || true
           awf logs summary | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Install awf from source
-        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version\n"
-
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true

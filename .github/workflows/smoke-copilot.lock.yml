@@ -21,7 +21,7 @@
 #
 # Smoke Copilot
 #
-# frontmatter-hash: 0b2d0b8d56fa452767db4886b7a880174366620242e08091e0c4d038cef3d331
+# frontmatter-hash: e9396d2d1223b3290b93b4d18aa419a29ffe761caadc99b618770b79d6742157
 
 name: "Smoke Copilot"
 "on":
@@ -160,8 +160,31 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.400
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.1
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:
@@ -805,9 +828,6 @@ jobs:
         with:
           name: cache-memory
           path: /tmp/gh-aw/cache-memory
-      - name: Install awf from source
-        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version"
-
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true
