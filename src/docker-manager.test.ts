@@ -623,6 +623,47 @@ describe('docker-manager', () => {
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME to container when enableChroot is true and env vars are set', () => {
+      const originalGoroot = process.env.GOROOT;
+      const originalCargoHome = process.env.CARGO_HOME;
+      const originalJavaHome = process.env.JAVA_HOME;
+
+      process.env.GOROOT = '/usr/local/go';
+      process.env.CARGO_HOME = '/home/user/.cargo';
+      process.env.JAVA_HOME = '/usr/lib/jvm/java-17';
+
+      try {
+        const configWithChroot = {
+          ...mockConfig,
+          enableChroot: true
+        };
+        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const agent = result.services.agent;
+        const environment = agent.environment as Record<string, string>;
+
+        expect(environment.AWF_GOROOT).toBe('/usr/local/go');
+        expect(environment.AWF_CARGO_HOME).toBe('/home/user/.cargo');
+        expect(environment.AWF_JAVA_HOME).toBe('/usr/lib/jvm/java-17');
+      } finally {
+        // Restore original values
+        if (originalGoroot !== undefined) {
+          process.env.GOROOT = originalGoroot;
+        } else {
+          delete process.env.GOROOT;
+        }
+        if (originalCargoHome !== undefined) {
+          process.env.CARGO_HOME = originalCargoHome;
+        } else {
+          delete process.env.CARGO_HOME;
+        }
+        if (originalJavaHome !== undefined) {
+          process.env.JAVA_HOME = originalJavaHome;
+        } else {
+          delete process.env.JAVA_HOME;
+        }
+      }
+    });
+
     it('should not set AWF_CHROOT_ENABLED when enableChroot is false', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
