@@ -508,6 +508,11 @@ program
     'latest'
   )
   .option(
+    '--skip-pull',
+    'Use local images without pulling from registry (requires images to be pre-downloaded)',
+    false
+  )
+  .option(
     '-e, --env <KEY=VALUE>',
     'Additional environment variables to pass to container (can be specified multiple times)',
     (value, previous: string[] = []) => [...previous, value],
@@ -788,6 +793,7 @@ program
       tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
+      skipPull: options.skipPull,
       agentImage,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
