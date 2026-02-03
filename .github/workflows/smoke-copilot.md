@@ -46,6 +46,21 @@ safe-outputs:
       run-failure: "📰 DEVELOPING STORY: [{workflow_name}]({run_url}) reports {status}. Our correspondents are investigating the incident..."
 timeout-minutes: 5
 strict: true
+post-steps:
+  - name: Install awf from source
+    run: |
+      echo "=== Installing awf from source code ==="
+      cd ${{ github.workspace }}
+      npm ci
+      npm run build
+      
+      # Create symlink to override installed binary
+      sudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf
+      sudo chmod +x ${{ github.workspace }}/dist/cli.js
+      
+      # Verify installation
+      echo "awf version after source install:"
+      awf --version || node ${{ github.workspace }}/dist/cli.js --version
 ---
 
 # Smoke Test: Copilot Engine Validation

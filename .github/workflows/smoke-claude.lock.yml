@@ -25,7 +25,7 @@
 #   Imports:
 #     - shared/mcp-pagination.md
 #
-# frontmatter-hash: f71ae93514bc6d8288ca00db26343a04c1f1d793eba3941217934bf1a57d0526
+# frontmatter-hash: 257b4a9543af02635d46eef5e18709834e31ced34ddb095ffe34a8482c3004d6
 
 name: "Smoke Claude"
 "on":
@@ -972,6 +972,9 @@ jobs:
         with:
           name: cache-memory
           path: /tmp/gh-aw/cache-memory
+      - name: Install awf from source
+        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version"
+
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true

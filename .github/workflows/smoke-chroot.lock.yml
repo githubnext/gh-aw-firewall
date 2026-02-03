@@ -21,7 +21,7 @@
 #
 # Smoke test workflow that validates the --enable-chroot feature by testing host binary access, network firewall, and security boundaries
 #
-# frontmatter-hash: fd4c28677cd91a033746443cec4ce46888adc86a792883deb7b3a28ce6ae7390
+# frontmatter-hash: 5b978c37fcfa8686f3f66523960a1bdbffd7e7a3137aced4a4feb1dfc80a3402
 
 name: "Smoke Chroot"
 "on":
@@ -750,6 +750,9 @@ jobs:
           # AWF runs with sudo, creating files owned by root
           sudo chmod -R a+r /tmp/gh-aw/sandbox/firewall/logs 2>/dev/null || true
           awf logs summary | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Install awf from source
+        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version\n"
+
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true

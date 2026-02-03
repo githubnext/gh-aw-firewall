@@ -21,7 +21,7 @@
 #
 # Smoke Copilot
 #
-# frontmatter-hash: e9396d2d1223b3290b93b4d18aa419a29ffe761caadc99b618770b79d6742157
+# frontmatter-hash: 0b2d0b8d56fa452767db4886b7a880174366620242e08091e0c4d038cef3d331
 
 name: "Smoke Copilot"
 "on":
@@ -805,6 +805,9 @@ jobs:
         with:
           name: cache-memory
           path: /tmp/gh-aw/cache-memory
+      - name: Install awf from source
+        run: "echo \"=== Installing awf from source code ===\"\ncd ${{ github.workspace }}\nnpm ci\nnpm run build\n\n# Create symlink to override installed binary\nsudo ln -sf ${{ github.workspace }}/dist/cli.js /usr/local/bin/awf\nsudo chmod +x ${{ github.workspace }}/dist/cli.js\n\n# Verify installation\necho \"awf version after source install:\"\nawf --version || node ${{ github.workspace }}/dist/cli.js --version"
+
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true
