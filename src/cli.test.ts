@@ -348,7 +348,8 @@ describe('cli', () => {
         .option('--log-level <level>', 'Log level', 'info')
         .option('--keep-containers', 'Keep containers', false)
         .option('--build-local', 'Build locally', false)
-        .option('--env-all', 'Pass all env vars', false);
+        .option('--env-all', 'Pass all env vars', false)
+        .argument('[args...]', 'Optional command arguments'); // Add variadic args to prevent "too many arguments" error
 
       // Parse empty args to get defaults
       program.parse(['node', 'awf'], { from: 'user' });
