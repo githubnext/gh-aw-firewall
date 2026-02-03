@@ -1259,6 +1259,32 @@ describe('docker-manager', () => {
       );
     });
 
+    it('should run docker compose up with --pull never when skipPull is true', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, true);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d', '--pull', 'never'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
+    it('should run docker compose up without --pull never when skipPull is false', async () => {
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com'], undefined, false);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['compose', 'up', '-d'],
+        { cwd: testDir, stdio: 'inherit' }
+      );
+    });
+
     it('should handle docker compose failure', async () => {
       mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
       mockExecaFn.mockRejectedValueOnce(new Error('Docker compose failed'));
