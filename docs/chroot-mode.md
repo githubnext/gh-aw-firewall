@@ -362,6 +362,6 @@ sudo awf --mount /opt/tools:/opt/tools:ro --allow-domains api.github.com \
 ## Related Documentation
 
 - [Architecture](./architecture.md) - Overall firewall architecture
-- [Security Architecture](../docs-site/src/content/docs/reference/security-architecture.md) - Detailed security model
+- [Security](./security.md) - Security policy and reporting
 - [Environment Variables](./environment.md) - Environment configuration with `--env-all`
-- [CLI Reference](../docs-site/src/content/docs/reference/cli-reference.md) - Complete CLI options
+- [Usage Guide](./usage.md) - Complete CLI options
