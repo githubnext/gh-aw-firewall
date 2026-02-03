@@ -342,8 +342,8 @@ docker exec awf-agent dmesg | grep FW_BLOCKED
    ```
 3. Ensure patterns include the scheme:
    ```bash
-   # ✗ Wrong: github.com/githubnext/*
-   # ✓ Correct: https://github.com/githubnext/*
+   # ✗ Wrong: github.com/myorg/*
+   # ✓ Correct: https://github.com/myorg/*
    ```
 
 ### Application Fails with Certificate Pinning

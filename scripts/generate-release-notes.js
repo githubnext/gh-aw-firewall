@@ -6,7 +6,7 @@
  * Usage: node scripts/generate-release-notes.js <changelog_file> <cli_help_file> <output_file>
  *
  * Environment variables:
- *   REPOSITORY - GitHub repository (e.g., githubnext/gh-aw-firewall)
+ *   REPOSITORY - GitHub repository (e.g., github/gh-aw-firewall)
  *   VERSION - Version tag (e.g., v0.3.0)
  *   VERSION_NUMBER - Version number without v prefix (e.g., 0.3.0)
  */

@@ -500,7 +500,7 @@ program
   .option(
     '--image-registry <registry>',
     'Container image registry',
-    'ghcr.io/githubnext/gh-aw-firewall'
+    'ghcr.io/github/gh-aw-firewall'
   )
   .option(
     '--image-tag <tag>',
@@ -558,7 +558,14 @@ program
   .option(
     '--allow-urls <urls>',
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
-    '                                   Supports wildcards: https://github.com/githubnext/*'
+    '                                   Supports wildcards: https://github.com/myorg/*'
+  )
+  .option(
+    '--enable-chroot',
+    'Enable chroot to /host for running host binaries (Python, Node, Go, etc.)\n' +
+    '                                   Uses selective path mounts instead of full filesystem access.\n' +
+    '                                   Docker socket is hidden to prevent firewall bypass.',
+    false
   )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
@@ -748,7 +755,7 @@ program
         if (!urlWithoutScheme.includes('/')) {
           logger.error(`URL pattern "${url}" must include a path component`);
           logger.error('For domain-only filtering, use --allow-domains instead');
-          logger.error('Example: https://github.com/githubnext/* (includes path)');
+          logger.error('Example: https://github.com/myorg/* (includes path)');
           process.exit(1);
         }
       }
@@ -793,6 +800,7 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
+      enableChroot: options.enableChroot,
     };
 
     // Warn if --env-all is used

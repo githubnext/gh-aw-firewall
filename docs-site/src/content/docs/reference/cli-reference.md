@@ -30,13 +30,14 @@ awf [options] -- <command>
 | `--tty` | flag | `false` | Allocate pseudo-TTY for interactive tools |
 | `--work-dir <dir>` | string | `/tmp/awf-<timestamp>` | Working directory for temporary files |
 | `--build-local` | flag | `false` | Build containers locally instead of pulling from registry |
-| `--image-registry <url>` | string | `ghcr.io/githubnext/gh-aw-firewall` | Container image registry |
+| `--image-registry <url>` | string | `ghcr.io/github/gh-aw-firewall` | Container image registry |
 | `--image-tag <tag>` | string | `latest` | Container image tag |
 | `-e, --env <KEY=VALUE>` | string | `[]` | Environment variable (repeatable) |
 | `--env-all` | flag | `false` | Pass all host environment variables |
 | `-v, --mount <host:container[:mode]>` | string | `[]` | Volume mount (repeatable) |
 | `--container-workdir <dir>` | string | User home | Working directory inside container |
 | `--dns-servers <servers>` | string | `8.8.8.8,8.8.4.4` | Trusted DNS servers (comma-separated) |
+| `--enable-chroot` | flag | `false` | Run command inside chroot to host filesystem |
 | `-V, --version` | flag | — | Display version |
 | `-h, --help` | flag | — | Display help |
 
@@ -111,7 +112,7 @@ Path to file with blocked domains. Supports the same format as `--allow-domains-
 Enable SSL Bump for HTTPS content inspection. When enabled, the firewall generates a per-session CA certificate and intercepts HTTPS connections, allowing URL path filtering.
 
 ```bash
---ssl-bump --allow-urls "https://github.com/githubnext/*"
+--ssl-bump --allow-urls "https://github.com/myorg/*"
 ```
 
 :::caution[HTTPS Interception]
@@ -132,7 +133,7 @@ Comma-separated list of allowed URL patterns for HTTPS traffic. Requires `--ssl-
 
 ```bash
 # Single pattern
---allow-urls "https://github.com/githubnext/*"
+--allow-urls "https://github.com/myorg/*"
 
 # Multiple patterns
 --allow-urls "https://github.com/org1/*,https://api.github.com/repos/*"
@@ -237,6 +238,44 @@ Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to 
 
 :::note
 Docker's embedded DNS (127.0.0.11) is always allowed for container name resolution, regardless of this setting.
+:::
+
+### `--enable-chroot`
+
+Run user commands inside a `chroot /host` jail, making the host filesystem appear as the root filesystem. This enables transparent access to host-installed binaries (Python, Node.js, Go, etc.) without needing to prefix paths with `/host`.
+
+```bash
+# Use host's Python directly
+sudo awf --enable-chroot --allow-domains pypi.org \
+  -- python3 -c "import requests; print(requests.__version__)"
+
+# Combined with --env-all for full host environment
+sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+  -- curl https://api.github.com
+```
+
+**How it works:**
+1. Host filesystem is mounted at `/host` inside the container
+2. The entrypoint performs `chroot /host` before running your command
+3. Inside the chroot, `/` = host's `/`, so binaries work with normal paths
+4. Network isolation is maintained (iptables rules apply at namespace level)
+
+**Requirements:**
+- `capsh` must be installed on the host (`apt-get install libcap2-bin`)
+- Host user must exist in `/etc/passwd` (matched by UID)
+
+**Security:**
+- `CAP_NET_ADMIN` and `CAP_SYS_CHROOT` are dropped before user command executes
+- Docker socket is hidden (`/dev/null`) to prevent firewall bypass
+- `/proc` is mounted read-only (host processes visible but not modifiable)
+
+**Use cases:**
+- GitHub Actions runners with pre-installed tools
+- Minimal container + host binaries
+- Avoiding version conflicts between container and host tools
+
+:::caution[Security Trade-offs]
+Chroot mode exposes the host filesystem (read-only for system paths, read-write for `$HOME` and `/tmp`). See [Chroot Mode Documentation](/gh-aw-firewall/docs/chroot-mode/) for security details.
 :::
 
 ## Exit Codes
