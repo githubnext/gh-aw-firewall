@@ -90,8 +90,8 @@ jobs:
           
           # Verify Docker images are pulled
           echo "Checking for pulled images..."
-          docker images ghcr.io/githubnext/gh-aw-firewall/squid
-          docker images ghcr.io/githubnext/gh-aw-firewall/agent
+          docker images ghcr.io/github/gh-aw-firewall/squid
+          docker images ghcr.io/github/gh-aw-firewall/agent
 
   test-action-invalid-version:
     name: Test Action (Invalid Version - Should Fail)

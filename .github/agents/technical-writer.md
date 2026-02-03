@@ -184,7 +184,7 @@ Before installing, ensure you have:
 Download the latest release binary:
 
 \`\`\`bash
-curl -L https://github.com/githubnext/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
+curl -L https://github.com/github/gh-aw-firewall/releases/latest/download/awf-linux-x64 -o awf
 chmod +x awf
 sudo mv awf /usr/local/bin/
 \`\`\`

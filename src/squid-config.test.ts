@@ -336,7 +336,7 @@ describe('generateSquidConfig', () => {
     });
 
     it('should allow CONNECT to Safe_ports (80 and 443) for HTTP proxy compatibility', () => {
-      // See: https://github.com/githubnext/gh-aw-firewall/issues/189
+      // See: https://github.com/github/gh-aw-firewall/issues/189
       // Node.js fetch uses CONNECT method even for HTTP connections when proxied
       const config: SquidConfig = {
         domains: ['example.com'],
@@ -1091,11 +1091,11 @@ describe('generateSquidConfig', () => {
           keyPath: '/tmp/test/ssl/ca-key.pem',
         },
         sslDbPath: '/tmp/test/ssl_db',
-        urlPatterns: ['^https://github\\.com/githubnext/[^\\s]*'],
+        urlPatterns: ['^https://github\\.com/myorg/[^\\s]*'],
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_url_0 url_regex');
-      expect(result).toContain('^https://github\\.com/githubnext/[^\\s]*');
+      expect(result).toContain('^https://github\\.com/myorg/[^\\s]*');
     });
 
     it('should not include SSL Bump section when disabled', () => {

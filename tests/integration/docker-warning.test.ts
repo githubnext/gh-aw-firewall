@@ -103,7 +103,7 @@ describe.skip('Docker Command Warning', () => {
     // The command may succeed or fail depending on how the shell handles the exit code
     // But the warning message should always be present in stderr
     expect(result.stderr).toContain('Docker-in-Docker support was removed in AWF v0.9.1');
-    expect(result.stderr).toContain('https://github.com/githubnext/gh-aw-firewall#breaking-changes');
+    expect(result.stderr).toContain('https://github.com/github/gh-aw-firewall#breaking-changes');
   }, 120000);
 
   test('Test 5: docker version shows warning', async () => {
