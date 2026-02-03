@@ -88,7 +88,7 @@ Each release includes:
 - `checksums.txt` - SHA256 checksums for all files
 
 ### GitHub Container Registry (GHCR)
-Docker images are published to `ghcr.io/githubnext/gh-aw-firewall`:
+Docker images are published to `ghcr.io/github/gh-aw-firewall`:
 - `squid:<version>` and `squid:latest` - Squid proxy container
 - `agent:<version>` and `agent:latest` - Agent execution environment (minimal, ~200MB)
 - `agent-act:<version>` and `agent-act:latest` - Agent with GitHub Actions parity (~2GB)

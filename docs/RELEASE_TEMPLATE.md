@@ -9,7 +9,7 @@ Edit this file to change the format of release notes for all future releases.
 |-------------|-------------|---------|
 | `{{CHANGELOG}}` | Auto-generated changelog from GitHub API or git log | PR list or commit list |
 | `{{CLI_HELP}}` | Output of `awf --help` command | CLI usage and options |
-| `{{REPOSITORY}}` | GitHub repository path | `githubnext/gh-aw-firewall` |
+| `{{REPOSITORY}}` | GitHub repository path | `github/gh-aw-firewall` |
 | `{{VERSION}}` | Full version tag with 'v' prefix | `v0.3.0` |
 | `{{VERSION_NUMBER}}` | Version number without 'v' prefix | `0.3.0` |
 

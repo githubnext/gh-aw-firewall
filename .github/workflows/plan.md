@@ -11,9 +11,6 @@ permissions:
   issues: read
   pull-requests: read
 engine: copilot
-network:
-  firewall:
-    version: "v0.10.0"
 tools:
   github:
     toolsets: [default, discussions]
