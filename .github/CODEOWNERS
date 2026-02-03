@@ -5,36 +5,36 @@
 # Patterns follow .gitignore syntax.
 
 # Global default owners - all files unless a more specific pattern matches
-* @githubnext/gh-aw-firewall-maintainers
+* @github/gh-aw-firewall-maintainers
 
 # Container security and configuration
-/containers/ @githubnext/gh-aw-firewall-maintainers
+/containers/ @github/gh-aw-firewall-maintainers
 
 # CI/CD workflows and automation
-/.github/workflows/ @githubnext/gh-aw-firewall-maintainers
+/.github/workflows/ @github/gh-aw-firewall-maintainers
 
 # Documentation site (Astro/Starlight)
-/docs-site/ @githubnext/gh-aw-firewall-maintainers
+/docs-site/ @github/gh-aw-firewall-maintainers
 
 # Core TypeScript source code
-/src/ @githubnext/gh-aw-firewall-maintainers
+/src/ @github/gh-aw-firewall-maintainers
 
 # Documentation files
-/docs/ @githubnext/gh-aw-firewall-maintainers
-*.md @githubnext/gh-aw-firewall-maintainers
+/docs/ @github/gh-aw-firewall-maintainers
+*.md @github/gh-aw-firewall-maintainers
 
 # Build and dependency configuration
-package.json @githubnext/gh-aw-firewall-maintainers
-package-lock.json @githubnext/gh-aw-firewall-maintainers
-tsconfig*.json @githubnext/gh-aw-firewall-maintainers
+package.json @github/gh-aw-firewall-maintainers
+package-lock.json @github/gh-aw-firewall-maintainers
+tsconfig*.json @github/gh-aw-firewall-maintainers
 
 # CI/CD scripts
-/scripts/ci/ @githubnext/gh-aw-firewall-maintainers
+/scripts/ci/ @github/gh-aw-firewall-maintainers
 
 # Test infrastructure
-/tests/ @githubnext/gh-aw-firewall-maintainers
-jest.config.js @githubnext/gh-aw-firewall-maintainers
+/tests/ @github/gh-aw-firewall-maintainers
+jest.config.js @github/gh-aw-firewall-maintainers
 
 # Security and policy files
-SECURITY.md @githubnext/gh-aw-firewall-maintainers
-CODE_OF_CONDUCT.md @githubnext/gh-aw-firewall-maintainers
+SECURITY.md @github/gh-aw-firewall-maintainers
+CODE_OF_CONDUCT.md @github/gh-aw-firewall-maintainers
