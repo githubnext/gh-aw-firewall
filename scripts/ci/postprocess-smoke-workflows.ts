@@ -7,6 +7,7 @@ const repoRoot = path.resolve(__dirname, '../..');
 const workflowPaths = [
   path.join(repoRoot, '.github/workflows/smoke-copilot.lock.yml'),
   path.join(repoRoot, '.github/workflows/smoke-claude.lock.yml'),
+  path.join(repoRoot, '.github/workflows/smoke-chroot.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:

@@ -49,7 +49,7 @@ runs:
       run: |
         set -euo pipefail
 
-        REPO="githubnext/gh-aw-firewall"
+        REPO="github/gh-aw-firewall"
         BINARY_NAME="awf-linux-x64"
         INSTALL_DIR="${RUNNER_TEMP}/awf-bin"
 
@@ -165,7 +165,7 @@ runs:
       run: |
         set -euo pipefail
         
-        REGISTRY="ghcr.io/githubnext/gh-aw-firewall"
+        REGISTRY="ghcr.io/github/gh-aw-firewall"
         
         echo "Pulling awf Docker images with tag: ${IMAGE_TAG}"
         
