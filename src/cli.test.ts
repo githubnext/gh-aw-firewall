@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, processLocalhostKeyword } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1137,6 +1137,158 @@ describe('cli', () => {
       it('should return error for alpine image', () => {
         const result = processAgentImageOption('alpine:latest', true);
         expect(result.error).toContain('Invalid agent image');
+      });
+    });
+  });
+
+  describe('processLocalhostKeyword', () => {
+    describe('when localhost keyword is not present', () => {
+      it('should return domains unchanged', () => {
+        const result = processLocalhostKeyword(
+          ['github.com', 'example.com'],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(false);
+        expect(result.allowedDomains).toEqual(['github.com', 'example.com']);
+        expect(result.shouldEnableHostAccess).toBe(false);
+        expect(result.defaultPorts).toBeUndefined();
+      });
+    });
+
+    describe('when plain localhost is present', () => {
+      it('should replace localhost with host.docker.internal', () => {
+        const result = processLocalhostKeyword(
+          ['localhost', 'github.com'],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.allowedDomains).toEqual(['github.com', 'host.docker.internal']);
+        expect(result.shouldEnableHostAccess).toBe(true);
+        expect(result.defaultPorts).toBe('3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090');
+      });
+
+      it('should replace localhost when it is the only domain', () => {
+        const result = processLocalhostKeyword(
+          ['localhost'],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.allowedDomains).toEqual(['host.docker.internal']);
+        expect(result.shouldEnableHostAccess).toBe(true);
+      });
+    });
+
+    describe('when http://localhost is present', () => {
+      it('should replace with http://host.docker.internal', () => {
+        const result = processLocalhostKeyword(
+          ['http://localhost', 'github.com'],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.allowedDomains).toEqual(['github.com', 'http://host.docker.internal']);
+        expect(result.shouldEnableHostAccess).toBe(true);
+        expect(result.defaultPorts).toBe('3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090');
+      });
+    });
+
+    describe('when https://localhost is present', () => {
+      it('should replace with https://host.docker.internal', () => {
+        const result = processLocalhostKeyword(
+          ['https://localhost', 'github.com'],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.allowedDomains).toEqual(['github.com', 'https://host.docker.internal']);
+        expect(result.shouldEnableHostAccess).toBe(true);
+        expect(result.defaultPorts).toBe('3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090');
+      });
+    });
+
+    describe('when host access is already enabled', () => {
+      it('should not suggest enabling host access again', () => {
+        const result = processLocalhostKeyword(
+          ['localhost', 'github.com'],
+          true, // Already enabled
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.shouldEnableHostAccess).toBe(false);
+        expect(result.defaultPorts).toBe('3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090');
+      });
+    });
+
+    describe('when custom ports are already specified', () => {
+      it('should not suggest default ports', () => {
+        const result = processLocalhostKeyword(
+          ['localhost', 'github.com'],
+          false,
+          '8080,9000' // Custom ports
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.shouldEnableHostAccess).toBe(true);
+        expect(result.defaultPorts).toBeUndefined();
+      });
+    });
+
+    describe('when both host access and custom ports are specified', () => {
+      it('should not suggest either', () => {
+        const result = processLocalhostKeyword(
+          ['localhost', 'github.com'],
+          true, // Already enabled
+          '8080' // Custom ports
+        );
+
+        expect(result.localhostDetected).toBe(true);
+        expect(result.shouldEnableHostAccess).toBe(false);
+        expect(result.defaultPorts).toBeUndefined();
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should only replace first occurrence of localhost', () => {
+        // Although unlikely, the function should handle this gracefully
+        const result = processLocalhostKeyword(
+          ['localhost', 'github.com', 'http://localhost'],
+          false,
+          undefined
+        );
+
+        // Should only replace the first match
+        expect(result.localhostDetected).toBe(true);
+        expect(result.allowedDomains).toEqual(['github.com', 'http://localhost', 'host.docker.internal']);
+      });
+
+      it('should preserve domain order', () => {
+        const result = processLocalhostKeyword(
+          ['github.com', 'localhost', 'example.com'],
+          false,
+          undefined
+        );
+
+        expect(result.allowedDomains).toEqual(['github.com', 'example.com', 'host.docker.internal']);
+      });
+
+      it('should handle empty domains list', () => {
+        const result = processLocalhostKeyword(
+          [],
+          false,
+          undefined
+        );
+
+        expect(result.localhostDetected).toBe(false);
+        expect(result.allowedDomains).toEqual([]);
       });
     });
   });
