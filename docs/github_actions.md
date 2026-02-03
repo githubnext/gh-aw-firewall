@@ -9,7 +9,7 @@ The simplest way to install awf in GitHub Actions is using the setup action:
 ```yaml
 steps:
   - name: Setup awf
-    uses: githubnext/gh-aw-firewall@main
+    uses: github/gh-aw-firewall@main
     # with:
     #   version: 'v1.0.0'    # Optional: defaults to latest
     #   pull-images: 'true'  # Optional: pre-pull Docker images
@@ -46,7 +46,7 @@ For reproducible builds, you can pin both the awf binary and Docker images:
 steps:
   - name: Setup awf
     id: setup-awf
-    uses: githubnext/gh-aw-firewall@main
+    uses: github/gh-aw-firewall@main
     with:
       version: 'v0.7.0'
       pull-images: 'true'
@@ -66,7 +66,7 @@ Alternatively, use the install script:
 steps:
   - name: Install awf
     run: |
-      curl -sSL https://raw.githubusercontent.com/githubnext/gh-aw-firewall/main/install.sh | sudo bash
+      curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
 ```
 
 ### Building from Source
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup awf
-        uses: githubnext/gh-aw-firewall@main
+        uses: github/gh-aw-firewall@main
 
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot@latest
@@ -176,7 +176,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup awf
-        uses: githubnext/gh-aw-firewall@main
+        uses: github/gh-aw-firewall@main
 
       - name: Test with Firewall
         env:

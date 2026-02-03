@@ -9,6 +9,6 @@ If you need to:
 - Run Docker: Execute Docker commands outside AWF wrapper
 - Build images: Run Docker build before invoking AWF
 
-See PR #205: https://github.com/githubnext/gh-aw-firewall/pull/205
+See PR #205: https://github.com/github/gh-aw-firewall/pull/205
 EOF
 exit 127
