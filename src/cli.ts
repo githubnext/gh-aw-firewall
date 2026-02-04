@@ -244,6 +244,35 @@ export function processAgentImageOption(
 }
 
 /**
+ * Result of validating flag combinations
+ */
+export interface FlagValidationResult {
+  /** Whether the validation passed */
+  valid: boolean;
+  /** Error message if validation failed */
+  error?: string;
+}
+
+/**
+ * Validates that --skip-pull is not used with --build-local
+ * @param skipPull - Whether --skip-pull flag was provided
+ * @param buildLocal - Whether --build-local flag was provided
+ * @returns FlagValidationResult with validation status and error message
+ */
+export function validateSkipPullWithBuildLocal(
+  skipPull: boolean | undefined,
+  buildLocal: boolean | undefined
+): FlagValidationResult {
+  if (skipPull && buildLocal) {
+    return {
+      valid: false,
+      error: '--skip-pull cannot be used with --build-local. Building images requires pulling base images from the registry.',
+    };
+  }
+  return { valid: true };
+}
+
+/**
  * Parses and validates DNS servers from a comma-separated string
  * @param input - Comma-separated DNS server string (e.g., "8.8.8.8,1.1.1.1")
  * @returns Array of validated DNS server IP addresses
@@ -573,6 +602,11 @@ program
     'latest'
   )
   .option(
+    '--skip-pull',
+    'Use local images without pulling from registry (requires images to be pre-downloaded)',
+    false
+  )
+  .option(
     '-e, --env <KEY=VALUE>',
     'Additional environment variables to pass to container (can be specified multiple times)',
     (value, previous: string[] = []) => [...previous, value],
@@ -696,10 +730,9 @@ program
       }
     }
 
-    // Ensure at least one domain is specified
+    // Log when no domains are specified (all network access will be blocked)
     if (allowedDomains.length === 0) {
-      logger.error('At least one domain must be specified with --allow-domains or --allow-domains-file');
-      process.exit(1);
+      logger.debug('No allowed domains specified - all network access will be blocked');
     }
 
     // Remove duplicates (in case domains appear in both sources)
@@ -878,6 +911,7 @@ program
       tty: options.tty || false,
       workDir: options.workDir,
       buildLocal: options.buildLocal,
+      skipPull: options.skipPull,
       agentImage,
       imageRegistry: options.imageRegistry,
       imageTag: options.imageTag,
@@ -903,6 +937,13 @@ program
     // Warn if --allow-host-ports is used without --enable-host-access
     if (config.allowHostPorts && !config.enableHostAccess) {
       logger.error('❌ --allow-host-ports requires --enable-host-access to be set');
+      process.exit(1);
+    }
+
+    // Error if --skip-pull is used with --build-local (incompatible flags)
+    const skipPullValidation = validateSkipPullWithBuildLocal(config.skipPull, config.buildLocal);
+    if (!skipPullValidation.valid) {
+      logger.error(`❌ ${skipPullValidation.error}`);
       process.exit(1);
     }
 
