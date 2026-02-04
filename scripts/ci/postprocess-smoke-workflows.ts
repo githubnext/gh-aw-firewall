@@ -5,9 +5,18 @@ import * as path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../..');
 const workflowPaths = [
+  // Existing smoke workflows
   path.join(repoRoot, '.github/workflows/smoke-copilot.lock.yml'),
   path.join(repoRoot, '.github/workflows/smoke-claude.lock.yml'),
   path.join(repoRoot, '.github/workflows/smoke-chroot.lock.yml'),
+  // Build test workflows
+  path.join(repoRoot, '.github/workflows/build-test-node.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-go.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-rust.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-java.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-cpp.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-deno.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-bun.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:
