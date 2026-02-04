@@ -6,11 +6,9 @@
 sudo awf [options] -- <command>
 
 Options:
-  --allow-domains <domains>    Comma-separated list of allowed domains (required)
-                               Supports wildcards and protocol prefixes:
-                               github.com         - exact domain + subdomains
-                               *.github.com       - any subdomain
-                               https://secure.com - HTTPS only
+  --allow-domains <domains>  Comma-separated list of allowed domains (optional)
+                             If not specified, all network access is blocked
+                             Example: github.com,api.github.com,arxiv.org
   --allow-domains-file <path>  Path to file containing allowed domains
   --block-domains <domains>    Comma-separated list of blocked domains
                                Takes precedence over allowed domains

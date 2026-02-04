@@ -53,15 +53,25 @@ export function aggregateLogs(entries: ParsedLogEntry[]): AggregatedStats {
   let deniedRequests = 0;
   let minTimestamp = Infinity;
   let maxTimestamp = -Infinity;
+  let totalRequests = 0;
 
   for (const entry of entries) {
-    // Track time range
+    // Track time range for all entries
     if (entry.timestamp < minTimestamp) {
       minTimestamp = entry.timestamp;
     }
     if (entry.timestamp > maxTimestamp) {
       maxTimestamp = entry.timestamp;
     }
+
+    // Skip benign operational entries (connection closures without HTTP headers)
+    // These appear during healthchecks and shutdown-time keep-alive connection closures
+    if (entry.url === 'error:transaction-end-before-headers') {
+      continue;
+    }
+
+    // Count this as a real request
+    totalRequests++;
 
     // Count allowed/denied
     if (entry.isAllowed) {
@@ -91,7 +101,6 @@ export function aggregateLogs(entries: ParsedLogEntry[]): AggregatedStats {
     }
   }
 
-  const totalRequests = entries.length;
   const uniqueDomains = byDomain.size;
   const timeRange =
     entries.length > 0 ? { start: minTimestamp, end: maxTimestamp } : null;
