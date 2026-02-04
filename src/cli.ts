@@ -752,6 +752,7 @@ program
       // Auto-enable host access
       if (localhostResult.shouldEnableHostAccess) {
         options.enableHostAccess = true;
+        logger.warn('⚠️  Security warning: localhost keyword enables host access - agent can reach services on your machine');
         logger.info('ℹ️  localhost keyword detected - automatically enabling host access');
       }
 
