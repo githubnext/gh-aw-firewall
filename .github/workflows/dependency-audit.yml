@@ -37,7 +37,6 @@ jobs:
 
       - name: Run npm audit (JSON output for SARIF)
         run: npm audit --json > npm-audit-main.json || true
-        continue-on-error: true
 
       - name: Convert npm audit to SARIF
         if: always()
@@ -76,7 +75,6 @@ jobs:
       - name: Run npm audit (JSON output for SARIF)
         run: npm audit --json > npm-audit-docs.json || true
         working-directory: docs-site
-        continue-on-error: true
 
       - name: Convert npm audit to SARIF
         if: always()

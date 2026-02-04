@@ -154,8 +154,9 @@ function convertToSarif(npmAudit: NpmAuditReport, packageJsonPath: string = 'pac
   const results: SarifResult[] = [];
   const ruleMap = new Map<string, number>();
 
-  // Process each vulnerability
-  for (const [pkgName, vuln] of Object.entries(npmAudit.vulnerabilities)) {
+  // Process each vulnerability (with null safety check)
+  const vulnerabilities = npmAudit.vulnerabilities || {};
+  for (const [pkgName, vuln] of Object.entries(vulnerabilities)) {
     // Extract advisory details from 'via' array
     const advisories = vuln.via.filter((v): v is NpmAuditVia => typeof v !== 'string');
     
