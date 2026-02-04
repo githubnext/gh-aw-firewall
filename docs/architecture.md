@@ -119,8 +119,8 @@ The wrapper generates:
 
 ### 2. Container Startup
 1. **Squid proxy starts first** with healthcheck
-2. **Copilot container waits** for Squid to be healthy
-3. **iptables rules applied** in copilot container to redirect all HTTP/HTTPS traffic
+2. **Agent container waits** for Squid to be healthy
+3. **iptables rules applied** in agent container to redirect all HTTP/HTTPS traffic
 
 ### 3. Traffic Routing
 - All HTTP (port 80) and HTTPS (port 443) traffic → Squid proxy
@@ -136,7 +136,7 @@ The wrapper generates:
 ### 5. Log Streaming
 - Container logs streamed in real-time using `docker logs -f`
 - TTY disabled to prevent ANSI escape sequences
-- Copilot and Squid logs preserved to `/tmp/*-logs-<timestamp>/` (if created)
+- Agent and Squid logs preserved to `/tmp/*-logs-<timestamp>/` (if created)
 
 ### 6. Cleanup
 - Containers stopped and removed
@@ -150,27 +150,27 @@ The wrapper generates:
 
 The system uses a defense-in-depth cleanup strategy across four stages to prevent Docker resource leaks:
 
-### 1. Pre-Test Cleanup (CI/CD Scripts)
-**Location:** `scripts/ci/test-copilot-*.sh` (start of each script)
+### 1. Pre-Test Cleanup (CI/CD)
+**Location:** CI/CD workflow scripts
 **What:** Runs `cleanup.sh` to remove orphaned resources from previous failed runs
 **Why:** Prevents Docker network subnet pool exhaustion and container name conflicts
 **Critical:** Without this, `timeout` commands that kill the wrapper mid-cleanup leave networks/containers behind
 
 ### 2. Normal Exit Cleanup (Built-in)
-**Location:** `src/cli.ts:117-118` (`performCleanup()`)
+**Location:** `src/cli.ts` (`performCleanup()`)
 **What:**
 - `stopContainers()` → `docker compose down -v` (stops containers, removes volumes)
 - `cleanup()` → Deletes workDir (`/tmp/awf-<timestamp>`)
 **Trigger:** Successful command completion
 
 ### 3. Signal/Error Cleanup (Built-in)
-**Location:** `src/cli.ts:95-103, 122-126` (SIGINT/SIGTERM handlers, catch blocks)
+**Location:** `src/cli.ts` (SIGINT/SIGTERM handlers, catch blocks)
 **What:** Same as normal exit cleanup
 **Trigger:** User interruption (Ctrl+C), timeout signals, or errors
 **Limitation:** Cannot catch SIGKILL (9) from `timeout` after grace period
 
 ### 4. CI/CD Always Cleanup
-**Location:** `.github/workflows/test-copilot-*.yml` (`if: always()`)
+**Location:** `.github/workflows/test-*.yml` (`if: always()`)
 **What:** Runs `cleanup.sh` regardless of job status
 **Why:** Safety net for SIGKILL, job cancellation, and unexpected failures
 
@@ -194,8 +194,8 @@ Removes all awf resources:
 
 ## Exit Code Handling
 
-The wrapper propagates the exit code from the copilot container:
-1. Command runs in copilot container
+The wrapper propagates the exit code from the agent container:
+1. Command runs in agent container
 2. Container exits with command's exit code
 3. Wrapper inspects container: `docker inspect --format={{.State.ExitCode}}`
 4. Wrapper exits with same code
