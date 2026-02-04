@@ -298,6 +298,70 @@ export function parseDnsServers(input: string): string[] {
 }
 
 /**
+ * Result of processing the localhost keyword in allowed domains
+ */
+export interface LocalhostProcessingResult {
+  /** Updated array of allowed domains with localhost replaced by host.docker.internal */
+  allowedDomains: string[];
+  /** Whether the localhost keyword was found and processed */
+  localhostDetected: boolean;
+  /** Whether host access should be enabled (if not already enabled) */
+  shouldEnableHostAccess: boolean;
+  /** Default port list to use if no custom ports were specified */
+  defaultPorts?: string;
+}
+
+/**
+ * Processes the localhost keyword in the allowed domains list.
+ * This function handles the logic for replacing localhost with host.docker.internal,
+ * preserving protocol prefixes, and determining whether to auto-enable host access
+ * and default development ports.
+ *
+ * @param allowedDomains - Array of allowed domains (may include localhost variants)
+ * @param enableHostAccess - Whether host access is already enabled
+ * @param allowHostPorts - Custom host ports if already specified
+ * @returns LocalhostProcessingResult with the processed values
+ */
+export function processLocalhostKeyword(
+  allowedDomains: string[],
+  enableHostAccess: boolean,
+  allowHostPorts: string | undefined
+): LocalhostProcessingResult {
+  const localhostIndex = allowedDomains.findIndex(d => 
+    d === 'localhost' || d === 'http://localhost' || d === 'https://localhost'
+  );
+
+  if (localhostIndex === -1) {
+    return {
+      allowedDomains,
+      localhostDetected: false,
+      shouldEnableHostAccess: false,
+    };
+  }
+
+  // Remove localhost and replace with host.docker.internal
+  const localhostValue = allowedDomains[localhostIndex];
+  const updatedDomains = [...allowedDomains];
+  updatedDomains.splice(localhostIndex, 1);
+  
+  // Preserve protocol if specified
+  if (localhostValue.startsWith('http://')) {
+    updatedDomains.push('http://host.docker.internal');
+  } else if (localhostValue.startsWith('https://')) {
+    updatedDomains.push('https://host.docker.internal');
+  } else {
+    updatedDomains.push('host.docker.internal');
+  }
+
+  return {
+    allowedDomains: updatedDomains,
+    localhostDetected: true,
+    shouldEnableHostAccess: !enableHostAccess,
+    defaultPorts: allowHostPorts ? undefined : '3000,3001,4000,4200,5000,5173,8000,8080,8081,8888,9000,9090',
+  };
+}
+
+/**
  * Escapes a shell argument by wrapping it in single quotes and escaping any single quotes within it
  * @param arg - Argument to escape
  * @returns Escaped argument safe for shell execution
@@ -476,7 +540,8 @@ program
     '                                   *.github.com       - any subdomain of github.com\n' +
     '                                   api-*.example.com  - api-* subdomains\n' +
     '                                   https://secure.com - HTTPS only\n' +
-    '                                   http://legacy.com  - HTTP only'
+    '                                   http://legacy.com  - HTTP only\n' +
+    '                                   localhost          - auto-configure for local testing (Playwright, etc.)'
   )
   .option(
     '--allow-domains-file <path>',
@@ -672,6 +737,32 @@ program
 
     // Remove duplicates (in case domains appear in both sources)
     allowedDomains = [...new Set(allowedDomains)];
+
+    // Handle special "localhost" keyword for Playwright testing
+    // This makes localhost testing work out of the box without requiring manual configuration
+    const localhostResult = processLocalhostKeyword(
+      allowedDomains,
+      options.enableHostAccess || false,
+      options.allowHostPorts
+    );
+
+    if (localhostResult.localhostDetected) {
+      allowedDomains = localhostResult.allowedDomains;
+
+      // Auto-enable host access
+      if (localhostResult.shouldEnableHostAccess) {
+        options.enableHostAccess = true;
+        logger.warn('⚠️  Security warning: localhost keyword enables host access - agent can reach services on your machine');
+        logger.info('ℹ️  localhost keyword detected - automatically enabling host access');
+      }
+
+      // Auto-configure common dev ports if not already specified
+      if (localhostResult.defaultPorts) {
+        options.allowHostPorts = localhostResult.defaultPorts;
+        logger.info('ℹ️  localhost keyword detected - allowing common development ports (3000, 4200, 5173, 8080, etc.)');
+        logger.info('   Use --allow-host-ports to customize the port list');
+      }
+    }
 
     // Validate all domains and patterns
     for (const domain of allowedDomains) {

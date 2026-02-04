@@ -21,16 +21,12 @@ See [Compatibility](docs/compatibility.md) for full details on supported version
 
 ## Get started fast
 
-- **Prerequisite:** Docker is running
-- **Install:**
-  ```bash
-  curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
-  ```
-- **Run your first command:**
-  ```bash
-  sudo awf --allow-domains github.com -- curl https://api.github.com
-  ```
-  The `--` separator passes the command you want to run behind the firewall.
+```bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
+sudo awf --allow-domains github.com -- curl https://api.github.com
+```
+
+The `--` separator divides firewall options from the command to run.
 
 ### GitHub Copilot CLI in one line
 
@@ -39,6 +35,15 @@ sudo -E awf \
   --allow-domains github.com,api.github.com,githubusercontent.com \
   -- copilot --prompt "List my repositories"
 ```
+
+### Playwright Testing Localhost (out of the box)
+
+```bash
+# Start your dev server, then test it:
+sudo awf --allow-domains localhost,playwright.dev -- npx playwright test
+```
+
+The `localhost` keyword automatically configures everything for local testing.
 
 For checksum verification, version pinning, and manual installation steps, see [Quick start](docs/quickstart.md).
 

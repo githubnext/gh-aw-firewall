@@ -11,7 +11,12 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   transform: {
     '^.+\\.ts$': 'ts-jest',
+    '^.+\\.js$': 'babel-jest',
   },
+  transformIgnorePatterns: [
+    // Transform ESM-only packages (chalk, execa, commander, etc.)
+    'node_modules/(?!(chalk|execa|commander)/)',
+  ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
   coverageThreshold: {
