@@ -53,9 +53,9 @@ steps:
       echo "=== Capturing host versions for post-verification ==="
       mkdir -p /tmp/gh-aw/chroot-test
       {
-        echo "HOST_PYTHON_VERSION=$(python3 --version 2>&1 | head -1)"
-        echo "HOST_NODE_VERSION=$(node --version 2>&1 | head -1)"
-        echo "HOST_GO_VERSION=$(go version 2>&1 | head -1)"
+        echo "HOST_PYTHON_VERSION='$(python3 --version 2>&1 | head -1)'"
+        echo "HOST_NODE_VERSION='$(node --version 2>&1 | head -1)'"
+        echo "HOST_GO_VERSION='$(go version 2>&1 | head -1)'"
       } > /tmp/gh-aw/chroot-test/host-versions.env
       cat /tmp/gh-aw/chroot-test/host-versions.env
   - name: Install awf dependencies
@@ -85,15 +85,15 @@ steps:
 
       # Test Python version in chroot
       echo "Testing Python..."
-      CHROOT_PYTHON=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- python3 --version 2>&1 | tail -1) || CHROOT_PYTHON="FAILED"
+      CHROOT_PYTHON=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- python3 --version 2>&1 | grep -oP 'Python \d+\.\d+\.\d+' | head -1) || CHROOT_PYTHON="FAILED"
 
       # Test Node version in chroot
       echo "Testing Node..."
-      CHROOT_NODE=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- node --version 2>&1 | tail -1) || CHROOT_NODE="FAILED"
+      CHROOT_NODE=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- node --version 2>&1 | grep -oP 'v\d+\.\d+\.\d+' | head -1) || CHROOT_NODE="FAILED"
 
       # Test Go version in chroot
       echo "Testing Go..."
-      CHROOT_GO=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- go version 2>&1 | tail -1) || CHROOT_GO="FAILED"
+      CHROOT_GO=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- go version 2>&1 | grep -oP 'go\d+\.\d+(\.\d+)?' | head -1) || CHROOT_GO="FAILED"
 
       # Save chroot versions
       {
@@ -111,19 +111,19 @@ steps:
       NODE_MATCH="NO"
       GO_MATCH="NO"
 
-      # Compare Python (extract version number)
-      HOST_PY_NUM=$(echo "$HOST_PYTHON_VERSION" | grep -oP '\d+\.\d+\.\d+' || echo "")
-      CHROOT_PY_NUM=$(echo "$CHROOT_PYTHON" | grep -oP '\d+\.\d+\.\d+' || echo "")
+      # Compare Python (extract version number - chroot already extracted as "Python X.Y.Z")
+      HOST_PY_NUM=$(echo "$HOST_PYTHON_VERSION" | grep -oP 'Python \d+\.\d+\.\d+' || echo "")
+      CHROOT_PY_NUM="$CHROOT_PYTHON"
       [ "$HOST_PY_NUM" = "$CHROOT_PY_NUM" ] && [ -n "$HOST_PY_NUM" ] && PYTHON_MATCH="YES"
 
-      # Compare Node (extract version number)
+      # Compare Node (extract version number - already extracted as v\d+.\d+.\d+)
       HOST_NODE_NUM=$(echo "$HOST_NODE_VERSION" | grep -oP 'v\d+\.\d+\.\d+' || echo "")
-      CHROOT_NODE_NUM=$(echo "$CHROOT_NODE" | grep -oP 'v\d+\.\d+\.\d+' || echo "")
+      CHROOT_NODE_NUM="$CHROOT_NODE"
       [ "$HOST_NODE_NUM" = "$CHROOT_NODE_NUM" ] && [ -n "$HOST_NODE_NUM" ] && NODE_MATCH="YES"
 
-      # Compare Go (extract version number)
+      # Compare Go (extract version number - chroot already extracted as "goX.Y.Z")
       HOST_GO_NUM=$(echo "$HOST_GO_VERSION" | grep -oP 'go\d+\.\d+(\.\d+)?' || echo "")
-      CHROOT_GO_NUM=$(echo "$CHROOT_GO" | grep -oP 'go\d+\.\d+(\.\d+)?' || echo "")
+      CHROOT_GO_NUM="$CHROOT_GO"
       [ "$HOST_GO_NUM" = "$CHROOT_GO_NUM" ] && [ -n "$HOST_GO_NUM" ] && GO_MATCH="YES"
 
       # Create results summary
