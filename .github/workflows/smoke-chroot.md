@@ -1,5 +1,5 @@
 ---
-description: Smoke test workflow that validates the --enable-chroot feature by testing host binary access, network firewall, and security boundaries
+description: Smoke test workflow that validates the --enable-chroot feature by testing host binary access and comparing versions
 on:
   workflow_dispatch:
   pull_request:
@@ -44,50 +44,130 @@ safe-outputs:
       run-failure: "**Chroot tests failed** [{workflow_name}]({run_url}) {status} - See logs for details."
 timeout-minutes: 20
 steps:
+  - name: Setup Go
+    uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+    with:
+      go-version: '1.22'
   - name: Capture host versions for verification
     run: |
       echo "=== Capturing host versions for post-verification ==="
-      echo "HOST_PYTHON_VERSION=$(python3 --version 2>&1 | head -1)" >> /tmp/host-versions.env
-      echo "HOST_NODE_VERSION=$(node --version 2>&1 | head -1)" >> /tmp/host-versions.env
-      echo "HOST_GO_VERSION=$(go version 2>&1 | head -1)" >> /tmp/host-versions.env
-      cat /tmp/host-versions.env
+      mkdir -p /tmp/gh-aw/chroot-test
+      {
+        echo "HOST_PYTHON_VERSION=$(python3 --version 2>&1 | head -1)"
+        echo "HOST_NODE_VERSION=$(node --version 2>&1 | head -1)"
+        echo "HOST_GO_VERSION=$(go version 2>&1 | head -1)"
+      } > /tmp/gh-aw/chroot-test/host-versions.env
+      cat /tmp/gh-aw/chroot-test/host-versions.env
+  - name: Build local containers
+    run: |
+      echo "=== Building local containers ==="
+      docker build -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
+      docker build -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
+  - name: Run chroot version tests
+    run: |
+      echo "=== Running chroot version tests ==="
+
+      # Capture GOROOT for chroot tests
+      export GOROOT=$(go env GOROOT)
+
+      # Test Python version in chroot
+      echo "Testing Python..."
+      CHROOT_PYTHON=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- python3 --version 2>&1 | tail -1) || CHROOT_PYTHON="FAILED"
+
+      # Test Node version in chroot
+      echo "Testing Node..."
+      CHROOT_NODE=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- node --version 2>&1 | tail -1) || CHROOT_NODE="FAILED"
+
+      # Test Go version in chroot
+      echo "Testing Go..."
+      CHROOT_GO=$(sudo -E awf --enable-chroot --skip-pull --allow-domains localhost -- go version 2>&1 | tail -1) || CHROOT_GO="FAILED"
+
+      # Save chroot versions
+      {
+        echo "CHROOT_PYTHON_VERSION=$CHROOT_PYTHON"
+        echo "CHROOT_NODE_VERSION=$CHROOT_NODE"
+        echo "CHROOT_GO_VERSION=$CHROOT_GO"
+      } > /tmp/gh-aw/chroot-test/chroot-versions.env
+
+      cat /tmp/gh-aw/chroot-test/chroot-versions.env
+
+      # Compare versions and create results
+      source /tmp/gh-aw/chroot-test/host-versions.env
+
+      PYTHON_MATCH="NO"
+      NODE_MATCH="NO"
+      GO_MATCH="NO"
+
+      # Compare Python (extract version number)
+      HOST_PY_NUM=$(echo "$HOST_PYTHON_VERSION" | grep -oP '\d+\.\d+\.\d+' || echo "")
+      CHROOT_PY_NUM=$(echo "$CHROOT_PYTHON" | grep -oP '\d+\.\d+\.\d+' || echo "")
+      [ "$HOST_PY_NUM" = "$CHROOT_PY_NUM" ] && [ -n "$HOST_PY_NUM" ] && PYTHON_MATCH="YES"
+
+      # Compare Node (extract version number)
+      HOST_NODE_NUM=$(echo "$HOST_NODE_VERSION" | grep -oP 'v\d+\.\d+\.\d+' || echo "")
+      CHROOT_NODE_NUM=$(echo "$CHROOT_NODE" | grep -oP 'v\d+\.\d+\.\d+' || echo "")
+      [ "$HOST_NODE_NUM" = "$CHROOT_NODE_NUM" ] && [ -n "$HOST_NODE_NUM" ] && NODE_MATCH="YES"
+
+      # Compare Go (extract version number)
+      HOST_GO_NUM=$(echo "$HOST_GO_VERSION" | grep -oP 'go\d+\.\d+(\.\d+)?' || echo "")
+      CHROOT_GO_NUM=$(echo "$CHROOT_GO" | grep -oP 'go\d+\.\d+(\.\d+)?' || echo "")
+      [ "$HOST_GO_NUM" = "$CHROOT_GO_NUM" ] && [ -n "$HOST_GO_NUM" ] && GO_MATCH="YES"
+
+      # Create results summary
+      {
+        echo "PYTHON_MATCH=$PYTHON_MATCH"
+        echo "NODE_MATCH=$NODE_MATCH"
+        echo "GO_MATCH=$GO_MATCH"
+        echo "HOST_PY_NUM=$HOST_PY_NUM"
+        echo "CHROOT_PY_NUM=$CHROOT_PY_NUM"
+        echo "HOST_NODE_NUM=$HOST_NODE_NUM"
+        echo "CHROOT_NODE_NUM=$CHROOT_NODE_NUM"
+        echo "HOST_GO_NUM=$HOST_GO_NUM"
+        echo "CHROOT_GO_NUM=$CHROOT_GO_NUM"
+      } > /tmp/gh-aw/chroot-test/results.env
+
+      cat /tmp/gh-aw/chroot-test/results.env
+
+      # Determine overall result
+      if [ "$PYTHON_MATCH" = "YES" ] && [ "$NODE_MATCH" = "YES" ] && [ "$GO_MATCH" = "YES" ]; then
+        echo "ALL_TESTS_PASSED=true" >> /tmp/gh-aw/chroot-test/results.env
+        echo "=== ALL CHROOT TESTS PASSED ==="
+      else
+        echo "ALL_TESTS_PASSED=false" >> /tmp/gh-aw/chroot-test/results.env
+        echo "=== SOME CHROOT TESTS FAILED ==="
+      fi
+  - name: Cleanup test containers
+    if: always()
+    run: |
+      ./scripts/ci/cleanup.sh || true
 ---
 
-# Verify Language Runtimes Match Host
+# Analyze Chroot Test Results
 
-This smoke test validates that `--enable-chroot` provides transparent access to host binaries by comparing versions.
+The chroot version comparison tests have already been executed in the setup steps. Your job is to analyze the results and report them.
 
-## Step 1: Read Host Versions
+## Step 1: Read Test Results
 
-First, read the host versions that were captured in the setup step:
-
-```bash
-cat /tmp/host-versions.env
-```
-
-## Step 2: Run Tests via AWF Chroot
-
-Run the same version commands through `awf --enable-chroot` and verify they match:
+Read the test results from the files created during setup:
 
 ```bash
-# Test Python version matches host
-sudo -E awf --enable-chroot --allow-domains localhost -- python3 --version
-
-# Test Node version matches host
-sudo -E awf --enable-chroot --allow-domains localhost -- node --version
-
-# Test Go version matches host
-sudo -E awf --enable-chroot --allow-domains localhost -- go version
+cat /tmp/gh-aw/chroot-test/host-versions.env
+cat /tmp/gh-aw/chroot-test/chroot-versions.env
+cat /tmp/gh-aw/chroot-test/results.env
 ```
 
-## Step 3: Verify Versions Match
+## Step 2: Create Summary Comment
 
-Compare the versions from chroot with the host versions from `/tmp/host-versions.env`.
+Based on the results, add a comment to the PR with a comparison table:
 
-Create a summary table showing:
 | Runtime | Host Version | Chroot Version | Match? |
 |---------|--------------|----------------|--------|
+| Python  | (from HOST_PY_NUM) | (from CHROOT_PY_NUM) | (PYTHON_MATCH) |
+| Node.js | (from HOST_NODE_NUM) | (from CHROOT_NODE_NUM) | (NODE_MATCH) |
+| Go      | (from HOST_GO_NUM) | (from CHROOT_GO_NUM) | (GO_MATCH) |
 
-If ALL versions match, the test passes. Add a comment to the PR with the comparison table.
+## Step 3: Add Label if Passed
 
-If all runtimes match, add the label `smoke-chroot`.
+If ALL_TESTS_PASSED is true, add the `smoke-chroot` label to the PR.
+
+Keep your comment brief and focused on the results.
