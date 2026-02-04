@@ -498,7 +498,6 @@ export function generateDockerCompose(
     // If no custom mounts specified AND not using chroot mode,
     // include blanket host filesystem mount for backward compatibility
     // Security: Host filesystem is mounted read-only to prevent accidental or malicious writes
-    // The isolate.sh script enables execution of host binaries via chroot when needed
     logger.debug('No custom mounts specified, using blanket /:/host:ro mount');
     agentVolumes.unshift('/:/host:ro');
   }
