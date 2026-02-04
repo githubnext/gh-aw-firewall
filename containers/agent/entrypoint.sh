@@ -232,9 +232,11 @@ AWFEOF
       # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
       echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
     fi
-    # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
+    # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
+    # This ensures the correct Go version is found even if AWF_HOST_PATH has wrong ordering
     if [ -n "${AWF_GOROOT}" ]; then
-      echo "[entrypoint] Using host GOROOT for chroot: ${AWF_GOROOT}"
+      echo "[entrypoint] Adding GOROOT/bin to PATH: ${AWF_GOROOT}/bin"
+      echo "export PATH=\"${AWF_GOROOT}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export GOROOT=\"${AWF_GOROOT}\"" >> "/host${SCRIPT_FILE}"
     fi
   else
@@ -251,9 +253,11 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Add Cargo bin for Rust (common in development)
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
 AWFEOF
-    # Add GOROOT if provided (required for Go on GitHub Actions with trimmed binaries)
+    # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
+    # This ensures the correct Go version is found even if PATH has wrong ordering
     if [ -n "${AWF_GOROOT}" ]; then
-      echo "[entrypoint] Using host GOROOT for chroot: ${AWF_GOROOT}"
+      echo "[entrypoint] Adding GOROOT/bin to PATH: ${AWF_GOROOT}/bin"
+      echo "export PATH=\"${AWF_GOROOT}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export GOROOT=\"${AWF_GOROOT}\"" >> "/host${SCRIPT_FILE}"
     fi
   fi
