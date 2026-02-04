@@ -36,7 +36,8 @@ describe('Localhost Access', () => {
     });
 
     expect(result).toSucceed();
-    // Check that the logs show automatic host access enablement
+    // Check that the logs show security warning first, then automatic host access enablement
+    expect(result.stderr).toContain('Security warning: localhost keyword enables host access - agent can reach services on your machine');
     expect(result.stderr).toContain('localhost keyword detected - automatically enabling host access');
     expect(result.stderr).toContain('allowing common development ports');
   }, 120000);
