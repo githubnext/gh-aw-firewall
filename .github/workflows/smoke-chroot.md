@@ -58,6 +58,19 @@ steps:
         echo "HOST_GO_VERSION=$(go version 2>&1 | head -1)"
       } > /tmp/gh-aw/chroot-test/host-versions.env
       cat /tmp/gh-aw/chroot-test/host-versions.env
+  - name: Install awf dependencies
+    run: npm ci
+  - name: Build awf
+    run: npm run build
+  - name: Install awf binary (local)
+    run: |
+      WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+      NODE_BIN="$(command -v node)"
+      sudo tee /usr/local/bin/awf > /dev/null <<EOF
+      #!/bin/bash
+      exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+      EOF
+      sudo chmod +x /usr/local/bin/awf
   - name: Build local containers
     run: |
       echo "=== Building local containers ==="

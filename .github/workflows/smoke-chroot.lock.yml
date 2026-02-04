@@ -21,7 +21,7 @@
 #
 # Smoke test workflow that validates the --enable-chroot feature by testing host binary access and comparing versions
 #
-# frontmatter-hash: 47c892578c36dcdd5d8f494bae5ff93c24dbec12b0a354fc0cab950c8a6109a5
+# frontmatter-hash: 7f66e9b8e14470e56ce2d51664388751c4121d4755fd1b84e7361a4cc741d672
 
 name: "Smoke Chroot"
 "on":
@@ -144,6 +144,12 @@ jobs:
             echo "HOST_GO_VERSION=$(go version 2>&1 | head -1)"
           } > /tmp/gh-aw/chroot-test/host-versions.env
           cat /tmp/gh-aw/chroot-test/host-versions.env
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: "WORKSPACE_PATH=\"${GITHUB_WORKSPACE:-$(pwd)}\"\nNODE_BIN=\"$(command -v node)\"\nsudo tee /usr/local/bin/awf > /dev/null <<EOF\n#!/bin/bash\nexec \"${NODE_BIN}\" \"${WORKSPACE_PATH}/dist/cli.js\" \"\\$@\"\nEOF\nsudo chmod +x /usr/local/bin/awf\n"
       - name: Build local containers
         run: |
           echo "=== Building local containers ==="
@@ -187,31 +193,8 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.402
-      - name: Install awf dependencies
-        run: npm ci
-      - name: Build awf
-        run: npm run build
-      - name: Install awf binary (local)
-        run: |
-          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
-          NODE_BIN="$(command -v node)"
-          if [ ! -d "$WORKSPACE_PATH" ]; then
-            echo "Workspace path not found: $WORKSPACE_PATH"
-            exit 1
-          fi
-          if [ ! -x "$NODE_BIN" ]; then
-            echo "Node binary not found: $NODE_BIN"
-            exit 1
-          fi
-          if [ ! -d "/usr/local/bin" ]; then
-            echo "/usr/local/bin is missing"
-            exit 1
-          fi
-          sudo tee /usr/local/bin/awf > /dev/null <<EOF
-          #!/bin/bash
-          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
-          EOF
-          sudo chmod +x /usr/local/bin/awf
+      - name: Install awf binary
+        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.4
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:
