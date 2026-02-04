@@ -3,37 +3,45 @@
 ## Command-Line Options
 
 ```
-sudo awf [options] <command>
+sudo awf [options] -- <command>
 
 Options:
   --allow-domains <domains>  Comma-separated list of allowed domains (optional)
                              If not specified, all network access is blocked
                              Example: github.com,api.github.com,arxiv.org
   --allow-domains-file <path>  Path to file containing allowed domains
-  --block-domains <domains>  Comma-separated list of blocked domains
-                             Takes precedence over allowed domains
+  --block-domains <domains>    Comma-separated list of blocked domains
+                               Takes precedence over allowed domains
   --block-domains-file <path>  Path to file containing blocked domains
-  --enable-host-access       Enable access to host services via host.docker.internal
-                             (see "Host Access" section for security implications)
-  --ssl-bump                 Enable SSL Bump for HTTPS content inspection
-  --allow-urls <urls>        Comma-separated list of allowed URL patterns (requires --ssl-bump)
-                             Example: https://github.com/myorg/*,https://api.github.com/repos/*
-  --log-level <level>        Log level: debug, info, warn, error (default: info)
-  --keep-containers          Keep containers running after command exits
-  --work-dir <dir>           Working directory for temporary files
-  --dns-servers <servers>    Comma-separated list of DNS servers (default: 8.8.8.8,8.8.4.4)
-  -e, --env <KEY=VALUE>      Additional environment variables (can repeat)
-  --env-all                  Pass all host environment variables to container
-  -v, --mount <path:path>    Volume mount (host_path:container_path[:ro|rw])
-  --tty                      Allocate a pseudo-TTY for interactive tools
-  --build-local              Build containers locally instead of using GHCR images
-  --agent-image <value>      Agent container image (default: "default")
-                             See "Agent Image" section for available options
-  -V, --version              Output the version number
-  -h, --help                 Display help for command
+  --enable-host-access         Enable access to host services via host.docker.internal
+                               (see "Host Access" section for security implications)
+  --allow-host-ports <ports>   Ports to allow when using --enable-host-access
+                               Example: --allow-host-ports 3000,8080 or 3000-3010
+  --ssl-bump                   Enable SSL Bump for HTTPS content inspection
+  --allow-urls <urls>          Comma-separated list of allowed URL patterns (requires --ssl-bump)
+                               Example: https://github.com/myorg/*
+  --enable-chroot              Enable chroot to /host for running host binaries
+                               (Python, Node, Go, etc.) See chroot-mode.md
+  --log-level <level>          Log level: debug, info, warn, error (default: info)
+  --keep-containers            Keep containers running after command exits
+  --work-dir <dir>             Working directory for temporary files
+  --container-workdir <dir>    Working directory inside the container
+  --dns-servers <servers>      Comma-separated list of DNS servers (default: 8.8.8.8,8.8.4.4)
+  --proxy-logs-dir <path>      Directory to save Squid proxy logs to
+  -e, --env <KEY=VALUE>        Additional environment variables (can repeat)
+  --env-all                    Pass all host environment variables to container
+  -v, --mount <path:path>      Volume mount (host_path:container_path[:ro|rw])
+  --tty                        Allocate a pseudo-TTY for interactive tools
+  --build-local                Build containers locally instead of using GHCR images
+  --agent-image <value>        Agent container image (default: "default")
+                               See "Agent Image" section for available options
+  --image-registry <registry>  Container image registry (default: ghcr.io/github/gh-aw-firewall)
+  --image-tag <tag>            Container image tag (default: latest)
+  -V, --version                Output the version number
+  -h, --help                   Display help for command
 
 Arguments:
-  command                    Command to execute (wrap in quotes)
+  command                      Command to execute (wrap in quotes, use -- separator)
 ```
 
 ## Basic Examples
@@ -466,6 +474,22 @@ For complete tool listings with versions, see [Agent Image Tools Reference](/gh-
 - First build with a new base image will take longer (downloading the image)
 - Subsequent builds use Docker cache and are faster
 - The `full-XX.XX` images require significant disk space (~60GB extracted)
+
+## Chroot Mode
+
+The `--enable-chroot` flag enables transparent access to host binaries (Python, Node.js, Go, etc.) while maintaining network isolation. This is useful for GitHub Actions runners with pre-installed tools.
+
+```bash
+# Run with chroot mode to use host binaries
+sudo awf --enable-chroot --allow-domains api.github.com \
+  -- python3 -c "import requests; print(requests.get('https://api.github.com').status_code)"
+
+# Combine with --env-all for environment variables
+sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+  -- bash -c 'echo "Home: $HOME, User: $USER"'
+```
+
+For detailed documentation including security considerations, volume mounts, and troubleshooting, see [Chroot Mode](chroot-mode.md).
 
 ## Limitations
 

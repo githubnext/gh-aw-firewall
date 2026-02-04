@@ -55,7 +55,7 @@ npm link
 awf --version
 ```
 
-You should see: `0.1.0`
+You should see the current version number (e.g., `0.13.1`)
 
 ## Your First Command
 
@@ -178,9 +178,9 @@ awf --allow-domains github.com \
 ## Limitations
 
 ```bash
-# ✗ No wildcard syntax (use base domain instead)
---allow-domains '*.github.com'
---allow-domains github.com        # ✓ matches subdomains automatically
+# ✓ Wildcard syntax is supported
+--allow-domains '*.github.com'    # matches any subdomain of github.com
+--allow-domains github.com        # also matches subdomains automatically
 
 # ✗ No internationalized domains (use punycode)
 --allow-domains bücher.ch
