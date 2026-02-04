@@ -257,6 +257,27 @@ Containers stopped, temporary files cleaned up
   - `.github.com` → matches all subdomains
 - Squid denies any domain not in the allowlist
 
+### Localhost Keyword
+
+The `localhost` keyword provides simplified access to host services for Playwright testing and local development:
+
+**Usage:**
+```bash
+sudo awf --allow-domains localhost,playwright.dev -- npx playwright test
+```
+
+**Automatic configuration when `localhost` is specified:**
+1. Maps `localhost` to `host.docker.internal` (Docker's host gateway)
+2. Enables `--enable-host-access` automatically
+3. Allows common development ports: 3000, 3001, 4000, 4200, 5000, 5173, 8000, 8080, 8081, 8888, 9000, 9090
+4. Preserves protocol prefixes (`http://localhost` → `http://host.docker.internal`)
+
+**Customization:**
+- Use `--allow-host-ports` to override the default port list
+- Example: `--allow-domains localhost --allow-host-ports 3000,8080`
+
+**Security note:** The localhost keyword enables access to host services. Only use for trusted workloads like local testing and development.
+
 ## Exit Code Handling
 
 The wrapper propagates the exit code from the agent container:

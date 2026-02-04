@@ -54,6 +54,31 @@ sudo awf \
   'curl https://api.github.com'
 ```
 
+### Playwright Testing Localhost
+
+Test local web applications with Playwright without complex configuration:
+
+```bash
+# Start your dev server (e.g., npm run dev on port 3000)
+# Then run Playwright tests through the firewall:
+sudo awf \
+  --allow-domains localhost,playwright.dev \
+  'npx playwright test'
+```
+
+The `localhost` keyword automatically:
+- Enables access to host services via `host.docker.internal`
+- Allows common development ports (3000, 4200, 5173, 8080, etc.)
+- Works with both HTTP and HTTPS protocols
+
+You can customize the ports with `--allow-host-ports`:
+```bash
+sudo awf \
+  --allow-domains localhost \
+  --allow-host-ports 3000,8080 \
+  'npx playwright test'
+```
+
 ### With GitHub Copilot CLI
 
 ```bash
