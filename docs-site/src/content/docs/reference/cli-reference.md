@@ -19,7 +19,7 @@ awf [options] -- <command>
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (required unless `--allow-domains-file` used) |
+| `--allow-domains <domains>` | string | — | Comma-separated list of allowed domains (optional; if not specified, all network access is blocked) |
 | `--allow-domains-file <path>` | string | — | Path to file containing allowed domains |
 | `--block-domains <domains>` | string | — | Comma-separated list of blocked domains (takes precedence over allowed) |
 | `--block-domains-file <path>` | string | — | Path to file containing blocked domains |
@@ -48,9 +48,15 @@ awf [options] -- <command>
 
 Comma-separated list of allowed domains. Domains automatically match all subdomains. Supports wildcard patterns and protocol-specific filtering.
 
+**If no domains are specified, all network access is blocked.** This is useful for running commands that should have no network access.
+
 ```bash
+# Allow specific domains
 --allow-domains github.com,npmjs.org
 --allow-domains '*.github.com,api-*.example.com'
+
+# No network access (empty or omitted)
+awf -- echo "offline command"
 ```
 
 #### Protocol-Specific Filtering

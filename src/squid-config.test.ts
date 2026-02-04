@@ -476,6 +476,33 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('access_log /var/log/squid/access.log firewall_detailed');
     });
+
+    it('should filter localhost healthcheck probes from logs', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Squid 5+ uses ACL filter on access_log directive instead of deprecated log_access
+      expect(result).toContain('acl healthcheck_localhost src 127.0.0.1 ::1');
+      expect(result).toContain('access_log /var/log/squid/access.log firewall_detailed !healthcheck_localhost');
+      // Ensure deprecated log_access directive is NOT present (removed in Squid 5+)
+      expect(result).not.toContain('log_access');
+    });
+
+    it('should place healthcheck ACL before access_log directive', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Verify the order: ACL definition comes before access_log that uses it
+      const aclIndex = result.indexOf('acl healthcheck_localhost');
+      const accessLogIndex = result.indexOf('access_log /var/log/squid/access.log firewall_detailed !healthcheck_localhost');
+
+      expect(aclIndex).toBeGreaterThan(-1);
+      expect(accessLogIndex).toBeGreaterThan(aclIndex);
+    });
   });
 
   describe('Streaming/Long-lived Connection Support', () => {
@@ -1372,5 +1399,23 @@ describe('Dangerous ports blocklist in generateSquidConfig', () => {
         allowHostPorts: '7000-7100',
       });
     }).not.toThrow();
+  });
+});
+
+describe('Empty Domain List', () => {
+  it('should generate config that denies all traffic when no domains are specified', () => {
+    const config = {
+      domains: [],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    // Should deny all traffic when no domains are allowed
+    expect(result).toContain('http_access deny all');
+    // Should have a comment indicating no domains configured
+    expect(result).toContain('# No domains configured');
+    // Should not have any allowed_domains ACL
+    expect(result).not.toContain('acl allowed_domains');
+    expect(result).not.toContain('acl allowed_http_only');
+    expect(result).not.toContain('acl allowed_https_only');
   });
 });
