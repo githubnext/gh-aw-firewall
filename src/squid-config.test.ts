@@ -476,6 +476,32 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('access_log /var/log/squid/access.log firewall_detailed');
     });
+
+    it('should filter localhost healthcheck probes from logs', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl healthcheck_localhost src 127.0.0.1 ::1');
+      expect(result).toContain('log_access deny healthcheck_localhost');
+    });
+
+    it('should place healthcheck filter before access_log directive', () => {
+      const config: SquidConfig = {
+        domains: ['example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Verify the order: ACL definition, then log_access deny, then access_log
+      const aclIndex = result.indexOf('acl healthcheck_localhost');
+      const logAccessIndex = result.indexOf('log_access deny healthcheck_localhost');
+      const accessLogIndex = result.indexOf('access_log /var/log/squid/access.log');
+      
+      expect(aclIndex).toBeGreaterThan(-1);
+      expect(logAccessIndex).toBeGreaterThan(aclIndex);
+      expect(accessLogIndex).toBeGreaterThan(logAccessIndex);
+    });
   });
 
   describe('Streaming/Long-lived Connection Support', () => {
