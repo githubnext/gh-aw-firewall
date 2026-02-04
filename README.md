@@ -23,7 +23,10 @@ See [Compatibility](docs/compatibility.md) for full details on supported version
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
+sudo awf --allow-domains github.com -- curl https://api.github.com
 ```
+
+The `--` separator divides firewall options from the command to run.
 
 ### GitHub Copilot CLI in one line
 
