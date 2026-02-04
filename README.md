@@ -133,6 +133,8 @@ sudo awf --help
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
 - [Chroot mode](docs/chroot-mode.md) — use host binaries with network isolation
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
+- [GitHub Actions](docs/github_actions.md) — CI/CD integration and MCP server setup
+- [Environment variables](docs/environment.md) — passing environment variables to containers
 - [Logging quick reference](docs/logging_quickref.md) and [Squid log filtering](docs/squid_log_filtering.md) — view and filter traffic
 - [Security model](docs/security.md) — what the firewall protects and how
 - [Architecture](docs/architecture.md) — how Squid, Docker, and iptables fit together
