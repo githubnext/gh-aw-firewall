@@ -512,7 +512,9 @@ pinger_enable off
 logformat firewall_detailed %ts.%03tu %>a:%>p %{Host}>h %<a:%<p %rv %rm %>Hs %Ss:%Sh %ru "%{User-Agent}>h"
 
 # Access log and cache configuration
-access_log /var/log/squid/access.log firewall_detailed
+# Don't log healthcheck probes from localhost (using ACL filter on access_log)
+acl healthcheck_localhost src 127.0.0.1 ::1
+access_log /var/log/squid/access.log firewall_detailed !healthcheck_localhost
 cache_log /var/log/squid/cache.log
 cache deny all
 

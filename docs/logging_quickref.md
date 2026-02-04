@@ -22,7 +22,7 @@ docker exec awf-squid grep "TCP_TUNNEL\|TCP_MISS" /var/log/squid/access.log
 # From host (requires sudo)
 sudo dmesg | grep FW_BLOCKED
 
-# From copilot container
+# From agent container
 docker exec awf-agent dmesg | grep FW_BLOCKED
 
 # Using journalctl (systemd)
@@ -335,5 +335,6 @@ docker exec awf-squid awk 'NF != 10' /var/log/squid/access.log
 
 ## See Also
 
-- [LOGGING.md](../LOGGING.md) - Complete logging documentation
+- [Squid Log Filtering](squid_log_filtering.md) - Filtering Squid access logs
+- [Troubleshooting](troubleshooting.md) - Common issues and fixes
 - [README.md](../README.md) - Main project documentation
