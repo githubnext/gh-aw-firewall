@@ -4,6 +4,14 @@ module.exports = {
   roots: ['<rootDir>/../integration'],
   testMatch: ['**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  transform: {
+    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.js$': 'babel-jest',
+  },
+  transformIgnorePatterns: [
+    // Transform ESM-only packages (chalk, execa, commander, etc.)
+    'node_modules/(?!(chalk|execa|commander)/)',
+  ],
   collectCoverageFrom: [
     '../integration/**/*.ts',
     '!**/*.test.ts',
