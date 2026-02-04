@@ -21,7 +21,7 @@
 #
 # Build Test Node.js
 #
-# frontmatter-hash: aacf85c55bc6eb73b3135685939f76197e7523392193ff2b910f1c300a0fc6c0
+# frontmatter-hash: 99bef0aa4f8ef6862f12518c00795d4d8b6af6296286d68059476b89f380961b
 
 name: "Build Test Node.js"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test Node.js"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:

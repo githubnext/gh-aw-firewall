@@ -21,7 +21,7 @@
 #
 # Build Test C++
 #
-# frontmatter-hash: c6f87d57c374db40b39cdd0ba9674369010e59e614cb07fdeacac77e173b4746
+# frontmatter-hash: 6d6d9e3536984f9e2b74117ee6ca684a631c272a27bfc4f5dec690379c8bdd61
 
 name: "Build Test C++"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test C++"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:

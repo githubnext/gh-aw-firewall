@@ -35,6 +35,8 @@ safe-outputs:
     run-failure: "**Build Test Failed** [{workflow_name}]({run_url}) - See logs for details"
 timeout-minutes: 30
 strict: true
+env:
+  GH_TOKEN: "${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}"
 ---
 
 # Build Test: Rust
@@ -45,7 +47,8 @@ strict: true
 
 Clone and test the following projects from the test repository:
 
-1. **Clone Repository**: `git clone https://github.com/Mossaka/gh-aw-firewall-test-rust.git /tmp/test-rust`
+1. **Clone Repository**: `gh repo clone Mossaka/gh-aw-firewall-test-rust /tmp/test-rust`
+   - **CRITICAL**: If clone fails, immediately call `safeoutputs-missing_tool` with message "CLONE_FAILED: Unable to clone test repository" and stop execution
 
 2. **Test Projects**:
    - `fd`: `cd /tmp/test-rust/fd && cargo build && cargo test`
@@ -69,3 +72,13 @@ Add a comment to the current pull request with a summary table:
 
 If ALL tests pass, add the label `build-test-rust` to the pull request.
 If ANY test fails, report the failure with error details.
+
+## Error Handling
+
+**CRITICAL**: This workflow MUST fail visibly when errors occur:
+
+1. **Clone failure**: If repository clone fails, call `safeoutputs-missing_tool` with "CLONE_FAILED: [error message]"
+2. **Build failure**: Report in comment table with ❌ and include error output
+3. **Test failure**: Report in comment table with FAIL status and include failure details
+
+DO NOT report success if any step fails. The workflow should produce a clear, actionable error message.

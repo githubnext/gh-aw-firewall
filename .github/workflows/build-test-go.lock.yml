@@ -21,7 +21,7 @@
 #
 # Build Test Go
 #
-# frontmatter-hash: cd7b885a38fc778df945edc6e901348ddb23b8362dc53bcc98bc880e92db25ee
+# frontmatter-hash: 2f8058dacf12d3b862058a1d7158d702c4b00860ad222565fcb3be9f4adf99c6
 
 name: "Build Test Go"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test Go"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:
