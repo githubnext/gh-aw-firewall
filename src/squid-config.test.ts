@@ -483,24 +483,25 @@ describe('generateSquidConfig', () => {
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
+      // Squid 5+ uses ACL filter on access_log directive instead of deprecated log_access
       expect(result).toContain('acl healthcheck_localhost src 127.0.0.1 ::1');
-      expect(result).toContain('log_access deny healthcheck_localhost');
+      expect(result).toContain('access_log /var/log/squid/access.log firewall_detailed !healthcheck_localhost');
+      // Ensure deprecated log_access directive is NOT present (removed in Squid 5+)
+      expect(result).not.toContain('log_access');
     });
 
-    it('should place healthcheck filter before access_log directive', () => {
+    it('should place healthcheck ACL before access_log directive', () => {
       const config: SquidConfig = {
         domains: ['example.com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      // Verify the order: ACL definition, then log_access deny, then access_log
+      // Verify the order: ACL definition comes before access_log that uses it
       const aclIndex = result.indexOf('acl healthcheck_localhost');
-      const logAccessIndex = result.indexOf('log_access deny healthcheck_localhost');
-      const accessLogIndex = result.indexOf('access_log /var/log/squid/access.log');
-      
+      const accessLogIndex = result.indexOf('access_log /var/log/squid/access.log firewall_detailed !healthcheck_localhost');
+
       expect(aclIndex).toBeGreaterThan(-1);
-      expect(logAccessIndex).toBeGreaterThan(aclIndex);
-      expect(accessLogIndex).toBeGreaterThan(logAccessIndex);
+      expect(accessLogIndex).toBeGreaterThan(aclIndex);
     });
   });
 
