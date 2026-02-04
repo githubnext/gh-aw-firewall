@@ -117,7 +117,7 @@ jobs:
         with:
           toolchain: 'stable'
       - name: Capture CARGO_HOME for AWF chroot mode
-        run: '[ -n "$CARGO_HOME" ] && echo "CARGO_HOME=$CARGO_HOME" >> $GITHUB_ENV || true'
+        run: echo "CARGO_HOME=$(echo $HOME/.cargo)" >> $GITHUB_ENV
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
       - name: Configure Git credentials
