@@ -50,6 +50,11 @@
       "version": "v0.40.0",
       "sha": "76d37d925abd44fee97379206f105b74b91a285b"
     },
+    "github/gh-aw/actions/setup@v0.42.0": {
+      "repo": "github/gh-aw/actions/setup",
+      "version": "v0.42.0",
+      "sha": "a7134347103ecf66b4bd422c3e9ce6466d400c02"
+    },
     "softprops/action-gh-release@v1": {
       "repo": "softprops/action-gh-release",
       "version": "v1",
