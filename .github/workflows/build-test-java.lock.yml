@@ -21,7 +21,7 @@
 #
 # Build Test Java
 #
-# frontmatter-hash: c3f5c8718c0982d8651752b28a8d7cfe2fdb62769550c0a593b9e21522aca60d
+# frontmatter-hash: 03a5b8a44629dd2513cc7dda38dfe03f696afb41f1bcafa03fc7dd9f4debf18c
 
 name: "Build Test Java"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test Java"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:

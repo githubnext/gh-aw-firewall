@@ -21,7 +21,7 @@
 #
 # Build Test Bun
 #
-# frontmatter-hash: 906745d65c7563d374e0e90a495fdb64eac39fd1bc615b4ba12a4f6f6fb0191b
+# frontmatter-hash: 2f4301a31bfbc25351b8a0af6b02d4f08de0bc7cfdcbc7a480d4344047bfe341
 
 name: "Build Test Bun"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test Bun"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:

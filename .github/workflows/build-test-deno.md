@@ -35,6 +35,8 @@ safe-outputs:
     run-failure: "**Build Test Failed** [{workflow_name}]({run_url}) - See logs for details"
 timeout-minutes: 15
 strict: true
+env:
+  GH_TOKEN: "${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}"
 ---
 
 # Build Test: Deno
@@ -50,7 +52,8 @@ strict: true
    export PATH="$DENO_INSTALL/bin:$PATH"
    ```
 
-2. **Clone Repository**: `git clone https://github.com/Mossaka/gh-aw-firewall-test-deno.git /tmp/test-deno`
+2. **Clone Repository**: `gh repo clone Mossaka/gh-aw-firewall-test-deno /tmp/test-deno`
+   - **CRITICAL**: If clone fails, immediately call `safeoutputs-missing_tool` with message "CLONE_FAILED: Unable to clone test repository" and stop execution
 
 3. **Test Projects**:
    - `oak`: `cd /tmp/test-deno/oak && deno test`
@@ -73,3 +76,13 @@ Add a comment to the current pull request with a summary table:
 
 If ALL tests pass, add the label `build-test-deno` to the pull request.
 If ANY test fails, report the failure with error details.
+
+## Error Handling
+
+**CRITICAL**: This workflow MUST fail visibly when errors occur:
+
+1. **Clone failure**: If repository clone fails, call `safeoutputs-missing_tool` with "CLONE_FAILED: [error message]"
+2. **Deno install failure**: Call `safeoutputs-missing_tool` with "DENO_INSTALL_FAILED: [error message]"
+3. **Test failure**: Report in comment table with FAIL status and include failure details
+
+DO NOT report success if any step fails. The workflow should produce a clear, actionable error message.

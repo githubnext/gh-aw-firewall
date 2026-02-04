@@ -21,7 +21,7 @@
 #
 # Build Test Deno
 #
-# frontmatter-hash: f31e23cf2341592bc3b077bdf6e86b8b16bc45c95e42f61819bdbece33a8a84d
+# frontmatter-hash: bfb4bcac6539c4dbbab1691bb87bd0b77e8872cd1568fd8ab757bb449e70a304
 
 name: "Build Test Deno"
 "on":
@@ -39,6 +39,9 @@ concurrency:
   cancel-in-progress: true
 
 run-name: "Build Test Deno"
+
+env:
+  GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
 
 jobs:
   activation:
