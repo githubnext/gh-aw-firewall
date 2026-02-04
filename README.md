@@ -21,16 +21,9 @@ See [Compatibility](docs/compatibility.md) for full details on supported version
 
 ## Get started fast
 
-- **Prerequisite:** Docker is running
-- **Install:**
-  ```bash
-  curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
-  ```
-- **Run your first command:**
-  ```bash
-  sudo awf --allow-domains github.com -- curl https://api.github.com
-  ```
-  The `--` separator passes the command you want to run behind the firewall.
+```bash
+curl -sSL https://raw.githubusercontent.com/github/gh-aw-firewall/main/install.sh | sudo bash
+```
 
 ### GitHub Copilot CLI in one line
 
