@@ -37,6 +37,8 @@ Options:
                                See "Agent Image" section for available options
   --image-registry <registry>  Container image registry (default: ghcr.io/github/gh-aw-firewall)
   --image-tag <tag>            Container image tag (default: latest)
+  --skip-pull                  Use local images without pulling from registry
+                               (requires images to be pre-downloaded)
   -V, --version                Output the version number
   -h, --help                   Display help for command
 
@@ -499,6 +501,89 @@ For complete tool listings with versions, see [Agent Image Tools Reference](/gh-
 - First build with a new base image will take longer (downloading the image)
 - Subsequent builds use Docker cache and are faster
 - The `full-XX.XX` images require significant disk space (~60GB extracted)
+
+## Using Pre-Downloaded Images
+
+For offline environments, air-gapped systems, or CI pipelines with image caching, you can use the `--skip-pull` flag to prevent awf from pulling images from the registry. This requires images to be pre-downloaded locally.
+
+### Basic Usage
+
+```bash
+# Pre-download images first
+docker pull ghcr.io/github/gh-aw-firewall/squid:latest
+docker pull ghcr.io/github/gh-aw-firewall/agent:latest
+
+# Use pre-downloaded images without pulling
+sudo awf --skip-pull --allow-domains github.com -- curl https://api.github.com
+```
+
+### Use Cases
+
+**Offline/Air-Gapped Environments:**
+```bash
+# Download images on a connected machine
+docker pull ghcr.io/github/gh-aw-firewall/squid:latest
+docker pull ghcr.io/github/gh-aw-firewall/agent:latest
+docker save ghcr.io/github/gh-aw-firewall/squid:latest > squid.tar
+docker save ghcr.io/github/gh-aw-firewall/agent:latest > agent.tar
+
+# Transfer tar files to air-gapped system, then:
+docker load < squid.tar
+docker load < agent.tar
+
+# Run without network access to registry
+sudo awf --skip-pull --allow-domains github.com -- your-command
+```
+
+**CI Pipeline Image Caching:**
+```yaml
+# GitHub Actions example
+- name: Cache Docker images
+  uses: actions/cache@v4
+  with:
+    path: /var/lib/docker
+    key: docker-images-${{ hashFiles('**/Dockerfile') }}
+
+- name: Pre-pull images (only if cache miss)
+  if: steps.cache.outputs.cache-hit != 'true'
+  run: |
+    docker pull ghcr.io/github/gh-aw-firewall/squid:latest
+    docker pull ghcr.io/github/gh-aw-firewall/agent:latest
+
+- name: Run awf with cached images
+  run: |
+    sudo awf --skip-pull --allow-domains github.com -- your-command
+```
+
+**Using Specific Versions:**
+```bash
+# Pre-download specific version
+docker pull ghcr.io/github/gh-aw-firewall/squid:v0.13.0
+docker pull ghcr.io/github/gh-aw-firewall/agent:v0.13.0
+
+# Tag as latest for awf to use
+docker tag ghcr.io/github/gh-aw-firewall/squid:v0.13.0 ghcr.io/github/gh-aw-firewall/squid:latest
+docker tag ghcr.io/github/gh-aw-firewall/agent:v0.13.0 ghcr.io/github/gh-aw-firewall/agent:latest
+
+# Use with --skip-pull
+sudo awf --skip-pull --allow-domains github.com -- your-command
+```
+
+### Important Notes
+
+- **Images must be pre-downloaded**: Using `--skip-pull` without having the required images will cause Docker to fail
+- **Version compatibility**: Ensure pre-downloaded image versions match the awf version you're using
+- **Not compatible with --build-local**: The `--skip-pull` flag cannot be used with `--build-local` since building requires pulling base images
+- **Default images only**: This works with preset images (`default`, `act`). Custom base images require `--build-local` and cannot use `--skip-pull`
+
+### Error Handling
+
+If images are not available locally when using `--skip-pull`, you'll see an error like:
+```
+Error: unable to find image 'ghcr.io/github/gh-aw-firewall/agent:latest' locally
+```
+
+To fix this, remove `--skip-pull` to allow automatic pulling, or pre-download the images first.
 
 ## Chroot Mode
 
