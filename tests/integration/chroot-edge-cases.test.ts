@@ -272,15 +272,22 @@ describe('Chroot Edge Cases', () => {
     }, 60000);
 
     test('should block HTTP to non-whitelisted domains', async () => {
-      const result = await runner.runWithSudo('curl -s --connect-timeout 5 http://example.com 2>&1', {
+      const result = await runner.runWithSudo('curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://example.com 2>&1 || true', {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 30000,
         enableChroot: true,
       });
 
-      // Should fail or timeout
-      expect(result).toFail();
+      // In intercept mode, Squid returns 403 for blocked HTTP domains.
+      // If the request fails entirely (connection refused/timeout), that also counts as blocked.
+      // We check stdout for the HTTP status code or a non-200 result.
+      if (result.success) {
+        // AWF succeeded (exit 0) — check the HTTP status code in output
+        // It should NOT be 200 (should be 403 or 000 for connection failure)
+        expect(result.stdout).not.toContain('200');
+      }
+      // If AWF failed (non-zero exit), the request was blocked — test passes
     }, 60000);
   });
 
