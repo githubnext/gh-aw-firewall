@@ -25,7 +25,7 @@
 #   Imports:
 #     - shared/mcp-pagination.md
 #
-# frontmatter-hash: f71ae93514bc6d8288ca00db26343a04c1f1d793eba3941217934bf1a57d0526
+# frontmatter-hash: df3c0218b02e43f915529156168765b5c6d58b9d713731cff2a90ab60c8f49d0
 
 name: "Smoke Claude"
 "on":
@@ -116,16 +116,13 @@ jobs:
         uses: github/gh-aw/actions/setup@a7134347103ecf66b4bd422c3e9ce6466d400c02 # v0.42.0
         with:
           destination: /opt/gh-aw/actions
-      - name: Checkout .github and .agents folders
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-        with:
-          sparse-checkout: |
-            .github
-            .agents
-          depth: 1
-          persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          persist-credentials: false
+
       # Cache memory file share configuration from frontmatter processed below
       - name: Create cache-memory directory
         run: bash /opt/gh-aw/actions/create_cache_memory_dir.sh
@@ -173,8 +170,31 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.5
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Install Claude Code CLI
         run: npm install -g --silent @anthropic-ai/claude-code@2.1.29
       - name: Determine automatic lockdown mode for GitHub MCP server

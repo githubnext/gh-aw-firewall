@@ -48,6 +48,11 @@ safe-outputs:
       run-success: "🎬 **THE END** — [{workflow_name}]({run_url}) **MISSION: ACCOMPLISHED!** The hero saves the day! ✨"
       run-failure: "💫 **TO BE CONTINUED...** [{workflow_name}]({run_url}) {status}! Our hero faces unexpected challenges..."
 timeout-minutes: 10
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+    with:
+      persist-credentials: false
 ---
 
 # Smoke Test: Claude Engine Validation

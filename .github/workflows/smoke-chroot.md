@@ -44,6 +44,12 @@ safe-outputs:
       run-failure: "**Chroot tests failed** [{workflow_name}]({run_url}) {status} - See logs for details."
 timeout-minutes: 20
 steps:
+  - name: Checkout repository
+    uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+    with:
+      persist-credentials: false
+  - name: Fix Copilot CLI directory permissions
+    run: mkdir -p /home/runner/.copilot && sudo chown -R runner:runner /home/runner/.copilot
   - name: Setup Go
     uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
     with:

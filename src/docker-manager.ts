@@ -319,16 +319,16 @@ export function generateDockerCompose(
     'SUDO_USER',      // Sudo metadata
     'SUDO_UID',       // Sudo metadata
     'SUDO_GID',       // Sudo metadata
-    'HTTP_PROXY',     // Intercept mode handles routing; explicit proxy is unreachable
-    'HTTPS_PROXY',    // Intercept mode handles routing; explicit proxy is unreachable
+    'HTTP_PROXY',     // Intercept mode handles HTTP routing via iptables DNAT
     'http_proxy',     // Lowercase variant
-    'https_proxy',    // Lowercase variant
+    'https_proxy',    // Lowercase variant — AWF sets HTTPS_PROXY explicitly; prevent host conflicts
   ]);
 
   // Start with required/overridden environment variables
   // For chroot mode, use the real user's home (not /root when running with sudo)
   const homeDir = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const environment: Record<string, string> = {
+    HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
@@ -354,6 +354,10 @@ export function generateDockerCompose(
     // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
     if (process.env.JAVA_HOME) {
       environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
+    }
+    // Bun: Pass BUN_INSTALL so entrypoint can add $BUN_INSTALL/bin to PATH
+    if (process.env.BUN_INSTALL) {
+      environment.AWF_BUN_INSTALL = process.env.BUN_INSTALL;
     }
   }
 
@@ -471,7 +475,9 @@ export function generateDockerCompose(
       '/etc/passwd:/host/etc/passwd:ro',                   // User database (needed for getent/user lookup)
       '/etc/group:/host/etc/group:ro',                     // Group database (needed for getent/group lookup)
       '/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro',     // Name service switch config
-      '/etc/hosts:/host/etc/hosts:ro',                     // Host name resolution (localhost, etc.) Note: won't include Docker extra_hosts like host.docker.internal
+      // Note: /etc/hosts is NOT mounted here. The entrypoint copies the container's /etc/hosts
+      // (which includes Docker extra_hosts like host.docker.internal) to /host/etc/hosts at runtime.
+      // This avoids modifying the host's actual /etc/hosts file.
     );
 
     // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'
