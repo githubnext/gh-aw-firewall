@@ -155,6 +155,11 @@ http_port 3128 ssl-bump \\
   dynamic_cert_mem_cache_size=16MB \\
   options=NO_SSLv3,NO_TLSv1,NO_TLSv1_1
 
+# Intercept port for NAT-redirected transparent proxy traffic
+# Traffic is DNAT'd here by iptables. Squid uses "intercept" mode to handle
+# relative URLs (GET /path) by extracting the destination from the Host header.
+http_port 3129 intercept
+
 # SSL certificate database for dynamic certificate generation
 # Using 16MB for certificate cache (sufficient for typical AI agent sessions)
 sslcrtd_program /usr/lib/squid/security_file_certgen -s ${sslDbPath} -M 16MB
