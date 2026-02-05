@@ -37,6 +37,11 @@ timeout-minutes: 15
 strict: true
 env:
   GH_TOKEN: "${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}"
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+    with:
+      persist-credentials: false
 ---
 
 # Build Test: Node.js

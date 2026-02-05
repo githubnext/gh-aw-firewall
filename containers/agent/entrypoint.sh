@@ -115,12 +115,11 @@ fi
 /usr/local/bin/setup-iptables.sh
 
 # Print proxy environment
-echo "[entrypoint] Proxy configuration: intercept mode (iptables DNAT 80/443 -> squid:${SQUID_INTERCEPT_PORT})"
+echo "[entrypoint] Proxy configuration:"
+echo "[entrypoint]   HTTP: intercept mode (iptables DNAT 80 -> squid:${SQUID_INTERCEPT_PORT})"
+echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
 if [ -n "$HTTP_PROXY" ]; then
-  echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY (user-provided)"
-fi
-if [ -n "$HTTPS_PROXY" ]; then
-  echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY (user-provided)"
+  echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY (user-provided override)"
 fi
 
 # Print network information
@@ -189,6 +188,18 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
     fi
   fi
 
+  # Copy container's /etc/hosts to /host/etc/hosts (preserves Docker extra_hosts like host.docker.internal)
+  # Docker adds extra_hosts entries (e.g., host.docker.internal) to the container's /etc/hosts,
+  # but the host's /etc/hosts doesn't have them. We copy the container's version to the overlay
+  # filesystem at /host/etc/hosts (not a bind mount, so this doesn't modify the real host).
+  HOSTS_CREATED=false
+  if cp /etc/hosts /host/etc/hosts 2>/dev/null; then
+    HOSTS_CREATED=true
+    echo "[entrypoint] Hosts configuration copied to chroot (includes host.docker.internal)"
+  else
+    echo "[entrypoint][WARN] Could not copy hosts configuration to chroot"
+  fi
+
   # Determine working directory inside the chroot
   # AWF_WORKDIR is set by docker-manager.ts (containerWorkDir or HOME)
   # For chroot mode, paths like /home/user stay the same (no /host prefix)
@@ -248,6 +259,12 @@ AWFEOF
       # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
       echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
     fi
+    # Bun: Add BUN_INSTALL/bin to PATH if provided (for Bun on GitHub Actions)
+    if [ -n "${AWF_BUN_INSTALL}" ]; then
+      echo "[entrypoint] Adding BUN_INSTALL/bin to PATH: ${AWF_BUN_INSTALL}/bin"
+      echo "export PATH=\"${AWF_BUN_INSTALL}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export BUN_INSTALL=\"${AWF_BUN_INSTALL}\"" >> "/host${SCRIPT_FILE}"
+    fi
     # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
     # This ensures the correct Go version is found even if AWF_HOST_PATH has wrong ordering
     if [ -n "${AWF_GOROOT}" ]; then
@@ -292,8 +309,8 @@ AWFEOF
   # Note: We use capsh inside the chroot because it handles the privilege drop
   # and user switch atomically. The host must have capsh installed.
 
-  # Build cleanup command that restores resolv.conf if it was modified or created
-  # The backup path uses the chroot perspective (no /host prefix)
+  # Build cleanup command that restores resolv.conf and /etc/hosts if they were modified
+  # The backup paths use the chroot perspective (no /host prefix)
   CLEANUP_CMD="rm -f ${SCRIPT_FILE}"
   if [ "$RESOLV_MODIFIED" = "true" ]; then
     # Convert backup path from container perspective (/host/etc/...) to chroot perspective (/etc/...)
@@ -305,6 +322,7 @@ AWFEOF
     CLEANUP_CMD="${CLEANUP_CMD}; rm -f /etc/resolv.conf 2>/dev/null || true"
     echo "[entrypoint] DNS configuration will be removed on exit"
   fi
+  # /etc/hosts cleanup not needed — written to container overlay, not host filesystem
 
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
