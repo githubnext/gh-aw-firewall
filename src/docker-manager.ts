@@ -713,6 +713,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     domains: config.allowedDomains,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
+    interceptPort: SQUID_INTERCEPT_PORT,
     sslBump: config.sslBump,
     caFiles: sslConfig?.caFiles,
     sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,
