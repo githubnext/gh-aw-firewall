@@ -166,15 +166,27 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   # NOTE: We backup the host's original resolv.conf and set up a trap to restore it
   RESOLV_BACKUP="/host/etc/resolv.conf.awf-backup-$$"
   RESOLV_MODIFIED=false
-  if cp /host/etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null; then
-    if cp /etc/resolv.conf /host/etc/resolv.conf.awf 2>/dev/null; then
-      mv /host/etc/resolv.conf.awf /host/etc/resolv.conf 2>/dev/null && RESOLV_MODIFIED=true
-      echo "[entrypoint] DNS configuration copied to chroot (backup at $RESOLV_BACKUP)"
+  RESOLV_CREATED=false
+  if [ -f /host/etc/resolv.conf ]; then
+    # File exists: backup original and replace
+    if cp /host/etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null; then
+      if cp /etc/resolv.conf /host/etc/resolv.conf.awf 2>/dev/null; then
+        mv /host/etc/resolv.conf.awf /host/etc/resolv.conf 2>/dev/null && RESOLV_MODIFIED=true
+        echo "[entrypoint] DNS configuration copied to chroot (backup at $RESOLV_BACKUP)"
+      else
+        echo "[entrypoint][WARN] Could not copy DNS configuration to chroot"
+      fi
     else
-      echo "[entrypoint][WARN] Could not copy DNS configuration to chroot"
+      echo "[entrypoint][WARN] Could not backup host resolv.conf, skipping DNS override"
     fi
   else
-    echo "[entrypoint][WARN] Could not backup host resolv.conf, skipping DNS override"
+    # File doesn't exist: create it (selective /etc mounts don't include resolv.conf)
+    if cp /etc/resolv.conf /host/etc/resolv.conf 2>/dev/null; then
+      RESOLV_CREATED=true
+      echo "[entrypoint] DNS configuration created in chroot (/host/etc/resolv.conf)"
+    else
+      echo "[entrypoint][WARN] Could not create DNS configuration in chroot"
+    fi
   fi
 
   # Determine working directory inside the chroot
@@ -280,7 +292,7 @@ AWFEOF
   # Note: We use capsh inside the chroot because it handles the privilege drop
   # and user switch atomically. The host must have capsh installed.
 
-  # Build cleanup command that restores resolv.conf if it was modified
+  # Build cleanup command that restores resolv.conf if it was modified or created
   # The backup path uses the chroot perspective (no /host prefix)
   CLEANUP_CMD="rm -f ${SCRIPT_FILE}"
   if [ "$RESOLV_MODIFIED" = "true" ]; then
@@ -288,6 +300,10 @@ AWFEOF
     CHROOT_RESOLV_BACKUP="${RESOLV_BACKUP#/host}"
     CLEANUP_CMD="${CLEANUP_CMD}; mv '${CHROOT_RESOLV_BACKUP}' /etc/resolv.conf 2>/dev/null || true"
     echo "[entrypoint] DNS configuration will be restored on exit"
+  elif [ "$RESOLV_CREATED" = "true" ]; then
+    # File was created by us; remove it on exit to leave no trace
+    CLEANUP_CMD="${CLEANUP_CMD}; rm -f /etc/resolv.conf 2>/dev/null || true"
+    echo "[entrypoint] DNS configuration will be removed on exit"
   fi
 
   exec chroot /host /bin/bash -c "

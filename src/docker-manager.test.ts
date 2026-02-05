@@ -559,6 +559,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
       expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
       expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
+      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
@@ -611,6 +612,14 @@ describe('docker-manager', () => {
 
       expect(agent.cap_add).toContain('NET_ADMIN');
       expect(agent.cap_add).not.toContain('SYS_CHROOT');
+    });
+
+    it('should not mount /etc/hosts under /host when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      expect(volumes).not.toContain('/etc/hosts:/host/etc/hosts:ro');
     });
 
     it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
@@ -713,6 +722,19 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/passwd:/host/etc/passwd:ro');
       expect(volumes).toContain('/etc/group:/host/etc/group:ro');
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
+    });
+
+    it('should mount /etc/hosts for hostname resolution in chroot mode', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // /etc/hosts is needed for localhost resolution inside chroot
+      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
     });
 
     it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {

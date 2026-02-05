@@ -471,6 +471,7 @@ export function generateDockerCompose(
       '/etc/passwd:/host/etc/passwd:ro',                   // User database (needed for getent/user lookup)
       '/etc/group:/host/etc/group:ro',                     // Group database (needed for getent/group lookup)
       '/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro',     // Name service switch config
+      '/etc/hosts:/host/etc/hosts:ro',                     // Host name resolution (localhost, etc.) Note: won't include Docker extra_hosts like host.docker.internal
     );
 
     // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'
