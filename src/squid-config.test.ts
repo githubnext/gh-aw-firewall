@@ -1120,6 +1120,27 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('http_port 3128');
       expect(result).not.toContain('https_port');
     });
+
+    it('should add intercept port when specified', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: 3128,
+        interceptPort: 3129,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128');
+      expect(result).toContain('http_port 3129 intercept');
+    });
+
+    it('should not add intercept port when not specified', () => {
+      const config: SquidConfig = {
+        domains: ['github.com'],
+        port: 3128,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('http_port 3128');
+      expect(result).not.toContain('intercept');
+    });
   });
 });
 

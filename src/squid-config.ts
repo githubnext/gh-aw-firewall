@@ -155,6 +155,11 @@ http_port 3128 ssl-bump \\
   dynamic_cert_mem_cache_size=16MB \\
   options=NO_SSLv3,NO_TLSv1,NO_TLSv1_1
 
+# Intercept port for NAT-redirected transparent proxy traffic
+# Traffic is DNAT'd here by iptables. Squid uses "intercept" mode to handle
+# relative URLs (GET /path) by extracting the destination from the Host header.
+http_port 3129 intercept
+
 # SSL certificate database for dynamic certificate generation
 # Using 16MB for certificate cache (sufficient for typical AI agent sessions)
 sslcrtd_program /usr/lib/squid/security_file_certgen -s ${sslDbPath} -M 16MB
@@ -205,7 +210,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
+  const { domains, blockedDomains, port, interceptPort, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -408,10 +413,16 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Generate SSL Bump section if enabled
   let sslBumpSection = '';
-  // Port configuration: Use normal proxy mode (not intercept mode)
-  // With targeted port redirection in iptables, traffic is explicitly redirected
-  // to Squid on specific ports (80, 443, + user-specified), maintaining defense-in-depth
+  // Port configuration:
+  // - Regular port (3128): For explicit proxy usage via HTTP_PROXY/HTTPS_PROXY env vars
+  //   Clients aware of the proxy send absolute URLs (GET http://example.com/path)
+  // - Intercept port (3129): For NAT-redirected transparent proxy traffic
+  //   Traffic is DNAT'd here by iptables. Squid uses "intercept" mode to handle
+  //   relative URLs (GET /path) by extracting the destination from the Host header.
   let portConfig = `http_port ${port}`;
+  if (interceptPort) {
+    portConfig += `\nhttp_port ${interceptPort} intercept`;
+  }
 
   // For SSL Bump, we need to check hasPlainDomains and hasPatterns for the 'both' protocol domains
   // since those are the ones that go into allowed_domains / allowed_domains_regex ACLs

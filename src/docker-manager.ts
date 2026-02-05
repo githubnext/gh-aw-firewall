@@ -267,7 +267,7 @@ export function generateDockerCompose(
     },
     volumes: squidVolumes,
     healthcheck: {
-      test: ['CMD', 'nc', '-z', 'localhost', '3128'],
+      test: ['CMD-SHELL', 'nc -z localhost 3128 && nc -z localhost 3129'],
       interval: '5s',
       timeout: '3s',
       retries: 5,
@@ -713,6 +713,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     domains: config.allowedDomains,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
+    interceptPort: SQUID_INTERCEPT_PORT,
     sslBump: config.sslBump,
     caFiles: sslConfig?.caFiles,
     sslDbPath: sslConfig ? '/var/spool/squid_ssl_db' : undefined,

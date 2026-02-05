@@ -474,6 +474,21 @@ export interface SquidConfig {
    * @example "3000-3010,8000-8090"
    */
   allowHostPorts?: string;
+
+  /**
+   * Port number for transparently intercepted traffic (NAT/DNAT redirected)
+   *
+   * When traffic is redirected via iptables NAT (DNAT) to Squid, it arrives
+   * as "transparent" traffic - the client doesn't know it's talking to a proxy.
+   * This requires Squid's "intercept" mode which handles relative URLs and
+   * reconstructs the original destination from the Host header.
+   *
+   * This port should be used for NAT-redirected traffic, while the regular
+   * `port` is used for explicit proxy connections (HTTP_PROXY env var).
+   *
+   * @default 3129
+   */
+  interceptPort?: number;
 }
 
 /**
