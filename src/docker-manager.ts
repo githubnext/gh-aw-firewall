@@ -319,14 +319,16 @@ export function generateDockerCompose(
     'SUDO_USER',      // Sudo metadata
     'SUDO_UID',       // Sudo metadata
     'SUDO_GID',       // Sudo metadata
+    'HTTP_PROXY',     // Intercept mode handles routing; explicit proxy is unreachable
+    'HTTPS_PROXY',    // Intercept mode handles routing; explicit proxy is unreachable
+    'http_proxy',     // Lowercase variant
+    'https_proxy',    // Lowercase variant
   ]);
 
   // Start with required/overridden environment variables
   // For chroot mode, use the real user's home (not /root when running with sudo)
   const homeDir = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const environment: Record<string, string> = {
-    HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-    HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),

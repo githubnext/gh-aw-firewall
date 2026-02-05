@@ -115,9 +115,13 @@ fi
 /usr/local/bin/setup-iptables.sh
 
 # Print proxy environment
-echo "[entrypoint] Proxy configuration:"
-echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY"
-echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
+echo "[entrypoint] Proxy configuration: intercept mode (iptables DNAT 80/443 -> squid:${SQUID_INTERCEPT_PORT})"
+if [ -n "$HTTP_PROXY" ]; then
+  echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY (user-provided)"
+fi
+if [ -n "$HTTPS_PROXY" ]; then
+  echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY (user-provided)"
+fi
 
 # Print network information
 echo "[entrypoint] Network information:"

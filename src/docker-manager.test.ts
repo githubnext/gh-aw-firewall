@@ -479,10 +479,12 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const env = agent.environment as Record<string, string>;
 
-      expect(env.HTTP_PROXY).toBe('http://172.30.0.10:3128');
-      expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
+      // HTTP_PROXY/HTTPS_PROXY are NOT set; intercept mode (iptables DNAT) handles routing
+      expect(env.HTTP_PROXY).toBeUndefined();
+      expect(env.HTTPS_PROXY).toBeUndefined();
       expect(env.SQUID_PROXY_HOST).toBe('squid-proxy');
       expect(env.SQUID_PROXY_PORT).toBe('3128');
+      expect(env.SQUID_INTERCEPT_PORT).toBe('3129');
     });
 
     it('should mount required volumes in agent container (default behavior)', () => {
@@ -922,6 +924,51 @@ describe('docker-manager', () => {
         expect(env.CUSTOM_HOST_VAR).toBe('test_value');
       } finally {
         delete process.env.CUSTOM_HOST_VAR;
+      }
+    });
+
+    it('should exclude proxy env vars when envAll is enabled', () => {
+      const originalHttpProxy = process.env.HTTP_PROXY;
+      const originalHttpsProxy = process.env.HTTPS_PROXY;
+      const originalHttpProxyLower = process.env.http_proxy;
+      const originalHttpsProxyLower = process.env.https_proxy;
+
+      process.env.HTTP_PROXY = 'http://host-proxy:8080';
+      process.env.HTTPS_PROXY = 'http://host-proxy:8080';
+      process.env.http_proxy = 'http://host-proxy:8080';
+      process.env.https_proxy = 'http://host-proxy:8080';
+
+      try {
+        const configWithEnvAll = { ...mockConfig, envAll: true };
+        const result = generateDockerCompose(configWithEnvAll, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        // Proxy vars must NOT leak from host (intercept mode handles routing)
+        expect(env.HTTP_PROXY).toBeUndefined();
+        expect(env.HTTPS_PROXY).toBeUndefined();
+        expect(env.http_proxy).toBeUndefined();
+        expect(env.https_proxy).toBeUndefined();
+      } finally {
+        if (originalHttpProxy !== undefined) {
+          process.env.HTTP_PROXY = originalHttpProxy;
+        } else {
+          delete process.env.HTTP_PROXY;
+        }
+        if (originalHttpsProxy !== undefined) {
+          process.env.HTTPS_PROXY = originalHttpsProxy;
+        } else {
+          delete process.env.HTTPS_PROXY;
+        }
+        if (originalHttpProxyLower !== undefined) {
+          process.env.http_proxy = originalHttpProxyLower;
+        } else {
+          delete process.env.http_proxy;
+        }
+        if (originalHttpsProxyLower !== undefined) {
+          process.env.https_proxy = originalHttpsProxyLower;
+        } else {
+          delete process.env.https_proxy;
+        }
       }
     });
 
