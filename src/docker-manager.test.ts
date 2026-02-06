@@ -743,6 +743,42 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
+    it('should mount writable chroot-hosts when enableChroot and enableHostAccess are true', () => {
+      // Ensure workDir exists for chroot-hosts file creation
+      fs.mkdirSync(mockConfig.workDir, { recursive: true });
+      try {
+        const config = {
+          ...mockConfig,
+          enableChroot: true,
+          enableHostAccess: true
+        };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const agent = result.services.agent;
+        const volumes = agent.volumes as string[];
+
+        // Should mount a writable copy of /etc/hosts (not the read-only original)
+        const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
+        expect(hostsVolume).toBeDefined();
+        expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts');
+        expect(hostsVolume).not.toContain(':ro');
+      } finally {
+        fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should mount read-only /etc/hosts when enableChroot is true but enableHostAccess is false', () => {
+      const config = {
+        ...mockConfig,
+        enableChroot: true,
+        enableHostAccess: false
+      };
+      const result = generateDockerCompose(config, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
+    });
+
     it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
       const configWithChroot = {
         ...mockConfig,
