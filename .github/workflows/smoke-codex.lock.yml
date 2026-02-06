@@ -182,31 +182,8 @@ jobs:
           package-manager-cache: false
       - name: Install Codex
         run: npm install -g --silent @openai/codex@0.98.0
-      - name: Install awf dependencies
-        run: npm ci
-      - name: Build awf
-        run: npm run build
-      - name: Install awf binary (local)
-        run: |
-          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
-          NODE_BIN="$(command -v node)"
-          if [ ! -d "$WORKSPACE_PATH" ]; then
-            echo "Workspace path not found: $WORKSPACE_PATH"
-            exit 1
-          fi
-          if [ ! -x "$NODE_BIN" ]; then
-            echo "Node binary not found: $NODE_BIN"
-            exit 1
-          fi
-          if [ ! -d "/usr/local/bin" ]; then
-            echo "/usr/local/bin is missing"
-            exit 1
-          fi
-          sudo tee /usr/local/bin/awf > /dev/null <<EOF
-          #!/bin/bash
-          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
-          EOF
-          sudo chmod +x /usr/local/bin/awf
+      - name: Install awf binary
+        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.7
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:
@@ -1479,7 +1456,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$CODEX_HOME/logs"
-          sudo -E awf --enable-chroot --env-all --container-workdir "${GITHUB_WORKSPACE}" --allow-domains '*.githubusercontent.com,172.30.0.1,api.openai.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,cdn.playwright.dev,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.githubassets.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,mcp.tavily.com,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,openai.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,playwright.download.prss.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,s.symcb.com,s.symcd.com,security.ubuntu.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --enable-host-access --build-local \
+          sudo -E awf --enable-chroot --env-all --container-workdir "${GITHUB_WORKSPACE}" --allow-domains '*.githubusercontent.com,172.30.0.1,api.openai.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,cdn.playwright.dev,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.githubassets.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,mcp.tavily.com,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,openai.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,playwright.download.prss.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,s.symcb.com,s.symcd.com,security.ubuntu.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com' --log-level info --proxy-logs-dir /tmp/gh-aw/sandbox/firewall/logs --enable-host-access --image-tag 0.13.7 --skip-pull \
             -- /bin/bash -c 'export PATH="$(find /opt/hostedtoolcache -maxdepth 4 -type d -name bin 2>/dev/null | tr '\''\n'\'' '\'':'\'')$PATH" && INSTRUCTION="$(cat /tmp/gh-aw/aw-prompts/prompt.txt)" && codex ${GH_AW_MODEL_AGENT_CODEX:+-c model="$GH_AW_MODEL_AGENT_CODEX" }exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "$INSTRUCTION"' \
             2>&1 | tee /tmp/gh-aw/agent-stdio.log
         env:
