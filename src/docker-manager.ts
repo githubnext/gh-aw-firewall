@@ -566,6 +566,7 @@ export function generateDockerCompose(
   // Enable host.docker.internal for agent when --enable-host-access is set
   if (config.enableHostAccess) {
     agentService.extra_hosts = ['host.docker.internal:host-gateway'];
+    environment.AWF_ENABLE_HOST_ACCESS = '1';
   }
 
   // Use GHCR image or build locally
