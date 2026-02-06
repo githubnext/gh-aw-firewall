@@ -27,9 +27,6 @@
         "acct",
         "swapon",
         "swapoff",
-        "mount",
-        "umount",
-        "umount2",
         "pivot_root",
         "syslog",
         "add_key",
@@ -47,6 +44,15 @@
       ],
       "action": "SCMP_ACT_ERRNO",
       "errnoRet": 1
+    },
+    {
+      "names": [
+        "umount",
+        "umount2"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block unmounting filesystems - mount is allowed for procfs but unmount is not needed"
     }
   ]
 }
