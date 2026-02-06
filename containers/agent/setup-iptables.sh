@@ -142,7 +142,7 @@ if [ -n "$AWF_ENABLE_HOST_ACCESS" ]; then
   if [ -n "$NETWORK_GATEWAY_IP" ] && [ "$NETWORK_GATEWAY_IP" != "$HOST_GATEWAY_IP" ]; then
     echo "[iptables] Allow direct traffic to network gateway (${NETWORK_GATEWAY_IP}) - bypassing Squid..."
     iptables -t nat -A OUTPUT -d "$NETWORK_GATEWAY_IP" -j RETURN
-    iptables -A OUTPUT -d "$NETWORK_GATEWAY_IP" -j ACCEPT
+    iptables -A OUTPUT -p tcp -d "$NETWORK_GATEWAY_IP" --dport 80 -j ACCEPT
   fi
 fi
 
