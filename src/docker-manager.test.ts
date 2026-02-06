@@ -774,7 +774,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
-    it('should mount writable chroot-hosts when enableChroot and enableHostAccess are true', () => {
+    it('should mount read-only chroot-hosts when enableChroot and enableHostAccess are true', () => {
       // Ensure workDir exists for chroot-hosts file creation
       fs.mkdirSync(mockConfig.workDir, { recursive: true });
       try {
@@ -787,11 +787,10 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const volumes = agent.volumes as string[];
 
-        // Should mount a writable copy of /etc/hosts (not the read-only original)
+        // Should mount a read-only copy of /etc/hosts with host.docker.internal pre-injected
         const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
         expect(hostsVolume).toBeDefined();
-        expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts');
-        expect(hostsVolume).not.toContain(':ro');
+        expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts:ro');
       } finally {
         fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
       }
