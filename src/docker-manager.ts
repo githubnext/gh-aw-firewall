@@ -488,20 +488,32 @@ export function generateDockerCompose(
     );
 
     // Mount /etc/hosts for host name resolution inside chroot
-    // When BOTH chroot and host access are enabled, we mount a writable COPY so the entrypoint
-    // can inject host.docker.internal (Docker only adds it to the container's
-    // /etc/hosts via extra_hosts, but chroot uses the host's /etc/hosts)
+    // When BOTH chroot and host access are enabled, we create a copy with host.docker.internal
+    // injected. Docker only adds this to the container's /etc/hosts via extra_hosts, but the
+    // chroot uses the host's /etc/hosts which lacks this entry. MCP servers need it to connect
+    // to the MCP gateway running on the host.
     if (config.enableHostAccess) {
       const chrootHostsPath = path.join(config.workDir, 'chroot-hosts');
       try {
         fs.copyFileSync('/etc/hosts', chrootHostsPath);
-        fs.chmodSync(chrootHostsPath, 0o644);
-        logger.debug(`Copied /etc/hosts to ${chrootHostsPath} for chroot host access`);
       } catch {
-        // Fall back to empty file if host /etc/hosts is not readable
-        fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n', { mode: 0o644 });
-        logger.debug('Created minimal chroot-hosts (could not read host /etc/hosts)');
+        fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n');
       }
+      // Resolve host-gateway IP from Docker bridge and append host.docker.internal
+      try {
+        const { stdout } = execa.sync('docker', [
+          'network', 'inspect', 'bridge',
+          '-f', '{{(index .IPAM.Config 0).Gateway}}'
+        ]);
+        const hostGatewayIp = stdout.trim();
+        if (hostGatewayIp) {
+          fs.appendFileSync(chrootHostsPath, `${hostGatewayIp}\thost.docker.internal\n`);
+          logger.debug(`Added host.docker.internal (${hostGatewayIp}) to chroot-hosts`);
+        }
+      } catch (err) {
+        logger.debug(`Could not resolve Docker bridge gateway: ${err}`);
+      }
+      fs.chmodSync(chrootHostsPath, 0o644);
       agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts`);
     } else {
       agentVolumes.push('/etc/hosts:/host/etc/hosts:ro');
