@@ -153,6 +153,10 @@ steps:
     if: always()
     run: |
       ./scripts/ci/cleanup.sh || true
+  - name: Ensure .copilot directory permissions
+    run: |
+      mkdir -p /home/runner/.copilot
+      sudo chown -R runner:runner /home/runner/.copilot
 ---
 
 # Analyze Chroot Test Results

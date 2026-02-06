@@ -9,7 +9,6 @@ import { generateSquidConfig } from './squid-config';
 import { generateSessionCa, initSslDb, CaFiles, parseUrlPatterns } from './ssl-bump';
 
 const SQUID_PORT = 3128;
-const SQUID_INTERCEPT_PORT = 3129; // Port for transparently intercepted traffic
 
 /**
  * Base image for the 'act' preset when building locally.
@@ -273,7 +272,7 @@ export function generateDockerCompose(
       retries: 5,
       start_period: '10s',
     },
-    ports: [`${SQUID_PORT}:${SQUID_PORT}`, `${SQUID_INTERCEPT_PORT}:${SQUID_INTERCEPT_PORT}`],
+    ports: [`${SQUID_PORT}:${SQUID_PORT}`],
     // Security hardening: Drop unnecessary capabilities
     // Squid only needs network capabilities, not system administration capabilities
     cap_drop: [
@@ -329,7 +328,6 @@ export function generateDockerCompose(
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
-    SQUID_INTERCEPT_PORT: SQUID_INTERCEPT_PORT.toString(),
     HOME: homeDir,
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
