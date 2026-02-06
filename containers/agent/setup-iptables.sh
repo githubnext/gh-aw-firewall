@@ -121,6 +121,20 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
+# Bypass Squid for host.docker.internal when host access is enabled.
+# MCP gateway traffic to host.docker.internal gets DNAT'd to Squid,
+# where Squid fails with "Invalid URL" because rmcp sends relative URLs.
+if [ -n "$AWF_ENABLE_HOST_ACCESS" ]; then
+  HOST_GATEWAY_IP=$(getent hosts host.docker.internal | awk 'NR==1 { print $1 }')
+  if [ -n "$HOST_GATEWAY_IP" ]; then
+    echo "[iptables] Allow direct traffic to host gateway (${HOST_GATEWAY_IP}) - bypassing Squid..."
+    iptables -t nat -A OUTPUT -d "$HOST_GATEWAY_IP" -j RETURN
+    iptables -A OUTPUT -d "$HOST_GATEWAY_IP" -j ACCEPT
+  else
+    echo "[iptables] WARNING: host.docker.internal could not be resolved, skipping host gateway bypass"
+  fi
+fi
+
 # Block dangerous ports at NAT level (defense-in-depth with Squid ACL filtering)
 # These ports are explicitly blocked to prevent access to sensitive services
 # even if Squid ACL filtering fails. The ports RETURN from NAT (not redirected)
