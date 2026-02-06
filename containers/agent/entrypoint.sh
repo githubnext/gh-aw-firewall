@@ -239,6 +239,13 @@ AWFEOF
       echo "export PATH=\"${AWF_GOROOT}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export GOROOT=\"${AWF_GOROOT}\"" >> "/host${SCRIPT_FILE}"
     fi
+    # Add BUN_INSTALL/bin to PATH if provided (for Bun on GitHub Actions)
+    # Bun must be pre-installed on the host because it crashes inside chroot (restricted /proc)
+    if [ -n "${AWF_BUN_INSTALL}" ]; then
+      echo "[entrypoint] Adding BUN_INSTALL/bin to PATH: ${AWF_BUN_INSTALL}/bin"
+      echo "export PATH=\"${AWF_BUN_INSTALL}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export BUN_INSTALL=\"${AWF_BUN_INSTALL}\"" >> "/host${SCRIPT_FILE}"
+    fi
   else
     echo "[entrypoint] Constructing default PATH for chroot"
     cat > "/host${SCRIPT_FILE}" << 'AWFEOF'

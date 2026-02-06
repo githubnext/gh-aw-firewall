@@ -353,6 +353,12 @@ export function generateDockerCompose(
     if (process.env.JAVA_HOME) {
       environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
     }
+    // Bun: Pass BUN_INSTALL so entrypoint can add $BUN_INSTALL/bin to PATH
+    // Bun crashes with core dump when installed inside chroot (restricted /proc access),
+    // so it must be pre-installed on the host via setup-bun action
+    if (process.env.BUN_INSTALL) {
+      environment.AWF_BUN_INSTALL = process.env.BUN_INSTALL;
+    }
   }
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)

@@ -624,14 +624,16 @@ describe('docker-manager', () => {
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
-    it('should pass GOROOT, CARGO_HOME, JAVA_HOME to container when enableChroot is true and env vars are set', () => {
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, BUN_INSTALL to container when enableChroot is true and env vars are set', () => {
       const originalGoroot = process.env.GOROOT;
       const originalCargoHome = process.env.CARGO_HOME;
       const originalJavaHome = process.env.JAVA_HOME;
+      const originalBunInstall = process.env.BUN_INSTALL;
 
       process.env.GOROOT = '/usr/local/go';
       process.env.CARGO_HOME = '/home/user/.cargo';
       process.env.JAVA_HOME = '/usr/lib/jvm/java-17';
+      process.env.BUN_INSTALL = '/home/user/.bun';
 
       try {
         const configWithChroot = {
@@ -645,6 +647,7 @@ describe('docker-manager', () => {
         expect(environment.AWF_GOROOT).toBe('/usr/local/go');
         expect(environment.AWF_CARGO_HOME).toBe('/home/user/.cargo');
         expect(environment.AWF_JAVA_HOME).toBe('/usr/lib/jvm/java-17');
+        expect(environment.AWF_BUN_INSTALL).toBe('/home/user/.bun');
       } finally {
         // Restore original values
         if (originalGoroot !== undefined) {
@@ -661,6 +664,32 @@ describe('docker-manager', () => {
           process.env.JAVA_HOME = originalJavaHome;
         } else {
           delete process.env.JAVA_HOME;
+        }
+        if (originalBunInstall !== undefined) {
+          process.env.BUN_INSTALL = originalBunInstall;
+        } else {
+          delete process.env.BUN_INSTALL;
+        }
+      }
+    });
+
+    it('should NOT set AWF_BUN_INSTALL when BUN_INSTALL is not in environment', () => {
+      const originalBunInstall = process.env.BUN_INSTALL;
+      delete process.env.BUN_INSTALL;
+
+      try {
+        const configWithChroot = {
+          ...mockConfig,
+          enableChroot: true
+        };
+        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const agent = result.services.agent;
+        const environment = agent.environment as Record<string, string>;
+
+        expect(environment.AWF_BUN_INSTALL).toBeUndefined();
+      } finally {
+        if (originalBunInstall !== undefined) {
+          process.env.BUN_INSTALL = originalBunInstall;
         }
       }
     });
