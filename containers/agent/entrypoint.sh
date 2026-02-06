@@ -158,10 +158,13 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   # Security: This procfs is container-scoped (only shows container processes, not host).
   # SYS_ADMIN capability (required for mount) is dropped before user code runs.
   mkdir -p /host/proc
-  if mount -t proc proc /host/proc; then
-    echo "[entrypoint] Mounted procfs at /host/proc"
+  if mount -t proc -o nosuid,nodev,noexec proc /host/proc; then
+    echo "[entrypoint] Mounted procfs at /host/proc (nosuid,nodev,noexec)"
   else
-    echo "[entrypoint][WARN] Failed to mount procfs at /host/proc - some runtimes may not work"
+    echo "[entrypoint][ERROR] Failed to mount procfs at /host/proc"
+    echo "[entrypoint][ERROR] This is required for Java, .NET, and other runtimes that read /proc/self/exe"
+    echo "[entrypoint][ERROR] Ensure the container has SYS_ADMIN capability (it will be dropped before user code runs)"
+    exit 1
   fi
 
   # Verify capsh is available on the host (required for privilege drop)
