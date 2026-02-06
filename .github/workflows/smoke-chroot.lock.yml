@@ -191,6 +191,10 @@ jobs:
         run: /opt/gh-aw/actions/validate_multi_secret.sh COPILOT_GITHUB_TOKEN 'GitHub Copilot CLI' https://github.github.com/gh-aw/reference/engines/#github-copilot-default
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+      - name: Ensure .copilot directory permissions
+        run: |
+          mkdir -p /home/runner/.copilot
+          sudo chown -R runner:runner /home/runner/.copilot
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.402
       - name: Install awf binary
@@ -959,6 +963,10 @@ jobs:
         run: /opt/gh-aw/actions/validate_multi_secret.sh COPILOT_GITHUB_TOKEN 'GitHub Copilot CLI' https://github.github.com/gh-aw/reference/engines/#github-copilot-default
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+      - name: Ensure .copilot directory permissions
+        run: |
+          mkdir -p /home/runner/.copilot
+          sudo chown -R runner:runner /home/runner/.copilot
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.402
       - name: Execute GitHub Copilot CLI
