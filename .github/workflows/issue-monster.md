@@ -12,9 +12,10 @@ on:
   skip-if-no-match: "is:issue is:open"
 
 permissions:
-  contents: read
-  issues: read
-  pull-requests: read
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
 
 engine: copilot
 timeout-minutes: 30
