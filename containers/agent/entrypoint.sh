@@ -116,11 +116,8 @@ fi
 
 # Print proxy environment
 echo "[entrypoint] Proxy configuration:"
-echo "[entrypoint]   HTTP: intercept mode (iptables DNAT 80 -> squid:${SQUID_INTERCEPT_PORT})"
+echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY"
 echo "[entrypoint]   HTTPS_PROXY=$HTTPS_PROXY"
-if [ -n "$HTTP_PROXY" ]; then
-  echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY (user-provided override)"
-fi
 
 # Print network information
 echo "[entrypoint] Network information:"
@@ -165,39 +162,15 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   # NOTE: We backup the host's original resolv.conf and set up a trap to restore it
   RESOLV_BACKUP="/host/etc/resolv.conf.awf-backup-$$"
   RESOLV_MODIFIED=false
-  RESOLV_CREATED=false
-  if [ -f /host/etc/resolv.conf ]; then
-    # File exists: backup original and replace
-    if cp /host/etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null; then
-      if cp /etc/resolv.conf /host/etc/resolv.conf.awf 2>/dev/null; then
-        mv /host/etc/resolv.conf.awf /host/etc/resolv.conf 2>/dev/null && RESOLV_MODIFIED=true
-        echo "[entrypoint] DNS configuration copied to chroot (backup at $RESOLV_BACKUP)"
-      else
-        echo "[entrypoint][WARN] Could not copy DNS configuration to chroot"
-      fi
+  if cp /host/etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null; then
+    if cp /etc/resolv.conf /host/etc/resolv.conf.awf 2>/dev/null; then
+      mv /host/etc/resolv.conf.awf /host/etc/resolv.conf 2>/dev/null && RESOLV_MODIFIED=true
+      echo "[entrypoint] DNS configuration copied to chroot (backup at $RESOLV_BACKUP)"
     else
-      echo "[entrypoint][WARN] Could not backup host resolv.conf, skipping DNS override"
+      echo "[entrypoint][WARN] Could not copy DNS configuration to chroot"
     fi
   else
-    # File doesn't exist: create it (selective /etc mounts don't include resolv.conf)
-    if cp /etc/resolv.conf /host/etc/resolv.conf 2>/dev/null; then
-      RESOLV_CREATED=true
-      echo "[entrypoint] DNS configuration created in chroot (/host/etc/resolv.conf)"
-    else
-      echo "[entrypoint][WARN] Could not create DNS configuration in chroot"
-    fi
-  fi
-
-  # Copy container's /etc/hosts to /host/etc/hosts (preserves Docker extra_hosts like host.docker.internal)
-  # Docker adds extra_hosts entries (e.g., host.docker.internal) to the container's /etc/hosts,
-  # but the host's /etc/hosts doesn't have them. We copy the container's version to the overlay
-  # filesystem at /host/etc/hosts (not a bind mount, so this doesn't modify the real host).
-  HOSTS_CREATED=false
-  if cp /etc/hosts /host/etc/hosts 2>/dev/null; then
-    HOSTS_CREATED=true
-    echo "[entrypoint] Hosts configuration copied to chroot (includes host.docker.internal)"
-  else
-    echo "[entrypoint][WARN] Could not copy hosts configuration to chroot"
+    echo "[entrypoint][WARN] Could not backup host resolv.conf, skipping DNS override"
   fi
 
   # Determine working directory inside the chroot
@@ -259,12 +232,6 @@ AWFEOF
       # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
       echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
     fi
-    # Bun: Add BUN_INSTALL/bin to PATH if provided (for Bun on GitHub Actions)
-    if [ -n "${AWF_BUN_INSTALL}" ]; then
-      echo "[entrypoint] Adding BUN_INSTALL/bin to PATH: ${AWF_BUN_INSTALL}/bin"
-      echo "export PATH=\"${AWF_BUN_INSTALL}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
-      echo "export BUN_INSTALL=\"${AWF_BUN_INSTALL}\"" >> "/host${SCRIPT_FILE}"
-    fi
     # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
     # This ensures the correct Go version is found even if AWF_HOST_PATH has wrong ordering
     if [ -n "${AWF_GOROOT}" ]; then
@@ -309,20 +276,15 @@ AWFEOF
   # Note: We use capsh inside the chroot because it handles the privilege drop
   # and user switch atomically. The host must have capsh installed.
 
-  # Build cleanup command that restores resolv.conf and /etc/hosts if they were modified
-  # The backup paths use the chroot perspective (no /host prefix)
+  # Build cleanup command that restores resolv.conf if it was modified
+  # The backup path uses the chroot perspective (no /host prefix)
   CLEANUP_CMD="rm -f ${SCRIPT_FILE}"
   if [ "$RESOLV_MODIFIED" = "true" ]; then
     # Convert backup path from container perspective (/host/etc/...) to chroot perspective (/etc/...)
     CHROOT_RESOLV_BACKUP="${RESOLV_BACKUP#/host}"
     CLEANUP_CMD="${CLEANUP_CMD}; mv '${CHROOT_RESOLV_BACKUP}' /etc/resolv.conf 2>/dev/null || true"
     echo "[entrypoint] DNS configuration will be restored on exit"
-  elif [ "$RESOLV_CREATED" = "true" ]; then
-    # File was created by us; remove it on exit to leave no trace
-    CLEANUP_CMD="${CLEANUP_CMD}; rm -f /etc/resolv.conf 2>/dev/null || true"
-    echo "[entrypoint] DNS configuration will be removed on exit"
   fi
-  # /etc/hosts cleanup not needed — written to container overlay, not host filesystem
 
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /

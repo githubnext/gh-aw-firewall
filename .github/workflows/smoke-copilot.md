@@ -46,11 +46,6 @@ safe-outputs:
       run-failure: "📰 DEVELOPING STORY: [{workflow_name}]({run_url}) reports {status}. Our correspondents are investigating the incident..."
 timeout-minutes: 5
 strict: true
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-    with:
-      persist-credentials: false
 ---
 
 # Smoke Test: Copilot Engine Validation
