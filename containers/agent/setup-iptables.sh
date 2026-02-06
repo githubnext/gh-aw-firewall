@@ -32,11 +32,8 @@ fi
 # Get Squid proxy configuration from environment
 SQUID_HOST="${SQUID_PROXY_HOST:-squid-proxy}"
 SQUID_PORT="${SQUID_PROXY_PORT:-3128}"
-# Intercept port for NAT-redirected transparent proxy traffic
-# Squid's "intercept" mode handles relative URLs by extracting destination from Host header
-SQUID_INTERCEPT_PORT="${SQUID_INTERCEPT_PORT:-3129}"
 
-echo "[iptables] Squid proxy: ${SQUID_HOST}:${SQUID_PORT} (intercept: ${SQUID_INTERCEPT_PORT})"
+echo "[iptables] Squid proxy: ${SQUID_HOST}:${SQUID_PORT}"
 
 # Resolve Squid hostname to IP
 # Use awk's NR to get first line to avoid host binary dependency in chroot mode
@@ -157,18 +154,15 @@ for port in "${DANGEROUS_PORTS[@]}"; do
 done
 echo "[iptables] NAT blacklist applied for ${#DANGEROUS_PORTS[@]} dangerous ports"
 
-# Redirect standard HTTP/HTTPS ports to Squid's INTERCEPT port
+# Redirect standard HTTP/HTTPS ports to Squid
 # This provides defense-in-depth: iptables enforces port policy, Squid enforces domain policy
-# We use the intercept port (not the regular port) because NAT-redirected traffic is "transparent" -
-# clients send relative URLs (GET /path) which require Squid's intercept mode to handle properly.
-# The regular port (3128) is for explicit proxy usage via HTTP_PROXY/HTTPS_PROXY env vars.
-echo "[iptables] Redirect HTTP (80) and HTTPS (443) to Squid intercept port..."
-iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination "${SQUID_IP}:${SQUID_INTERCEPT_PORT}"
-iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination "${SQUID_IP}:${SQUID_INTERCEPT_PORT}"
+echo "[iptables] Redirect HTTP (80) and HTTPS (443) to Squid..."
+iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
+iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
 
 # If user specified additional ports via --allow-host-ports, redirect those too
 if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
-  echo "[iptables] Redirect user-specified ports to Squid intercept port..."
+  echo "[iptables] Redirect user-specified ports to Squid..."
 
   # Parse comma-separated port list
   IFS=',' read -ra PORTS <<< "$AWF_ALLOW_HOST_PORTS"
@@ -179,13 +173,13 @@ if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
 
     if [[ $port_spec == *"-"* ]]; then
       # Port range (e.g., "3000-3010")
-      echo "[iptables]   Redirect port range $port_spec to Squid intercept port..."
+      echo "[iptables]   Redirect port range $port_spec to Squid..."
       # For port ranges, use --dport with range syntax (without multiport)
-      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_INTERCEPT_PORT}"
+      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
     else
       # Single port (e.g., "3000")
-      echo "[iptables]   Redirect port $port_spec to Squid intercept port..."
-      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_INTERCEPT_PORT}"
+      echo "[iptables]   Redirect port $port_spec to Squid..."
+      iptables -t nat -A OUTPUT -p tcp --dport "$port_spec" -j DNAT --to-destination "${SQUID_IP}:${SQUID_PORT}"
     fi
   done
 else

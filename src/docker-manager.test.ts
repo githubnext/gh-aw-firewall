@@ -479,13 +479,10 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const env = agent.environment as Record<string, string>;
 
-      // HTTP_PROXY is NOT set; intercept mode (iptables DNAT) handles HTTP routing
-      // HTTPS_PROXY IS set; HTTPS requires CONNECT method through forward proxy port 3128
-      expect(env.HTTP_PROXY).toBeUndefined();
+      expect(env.HTTP_PROXY).toBe('http://172.30.0.10:3128');
       expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
       expect(env.SQUID_PROXY_HOST).toBe('squid-proxy');
       expect(env.SQUID_PROXY_PORT).toBe('3128');
-      expect(env.SQUID_INTERCEPT_PORT).toBe('3129');
     });
 
     it('should mount required volumes in agent container (default behavior)', () => {
@@ -560,8 +557,6 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
       expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
       expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
-      // /etc/hosts is NOT mounted — entrypoint copies container's /etc/hosts at runtime
-      // to avoid modifying the host's real /etc/hosts file
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
@@ -616,14 +611,6 @@ describe('docker-manager', () => {
       expect(agent.cap_add).not.toContain('SYS_CHROOT');
     });
 
-    it('should not mount /etc/hosts in any mode (entrypoint handles it at runtime)', () => {
-      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const agent = result.services.agent;
-      const volumes = agent.volumes as string[];
-
-      expect(volumes.some((v: string) => v.includes('/etc/hosts'))).toBe(false);
-    });
-
     it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
       const configWithChroot = {
         ...mockConfig,
@@ -636,16 +623,14 @@ describe('docker-manager', () => {
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
-    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, BUN_INSTALL to container when enableChroot is true and env vars are set', () => {
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME to container when enableChroot is true and env vars are set', () => {
       const originalGoroot = process.env.GOROOT;
       const originalCargoHome = process.env.CARGO_HOME;
       const originalJavaHome = process.env.JAVA_HOME;
-      const originalBunInstall = process.env.BUN_INSTALL;
 
       process.env.GOROOT = '/usr/local/go';
       process.env.CARGO_HOME = '/home/user/.cargo';
       process.env.JAVA_HOME = '/usr/lib/jvm/java-17';
-      process.env.BUN_INSTALL = '/home/user/.bun';
 
       try {
         const configWithChroot = {
@@ -659,7 +644,6 @@ describe('docker-manager', () => {
         expect(environment.AWF_GOROOT).toBe('/usr/local/go');
         expect(environment.AWF_CARGO_HOME).toBe('/home/user/.cargo');
         expect(environment.AWF_JAVA_HOME).toBe('/usr/lib/jvm/java-17');
-        expect(environment.AWF_BUN_INSTALL).toBe('/home/user/.bun');
       } finally {
         // Restore original values
         if (originalGoroot !== undefined) {
@@ -676,11 +660,6 @@ describe('docker-manager', () => {
           process.env.JAVA_HOME = originalJavaHome;
         } else {
           delete process.env.JAVA_HOME;
-        }
-        if (originalBunInstall !== undefined) {
-          process.env.BUN_INSTALL = originalBunInstall;
-        } else {
-          delete process.env.BUN_INSTALL;
         }
       }
     });
@@ -732,20 +711,6 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/passwd:/host/etc/passwd:ro');
       expect(volumes).toContain('/etc/group:/host/etc/group:ro');
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
-    });
-
-    it('should not mount /etc/hosts in chroot mode (entrypoint copies it at runtime)', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
-      const agent = result.services.agent;
-      const volumes = agent.volumes as string[];
-
-      // /etc/hosts is NOT mounted — entrypoint copies container's /etc/hosts to /host/etc/hosts
-      // at runtime to include Docker extra_hosts (host.docker.internal) without modifying host
-      expect(volumes.some((v: string) => v.includes('/etc/hosts'))).toBe(false);
     });
 
     it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
@@ -957,53 +922,6 @@ describe('docker-manager', () => {
         expect(env.CUSTOM_HOST_VAR).toBe('test_value');
       } finally {
         delete process.env.CUSTOM_HOST_VAR;
-      }
-    });
-
-    it('should exclude proxy env vars when envAll is enabled', () => {
-      const originalHttpProxy = process.env.HTTP_PROXY;
-      const originalHttpsProxy = process.env.HTTPS_PROXY;
-      const originalHttpProxyLower = process.env.http_proxy;
-      const originalHttpsProxyLower = process.env.https_proxy;
-
-      process.env.HTTP_PROXY = 'http://host-proxy:8080';
-      process.env.HTTPS_PROXY = 'http://host-proxy:8080';
-      process.env.http_proxy = 'http://host-proxy:8080';
-      process.env.https_proxy = 'http://host-proxy:8080';
-
-      try {
-        const configWithEnvAll = { ...mockConfig, envAll: true };
-        const result = generateDockerCompose(configWithEnvAll, mockNetworkConfig);
-        const env = result.services.agent.environment as Record<string, string>;
-
-        // HTTP_PROXY must NOT leak from host (intercept mode handles HTTP routing)
-        expect(env.HTTP_PROXY).toBeUndefined();
-        expect(env.http_proxy).toBeUndefined();
-        // https_proxy (lowercase) must NOT leak from host — AWF sets HTTPS_PROXY explicitly
-        expect(env.https_proxy).toBeUndefined();
-        // HTTPS_PROXY is set by AWF (not from host) for CONNECT tunneling
-        expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
-      } finally {
-        if (originalHttpProxy !== undefined) {
-          process.env.HTTP_PROXY = originalHttpProxy;
-        } else {
-          delete process.env.HTTP_PROXY;
-        }
-        if (originalHttpsProxy !== undefined) {
-          process.env.HTTPS_PROXY = originalHttpsProxy;
-        } else {
-          delete process.env.HTTPS_PROXY;
-        }
-        if (originalHttpProxyLower !== undefined) {
-          process.env.http_proxy = originalHttpProxyLower;
-        } else {
-          delete process.env.http_proxy;
-        }
-        if (originalHttpsProxyLower !== undefined) {
-          process.env.https_proxy = originalHttpsProxyLower;
-        } else {
-          delete process.env.https_proxy;
-        }
       }
     });
 

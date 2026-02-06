@@ -11,14 +11,12 @@ permissions:
   issues: read
 name: Build Test Bun
 engine: copilot
-runtimes:
-  bun:
-    version: "latest"
 network:
   allowed:
     - defaults
     - github
     - node
+    - "bun.sh"
 tools:
   bash:
     - "*"
@@ -37,11 +35,6 @@ timeout-minutes: 15
 strict: true
 env:
   GH_TOKEN: "${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}"
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-    with:
-      persist-credentials: false
 ---
 
 # Build Test: Bun
@@ -50,7 +43,12 @@ steps:
 
 ## Test Requirements
 
-1. **Verify Bun**: Bun is pre-installed. Run `bun --version` to confirm it's available on PATH.
+1. **Install Bun**:
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   export BUN_INSTALL="$HOME/.bun"
+   export PATH="$BUN_INSTALL/bin:$PATH"
+   ```
 
 2. **Clone Repository**: `gh repo clone Mossaka/gh-aw-firewall-test-bun /tmp/test-bun`
    - **CRITICAL**: If clone fails, immediately call `safeoutputs-missing_tool` with message "CLONE_FAILED: Unable to clone test repository" and stop execution
@@ -83,7 +81,7 @@ If ANY test fails, report the failure with error details.
 **CRITICAL**: This workflow MUST fail visibly when errors occur:
 
 1. **Clone failure**: If repository clone fails, call `safeoutputs-missing_tool` with "CLONE_FAILED: [error message]"
-2. **Bun not available**: If `bun --version` fails, call `safeoutputs-missing_tool` with "BUN_NOT_FOUND: bun not available on PATH"
+2. **Bun install failure**: Call `safeoutputs-missing_tool` with "BUN_INSTALL_FAILED: [error message]"
 3. **Test failure**: Report in comment table with FAIL status and include failure details
 
 DO NOT report success if any step fails. The workflow should produce a clear, actionable error message.
