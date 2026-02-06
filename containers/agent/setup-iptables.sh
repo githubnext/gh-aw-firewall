@@ -133,6 +133,17 @@ if [ -n "$AWF_ENABLE_HOST_ACCESS" ]; then
   else
     echo "[iptables] WARNING: host.docker.internal could not be resolved, skipping host gateway bypass"
   fi
+
+  # Also bypass Squid for the container's default network gateway.
+  # Codex resolves host.docker.internal to this IP (172.30.0.1 on the AWF network)
+  # instead of the Docker bridge gateway (172.17.0.1). Without this bypass,
+  # MCP Streamable HTTP traffic goes through Squid, which crashes on SSE connections.
+  NETWORK_GATEWAY_IP=$(route -n | awk '/^0\.0\.0\.0/ { print $2; exit }')
+  if [ -n "$NETWORK_GATEWAY_IP" ] && [ "$NETWORK_GATEWAY_IP" != "$HOST_GATEWAY_IP" ]; then
+    echo "[iptables] Allow direct traffic to network gateway (${NETWORK_GATEWAY_IP}) - bypassing Squid..."
+    iptables -t nat -A OUTPUT -d "$NETWORK_GATEWAY_IP" -j RETURN
+    iptables -A OUTPUT -p tcp -d "$NETWORK_GATEWAY_IP" --dport 80 -j ACCEPT
+  fi
 fi
 
 # Block dangerous ports at NAT level (defense-in-depth with Squid ACL filtering)
