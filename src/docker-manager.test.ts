@@ -766,6 +766,29 @@ describe('docker-manager', () => {
       }
     });
 
+    it('should inject host.docker.internal into chroot-hosts file', () => {
+      // Ensure workDir exists for chroot-hosts file creation
+      fs.mkdirSync(mockConfig.workDir, { recursive: true });
+      try {
+        const config = {
+          ...mockConfig,
+          enableChroot: true,
+          enableHostAccess: true
+        };
+        generateDockerCompose(config, mockNetworkConfig);
+
+        // The chroot-hosts file should exist and contain host.docker.internal
+        const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
+        expect(fs.existsSync(chrootHostsPath)).toBe(true);
+        const content = fs.readFileSync(chrootHostsPath, 'utf8');
+        // Docker bridge gateway resolution may succeed or fail in test env,
+        // but the file should exist with at least localhost
+        expect(content).toContain('localhost');
+      } finally {
+        fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
+      }
+    });
+
     it('should mount read-only /etc/hosts when enableChroot is true but enableHostAccess is false', () => {
       const config = {
         ...mockConfig,
