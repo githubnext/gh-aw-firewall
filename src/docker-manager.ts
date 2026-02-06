@@ -332,6 +332,18 @@ export function generateDockerCompose(
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
 
+  // When host access is enabled, bypass the proxy for the host gateway IPs.
+  // MCP Streamable HTTP (SSE) traffic through Squid crashes it (comm.cc:1583),
+  // so MCP gateway traffic must go directly to the host, not through Squid.
+  if (config.enableHostAccess) {
+    // Compute the network gateway IP (first usable IP in the subnet)
+    const subnetBase = networkConfig.subnet.split('/')[0]; // e.g. "172.30.0.0"
+    const parts = subnetBase.split('.');
+    const networkGatewayIp = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+    environment.NO_PROXY = `localhost,127.0.0.1,${networkConfig.squidIp},host.docker.internal,${networkGatewayIp}`;
+    environment.no_proxy = environment.NO_PROXY;
+  }
+
   // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
   // This ensures toolcache paths (Python, Node, Go, Rust, Java) are correctly resolved
   if (config.enableChroot) {
