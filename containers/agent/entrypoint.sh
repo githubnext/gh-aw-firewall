@@ -133,9 +133,10 @@ echo "[entrypoint] =================================="
 # Determine which capabilities to drop
 # - CAP_NET_ADMIN is always dropped (prevents iptables bypass)
 # - CAP_SYS_CHROOT is dropped when chroot mode is enabled (prevents user code from using chroot)
+# - CAP_SYS_ADMIN is dropped when chroot mode is enabled (was needed for mounting procfs)
 if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
-  CAPS_TO_DROP="cap_net_admin,cap_sys_chroot"
-  echo "[entrypoint] Chroot mode enabled - dropping CAP_NET_ADMIN and CAP_SYS_CHROOT"
+  CAPS_TO_DROP="cap_net_admin,cap_sys_chroot,cap_sys_admin"
+  echo "[entrypoint] Chroot mode enabled - dropping CAP_NET_ADMIN, CAP_SYS_CHROOT, and CAP_SYS_ADMIN"
 else
   CAPS_TO_DROP="cap_net_admin"
   echo "[entrypoint] Dropping CAP_NET_ADMIN capability"
@@ -149,6 +150,19 @@ echo ""
 # This provides transparent host binary access - user command sees host filesystem as /
 if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   echo "[entrypoint] Chroot mode: running command inside host filesystem (/host)"
+
+  # Mount a container-scoped procfs at /host/proc
+  # This provides dynamic /proc/self/exe resolution (required by .NET CLR, JVM, and other
+  # runtimes that read /proc/self/exe to find themselves). A static bind mount of /proc/self
+  # always resolves to the parent shell's exe, causing runtime failures.
+  # Security: This procfs is container-scoped (only shows container processes, not host).
+  # SYS_ADMIN capability (required for mount) is dropped before user code runs.
+  mkdir -p /host/proc
+  if mount -t proc proc /host/proc; then
+    echo "[entrypoint] Mounted procfs at /host/proc"
+  else
+    echo "[entrypoint][WARN] Failed to mount procfs at /host/proc - some runtimes may not work"
+  fi
 
   # Verify capsh is available on the host (required for privilege drop)
   if ! chroot /host which capsh >/dev/null 2>&1; then
@@ -261,6 +275,12 @@ AWFEOF
       echo "export JAVA_HOME=\"${AWF_JAVA_HOME}\"" >> "/host${SCRIPT_FILE}"
       # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
       echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
+    fi
+    # Add DOTNET_ROOT to PATH if provided (for .NET on GitHub Actions)
+    if [ -n "${AWF_DOTNET_ROOT}" ]; then
+      echo "[entrypoint] Adding DOTNET_ROOT to PATH: ${AWF_DOTNET_ROOT}"
+      echo "export PATH=\"${AWF_DOTNET_ROOT}:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export DOTNET_ROOT=\"${AWF_DOTNET_ROOT}\"" >> "/host${SCRIPT_FILE}"
     fi
     # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
     # This ensures the correct Go version is found even if AWF_HOST_PATH has wrong ordering

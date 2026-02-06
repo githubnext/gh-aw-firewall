@@ -546,9 +546,11 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/opt:/host/opt:ro');
 
       // Should include special filesystems (read-only)
-      // NOTE: Only /proc/self is mounted (not full /proc) to prevent exposure of other processes' env vars
+      // NOTE: /proc is NOT bind-mounted. Instead, a container-scoped procfs is mounted
+      // at /host/proc via 'mount -t proc' in entrypoint.sh (requires SYS_ADMIN, which
+      // is dropped before user code). This provides dynamic /proc/self/exe resolution.
       expect(volumes).not.toContain('/proc:/host/proc:ro');
-      expect(volumes).toContain('/proc/self:/host/proc/self:ro');
+      expect(volumes).not.toContain('/proc/self:/host/proc/self:ro');
       expect(volumes).toContain('/sys:/host/sys:ro');
       expect(volumes).toContain('/dev:/host/dev:ro');
 
@@ -592,7 +594,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
     });
 
-    it('should add SYS_CHROOT capability when enableChroot is true', () => {
+    it('should add SYS_CHROOT and SYS_ADMIN capabilities when enableChroot is true', () => {
       const configWithChroot = {
         ...mockConfig,
         enableChroot: true
@@ -602,14 +604,35 @@ describe('docker-manager', () => {
 
       expect(agent.cap_add).toContain('NET_ADMIN');
       expect(agent.cap_add).toContain('SYS_CHROOT');
+      // SYS_ADMIN is needed to mount procfs at /host/proc for dynamic /proc/self/exe
+      expect(agent.cap_add).toContain('SYS_ADMIN');
     });
 
-    it('should not add SYS_CHROOT capability when enableChroot is false', () => {
+    it('should not add SYS_CHROOT or SYS_ADMIN capability when enableChroot is false', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
       expect(agent.cap_add).toContain('NET_ADMIN');
       expect(agent.cap_add).not.toContain('SYS_CHROOT');
+      expect(agent.cap_add).not.toContain('SYS_ADMIN');
+    });
+
+    it('should add apparmor:unconfined security_opt when enableChroot is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.security_opt).toContain('apparmor:unconfined');
+    });
+
+    it('should not add apparmor:unconfined security_opt when enableChroot is false', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+
+      expect(agent.security_opt).not.toContain('apparmor:unconfined');
     });
 
     it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
@@ -624,15 +647,17 @@ describe('docker-manager', () => {
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
-    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, BUN_INSTALL to container when enableChroot is true and env vars are set', () => {
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, DOTNET_ROOT, BUN_INSTALL to container when enableChroot is true and env vars are set', () => {
       const originalGoroot = process.env.GOROOT;
       const originalCargoHome = process.env.CARGO_HOME;
       const originalJavaHome = process.env.JAVA_HOME;
+      const originalDotnetRoot = process.env.DOTNET_ROOT;
       const originalBunInstall = process.env.BUN_INSTALL;
 
       process.env.GOROOT = '/usr/local/go';
       process.env.CARGO_HOME = '/home/user/.cargo';
       process.env.JAVA_HOME = '/usr/lib/jvm/java-17';
+      process.env.DOTNET_ROOT = '/usr/lib/dotnet';
       process.env.BUN_INSTALL = '/home/user/.bun';
 
       try {
@@ -647,6 +672,7 @@ describe('docker-manager', () => {
         expect(environment.AWF_GOROOT).toBe('/usr/local/go');
         expect(environment.AWF_CARGO_HOME).toBe('/home/user/.cargo');
         expect(environment.AWF_JAVA_HOME).toBe('/usr/lib/jvm/java-17');
+        expect(environment.AWF_DOTNET_ROOT).toBe('/usr/lib/dotnet');
         expect(environment.AWF_BUN_INSTALL).toBe('/home/user/.bun');
       } finally {
         // Restore original values
@@ -664,6 +690,11 @@ describe('docker-manager', () => {
           process.env.JAVA_HOME = originalJavaHome;
         } else {
           delete process.env.JAVA_HOME;
+        }
+        if (originalDotnetRoot !== undefined) {
+          process.env.DOTNET_ROOT = originalDotnetRoot;
+        } else {
+          delete process.env.DOTNET_ROOT;
         }
         if (originalBunInstall !== undefined) {
           process.env.BUN_INSTALL = originalBunInstall;
