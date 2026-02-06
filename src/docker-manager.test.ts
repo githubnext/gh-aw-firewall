@@ -557,6 +557,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
       expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
       expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
+      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
