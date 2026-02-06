@@ -16,3 +16,4 @@ coverage/
 docs-site/dist/
 docs-site/.astro/
 docs-site/node_modules/
+reports/

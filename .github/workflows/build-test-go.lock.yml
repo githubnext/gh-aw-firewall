@@ -140,8 +140,31 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
       - name: Install GitHub Copilot CLI
         run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.402
-      - name: Install awf binary
-        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.13.4
+      - name: Install awf dependencies
+        run: npm ci
+      - name: Build awf
+        run: npm run build
+      - name: Install awf binary (local)
+        run: |
+          WORKSPACE_PATH="${GITHUB_WORKSPACE:-$(pwd)}"
+          NODE_BIN="$(command -v node)"
+          if [ ! -d "$WORKSPACE_PATH" ]; then
+            echo "Workspace path not found: $WORKSPACE_PATH"
+            exit 1
+          fi
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "Node binary not found: $NODE_BIN"
+            exit 1
+          fi
+          if [ ! -d "/usr/local/bin" ]; then
+            echo "/usr/local/bin is missing"
+            exit 1
+          fi
+          sudo tee /usr/local/bin/awf > /dev/null <<EOF
+          #!/bin/bash
+          exec "${NODE_BIN}" "${WORKSPACE_PATH}/dist/cli.js" "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/awf
       - name: Determine automatic lockdown mode for GitHub MCP server
         id: determine-automatic-lockdown
         env:

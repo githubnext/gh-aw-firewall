@@ -21,7 +21,7 @@
 #
 # The Cookie Monster of issues - assigns issues to Copilot agents one at a time
 #
-# frontmatter-hash: 3a6a379ce94166649edd1371fe0c7b3693ad1308709a0856651aeb9b0ca70b18
+# frontmatter-hash: 1aec29a3d679779c462f3107f9b39751bd841f31632479e542a7a7b47031cd75
 
 name: "Issue Monster"
 "on":
@@ -78,10 +78,10 @@ jobs:
       - search_issues
     runs-on: ubuntu-latest
     permissions:
-      actions: write
-      contents: write
-      issues: write
-      pull-requests: write
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""
@@ -765,8 +765,7 @@ jobs:
     if: (always()) && (needs.agent.result != 'skipped')
     runs-on: ubuntu-slim
     permissions:
-      actions: write
-      contents: write
+      contents: read
       discussions: write
       issues: write
       pull-requests: write
@@ -1022,8 +1021,7 @@ jobs:
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.detection.outputs.success == 'true')
     runs-on: ubuntu-slim
     permissions:
-      actions: write
-      contents: write
+      contents: read
       discussions: write
       issues: write
       pull-requests: write
