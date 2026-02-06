@@ -44,6 +44,22 @@ Options:
 
 Arguments:
   command                      Command to execute (wrap in quotes, use -- separator)
+
+Commands:
+  logs [options]               View and analyze Squid proxy logs
+    -f, --follow               Follow log output in real-time (like tail -f)
+    --format <format>          Output format: raw, pretty (colorized), json
+    --source <path>            Path to log directory or "running" for live container
+    --list                     List available log sources
+    --with-pid                 Enrich logs with PID/process info (requires -f)
+  
+  logs stats [options]         Show aggregated statistics from firewall logs
+    --format <format>          Output format: json, markdown, pretty
+    --source <path>            Path to log directory or "running" for live container
+  
+  logs summary [options]       Generate summary report (markdown by default)
+    --format <format>          Output format: json, markdown, pretty
+    --source <path>            Path to log directory or "running" for live container
 ```
 
 ## Basic Examples

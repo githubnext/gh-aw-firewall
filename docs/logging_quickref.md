@@ -1,6 +1,86 @@
 # Logging Quick Reference
 
-## View Logs
+## Using the AWF CLI
+
+The firewall includes a built-in `awf logs` command for viewing and analyzing Squid proxy logs:
+
+### View Logs in Real-Time
+
+```bash
+# Follow logs in real-time (like tail -f)
+awf logs -f
+
+# Follow with PID tracking to identify which process made each request
+awf logs -f --with-pid
+
+# Follow with JSON output
+awf logs -f --format json
+```
+
+### View Historical Logs
+
+```bash
+# View logs from last run (pretty format, default)
+awf logs
+
+# View logs from specific directory
+awf logs --source /tmp/squid-logs-1234567890
+
+# Raw format (no colorization)
+awf logs --format raw
+
+# JSON format for scripting
+awf logs --format json
+```
+
+### List Available Log Sources
+
+```bash
+# Find all preserved log directories
+awf logs --list
+```
+
+### Generate Statistics
+
+```bash
+# Show aggregated stats (pretty terminal output)
+awf logs stats
+
+# JSON format for scripting
+awf logs stats --format json
+
+# Markdown format
+awf logs stats --format markdown
+```
+
+### Generate Summary for GitHub Actions
+
+```bash
+# Add summary to GitHub Actions step summary
+awf logs summary >> $GITHUB_STEP_SUMMARY
+
+# Also available in JSON and pretty formats
+awf logs summary --format json
+```
+
+**CLI Options:**
+| Flag | Description |
+|------|-------------|
+| `-f, --follow` | Follow log output in real-time (like `tail -f`) |
+| `--format <format>` | Output format: `raw`, `pretty`, `json` |
+| `--source <path>` | Path to log directory or `"running"` for live container |
+| `--list` | List available log sources |
+| `--with-pid` | Enrich logs with PID/process info (requires `-f`) |
+
+**Statistics Commands:**
+| Command | Description |
+|---------|-------------|
+| `awf logs stats` | Show aggregated statistics (total requests, allowed/denied counts, per-domain breakdown) |
+| `awf logs summary` | Generate markdown summary (optimized for GitHub Actions) |
+
+## Manual Docker Commands
+
+For advanced use cases or when the CLI is not available, you can access logs directly via Docker:
 
 ### HTTP/HTTPS Traffic (Squid)
 ```bash
@@ -121,23 +201,9 @@ docker exec awf-squid grep "TCP_DENIED" /var/log/squid/access.log | \
 
 ## PID/Process Tracking
 
-Correlate network requests with specific processes using `awf logs -f --with-pid`:
+The `awf logs` command supports real-time PID tracking using the `--with-pid` flag (see "Using the AWF CLI" section above for examples).
 
-```bash
-# Follow logs with PID tracking (real-time only)
-awf logs -f --with-pid
-
-# Example output:
-# [2024-01-01 12:00:00.123] CONNECT api.github.com → 200 (ALLOWED) [curl/7.88.1] <PID:12345 curl>
-```
-
-### JSON Output with PID
-
-```bash
-awf logs -f --with-pid --format json
-```
-
-**Additional fields when `--with-pid` is enabled:**
+When enabled, logs include:
 | Field | Description |
 |-------|-------------|
 | `pid` | Process ID that made the request |
@@ -225,30 +291,6 @@ docker exec awf-squid grep "curl" /var/log/squid/access.log
 ```
 
 ## Statistics
-
-### Using `awf logs stats`
-
-Get aggregated statistics including total requests, allowed/denied counts, and per-domain breakdown:
-
-```bash
-# Pretty terminal output (default)
-awf logs stats
-
-# JSON format for scripting
-awf logs stats --format json
-
-# Markdown format
-awf logs stats --format markdown
-```
-
-### Using `awf logs summary` for GitHub Actions
-
-Generate a markdown summary optimized for GitHub Actions step summaries:
-
-```bash
-# Add summary to GitHub Actions step summary
-awf logs summary >> $GITHUB_STEP_SUMMARY
-```
 
 ### Manual Statistics Queries
 
