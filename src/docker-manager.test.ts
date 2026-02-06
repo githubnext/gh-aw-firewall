@@ -971,6 +971,29 @@ describe('docker-manager', () => {
         expect(agent.extra_hosts).toBeUndefined();
         expect(squid.extra_hosts).toBeUndefined();
       });
+
+      it('should set AWF_ENABLE_HOST_ACCESS when enableHostAccess is true', () => {
+        const config = { ...mockConfig, enableHostAccess: true };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBe('1');
+      });
+
+      it('should NOT set AWF_ENABLE_HOST_ACCESS when enableHostAccess is false', () => {
+        const config = { ...mockConfig, enableHostAccess: false };
+        const result = generateDockerCompose(config, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBeUndefined();
+      });
+
+      it('should NOT set AWF_ENABLE_HOST_ACCESS when enableHostAccess is undefined', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.AWF_ENABLE_HOST_ACCESS).toBeUndefined();
+      });
     });
 
     describe('allowHostPorts option', () => {
