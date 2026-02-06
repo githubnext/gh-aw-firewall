@@ -327,8 +327,9 @@ AWFEOF
     echo "[entrypoint] DNS configuration will be removed on exit"
   fi
   if [ "$HOSTS_MODIFIED" = "true" ]; then
-    # Remove the host.docker.internal line we added (runs inside chroot perspective)
-    CLEANUP_CMD="${CLEANUP_CMD}; sed -i '/host.docker.internal/d' /etc/hosts 2>/dev/null || true"
+    # Remove the specific host.docker.internal line we added (runs inside chroot perspective)
+    # Use a precise pattern to avoid accidentally removing unrelated entries
+    CLEANUP_CMD="${CLEANUP_CMD}; sed -i '/^[0-9.]\\+[[:space:]]\\+host\\.docker\\.internal\$/d' /etc/hosts 2>/dev/null || true"
     echo "[entrypoint] host.docker.internal will be removed from /etc/hosts on exit"
   fi
 

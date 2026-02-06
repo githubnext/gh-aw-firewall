@@ -488,17 +488,18 @@ export function generateDockerCompose(
     );
 
     // Mount /etc/hosts for host name resolution inside chroot
-    // When host access is enabled, we mount a writable COPY so the entrypoint
+    // When BOTH chroot and host access are enabled, we mount a writable COPY so the entrypoint
     // can inject host.docker.internal (Docker only adds it to the container's
     // /etc/hosts via extra_hosts, but chroot uses the host's /etc/hosts)
     if (config.enableHostAccess) {
       const chrootHostsPath = path.join(config.workDir, 'chroot-hosts');
       try {
         fs.copyFileSync('/etc/hosts', chrootHostsPath);
+        fs.chmodSync(chrootHostsPath, 0o644);
         logger.debug(`Copied /etc/hosts to ${chrootHostsPath} for chroot host access`);
       } catch {
         // Fall back to empty file if host /etc/hosts is not readable
-        fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n');
+        fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n', { mode: 0o644 });
         logger.debug('Created minimal chroot-hosts (could not read host /etc/hosts)');
       }
       agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts`);
