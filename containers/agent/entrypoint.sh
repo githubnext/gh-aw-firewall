@@ -186,6 +186,23 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
     fi
   fi
 
+  # Inject host.docker.internal into chroot's /etc/hosts when host access is enabled
+  # Docker adds this to the container's /etc/hosts via extra_hosts, but the chroot
+  # uses a separate hosts file that doesn't have it. The container's /etc/hosts has
+  # the correct mapping, so we copy it to the chroot's /etc/hosts.
+  HOSTS_MODIFIED=false
+  if [ "${AWF_ENABLE_HOST_ACCESS}" = "1" ]; then
+    HOST_DOCKER_ENTRY=$(grep "host.docker.internal" /etc/hosts 2>/dev/null | head -1 || true)
+    if [ -n "$HOST_DOCKER_ENTRY" ] && ! grep -q "host.docker.internal" /host/etc/hosts 2>/dev/null; then
+      if echo "$HOST_DOCKER_ENTRY" >> /host/etc/hosts 2>/dev/null; then
+        HOSTS_MODIFIED=true
+        echo "[entrypoint] Added host.docker.internal to chroot /etc/hosts"
+      else
+        echo "[entrypoint][WARN] Could not add host.docker.internal to chroot /etc/hosts"
+      fi
+    fi
+  fi
+
   # Determine working directory inside the chroot
   # AWF_WORKDIR is set by docker-manager.ts (containerWorkDir or HOME)
   # For chroot mode, paths like /home/user stay the same (no /host prefix)
@@ -308,6 +325,12 @@ AWFEOF
     # File was created by us; remove it on exit to leave no trace
     CLEANUP_CMD="${CLEANUP_CMD}; rm -f /etc/resolv.conf 2>/dev/null || true"
     echo "[entrypoint] DNS configuration will be removed on exit"
+  fi
+  if [ "$HOSTS_MODIFIED" = "true" ]; then
+    # Remove the specific host.docker.internal line we added (runs inside chroot perspective)
+    # Use a precise pattern to avoid accidentally removing unrelated entries
+    CLEANUP_CMD="${CLEANUP_CMD}; sed -i '/^[0-9.]\\+[[:space:]]\\+host\\.docker\\.internal\$/d' /etc/hosts 2>/dev/null || true"
+    echo "[entrypoint] host.docker.internal will be removed from /etc/hosts on exit"
   fi
 
   exec chroot /host /bin/bash -c "

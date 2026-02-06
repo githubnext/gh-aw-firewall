@@ -60,27 +60,44 @@ function buildLocalInstallSteps(indent: string): string {
   ].join('\n') + '\n';
 }
 
+// Replace --image-tag <version> --skip-pull with --build-local so smoke tests
+// use locally-built container images (with the latest entrypoint.sh, setup-iptables.sh, etc.)
+// instead of pre-built GHCR images that may be stale.
+const imageTagRegex = /--image-tag\s+[0-9.]+\s+--skip-pull/g;
+
 for (const workflowPath of workflowPaths) {
-  const content = fs.readFileSync(workflowPath, 'utf-8');
+  let content = fs.readFileSync(workflowPath, 'utf-8');
+  let modified = false;
+
+  // Replace "Install awf binary" step with local build steps
   const matches = content.match(installStepRegexGlobal);
-
-  if (!matches || matches.length === 0) {
-    console.log(`Skipping ${workflowPath}: no awf install step found.`);
-    continue;
-  }
-
-  if (matches.length !== 1) {
-    throw new Error(
-      `Expected exactly one awf install step in ${workflowPath}, found ${matches.length}. ` +
-        'Ensure the workflow has a single "Install awf binary" step in the agent job.'
+  if (matches) {
+    if (matches.length !== 1) {
+      throw new Error(
+        `Expected exactly one awf install step in ${workflowPath}, found ${matches.length}. ` +
+          'Ensure the workflow has a single "Install awf binary" step in the agent job.'
+      );
+    }
+    content = content.replace(
+      installStepRegexGlobal,
+      (_match, indent: string) => buildLocalInstallSteps(indent)
     );
+    modified = true;
+    console.log(`  Replaced awf install step with local build`);
   }
 
-  const updated = content.replace(
-    installStepRegexGlobal,
-    (_match, indent: string) => buildLocalInstallSteps(indent)
-  );
+  // Replace GHCR image tags with local builds
+  const imageTagMatches = content.match(imageTagRegex);
+  if (imageTagMatches) {
+    content = content.replace(imageTagRegex, '--build-local');
+    modified = true;
+    console.log(`  Replaced ${imageTagMatches.length} --image-tag/--skip-pull with --build-local`);
+  }
 
-  fs.writeFileSync(workflowPath, updated);
-  console.log(`Updated ${workflowPath}`);
+  if (modified) {
+    fs.writeFileSync(workflowPath, content);
+    console.log(`Updated ${workflowPath}`);
+  } else {
+    console.log(`Skipping ${workflowPath}: no changes needed.`);
+  }
 }
