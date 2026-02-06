@@ -272,7 +272,7 @@ describe('Chroot Edge Cases', () => {
     }, 60000);
 
     test('should block HTTP to non-whitelisted domains', async () => {
-      const result = await runner.runWithSudo('curl -s --connect-timeout 5 http://example.com 2>&1', {
+      const result = await runner.runWithSudo('curl -f --connect-timeout 5 http://example.com 2>&1', {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 30000,
