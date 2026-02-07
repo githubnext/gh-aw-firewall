@@ -521,7 +521,7 @@ export function generateDockerCompose(
         logger.debug(`Could not resolve Docker bridge gateway: ${err}`);
       }
       fs.chmodSync(chrootHostsPath, 0o644);
-      agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts`);
+      agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts:ro`);
     } else {
       agentVolumes.push('/etc/hosts:/host/etc/hosts:ro');
     }

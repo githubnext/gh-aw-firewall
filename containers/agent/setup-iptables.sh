@@ -11,6 +11,12 @@ is_ipv6() {
   [[ "$ip" == *:* ]]
 }
 
+# Function to validate an IPv4 address format (e.g., 172.17.0.1)
+is_valid_ipv4() {
+  local ip="$1"
+  echo "$ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+}
+
 # Function to check if ip6tables is available and functional
 has_ip6tables() {
   if command -v ip6tables &>/dev/null && ip6tables -L -n &>/dev/null; then
@@ -124,12 +130,28 @@ iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 # Bypass Squid for host.docker.internal when host access is enabled.
 # MCP gateway traffic to host.docker.internal gets DNAT'd to Squid,
 # where Squid fails with "Invalid URL" because rmcp sends relative URLs.
+# The NAT RETURN prevents DNAT to Squid (which would crash on MCP traffic).
+# The FILTER ACCEPT is restricted to allowed ports only (80, 443, and --allow-host-ports).
 if [ -n "$AWF_ENABLE_HOST_ACCESS" ]; then
   HOST_GATEWAY_IP=$(getent hosts host.docker.internal | awk 'NR==1 { print $1 }')
-  if [ -n "$HOST_GATEWAY_IP" ]; then
+  if [ -n "$HOST_GATEWAY_IP" ] && is_valid_ipv4 "$HOST_GATEWAY_IP"; then
     echo "[iptables] Allow direct traffic to host gateway (${HOST_GATEWAY_IP}) - bypassing Squid..."
+    # NAT: skip DNAT to Squid for all traffic to host gateway (prevents Squid crash)
     iptables -t nat -A OUTPUT -d "$HOST_GATEWAY_IP" -j RETURN
-    iptables -A OUTPUT -d "$HOST_GATEWAY_IP" -j ACCEPT
+    # FILTER: only allow standard ports (80, 443) to host gateway
+    iptables -A OUTPUT -p tcp -d "$HOST_GATEWAY_IP" --dport 80 -j ACCEPT
+    iptables -A OUTPUT -p tcp -d "$HOST_GATEWAY_IP" --dport 443 -j ACCEPT
+    # FILTER: also allow user-specified ports from --allow-host-ports
+    if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
+      IFS=',' read -ra HOST_PORTS <<< "$AWF_ALLOW_HOST_PORTS"
+      for port_spec in "${HOST_PORTS[@]}"; do
+        port_spec=$(echo "$port_spec" | xargs)
+        echo "[iptables]   Allow host gateway port $port_spec"
+        iptables -A OUTPUT -p tcp -d "$HOST_GATEWAY_IP" --dport "$port_spec" -j ACCEPT
+      done
+    fi
+  elif [ -n "$HOST_GATEWAY_IP" ]; then
+    echo "[iptables] WARNING: host.docker.internal resolved to invalid IP '${HOST_GATEWAY_IP}', skipping host gateway bypass"
   else
     echo "[iptables] WARNING: host.docker.internal could not be resolved, skipping host gateway bypass"
   fi
@@ -139,10 +161,20 @@ if [ -n "$AWF_ENABLE_HOST_ACCESS" ]; then
   # instead of the Docker bridge gateway (172.17.0.1). Without this bypass,
   # MCP Streamable HTTP traffic goes through Squid, which crashes on SSE connections.
   NETWORK_GATEWAY_IP=$(route -n | awk '/^0\.0\.0\.0/ { print $2; exit }')
-  if [ -n "$NETWORK_GATEWAY_IP" ] && [ "$NETWORK_GATEWAY_IP" != "$HOST_GATEWAY_IP" ]; then
+  if [ -n "$NETWORK_GATEWAY_IP" ] && is_valid_ipv4 "$NETWORK_GATEWAY_IP" && [ "$NETWORK_GATEWAY_IP" != "$HOST_GATEWAY_IP" ]; then
     echo "[iptables] Allow direct traffic to network gateway (${NETWORK_GATEWAY_IP}) - bypassing Squid..."
     iptables -t nat -A OUTPUT -d "$NETWORK_GATEWAY_IP" -j RETURN
     iptables -A OUTPUT -p tcp -d "$NETWORK_GATEWAY_IP" --dport 80 -j ACCEPT
+    iptables -A OUTPUT -p tcp -d "$NETWORK_GATEWAY_IP" --dport 443 -j ACCEPT
+    if [ -n "$AWF_ALLOW_HOST_PORTS" ]; then
+      IFS=',' read -ra NET_GW_PORTS <<< "$AWF_ALLOW_HOST_PORTS"
+      for port_spec in "${NET_GW_PORTS[@]}"; do
+        port_spec=$(echo "$port_spec" | xargs)
+        iptables -A OUTPUT -p tcp -d "$NETWORK_GATEWAY_IP" --dport "$port_spec" -j ACCEPT
+      done
+    fi
+  elif [ -n "$NETWORK_GATEWAY_IP" ] && ! is_valid_ipv4 "$NETWORK_GATEWAY_IP"; then
+    echo "[iptables] WARNING: network gateway resolved to invalid IP '${NETWORK_GATEWAY_IP}', skipping"
   fi
 fi
 
