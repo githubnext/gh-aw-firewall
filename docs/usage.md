@@ -322,12 +322,13 @@ sudo awf \
 
 ### Security Considerations
 
-> ⚠️ **Security Warning**: When `--enable-host-access` is combined with `host.docker.internal` in `--allow-domains`, containers can access **ANY service** running on the host machine, including:
-> - Local databases (PostgreSQL, MySQL, Redis)
-> - Development servers
-> - Other sensitive services
+> ⚠️ **Security Warning**: When `--enable-host-access` is enabled, containers can access services running on the host machine via `host.docker.internal`.
 >
-> Only enable this for trusted workloads like MCP gateways.
+> **Port restrictions:** As of v0.13.13+, access is restricted to ports 80, 443, and any ports specified with `--allow-host-ports`. This prevents access to arbitrary services like databases, admin panels, etc.
+>
+> **Before v0.13.13:** All ports were accessible when host access was enabled, creating a security risk.
+>
+> Only enable this for trusted workloads like MCP gateways or local testing with Playwright.
 
 **Why opt-in?** By default, `host.docker.internal` hostname resolution is disabled to prevent containers from accessing host services. This is a defense-in-depth measure against malicious code attempting to access local resources.
 
@@ -337,12 +338,15 @@ sudo awf \
 # Start your MCP gateway on the host (port 8080)
 ./my-mcp-gateway --port 8080 &
 
-# Run awf with host access enabled
+# Run awf with host access enabled and custom port
 sudo awf \
   --enable-host-access \
+  --allow-host-ports 8080 \
   --allow-domains host.docker.internal,api.github.com \
   -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
 ```
+
+**Note:** Ports 80 and 443 are always allowed when `--enable-host-access` is enabled. Use `--allow-host-ports` to allow additional ports (e.g., for MCP gateways or development servers running on non-standard ports).
 
 ### CONNECT Method on Port 80
 
