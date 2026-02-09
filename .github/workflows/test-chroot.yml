@@ -36,15 +36,37 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Capture GOROOT for chroot tests
-        id: go-env
+      - name: Setup Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0'
+
+      - name: Capture tool paths for chroot tests
+        id: tool-paths
         run: |
           # Go on GitHub Actions uses trimmed binaries that require GOROOT
-          # Capture it here so we can pass it to chroot tests
           GOROOT_VALUE=$(go env GOROOT)
           echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_OUTPUT
           echo "GOROOT=${GOROOT_VALUE}" >> $GITHUB_ENV
           echo "Captured GOROOT: ${GOROOT_VALUE}"
+
+          # Java: JAVA_HOME is needed so entrypoint can add $JAVA_HOME/bin to PATH
+          if [ -n "$JAVA_HOME" ]; then
+            echo "JAVA_HOME=${JAVA_HOME}" >> $GITHUB_ENV
+            echo "Captured JAVA_HOME: ${JAVA_HOME}"
+          fi
+
+          # .NET: DOTNET_ROOT is needed so entrypoint can add to PATH and set DOTNET_ROOT
+          if [ -n "$DOTNET_ROOT" ]; then
+            echo "DOTNET_ROOT=${DOTNET_ROOT}" >> $GITHUB_ENV
+            echo "Captured DOTNET_ROOT: ${DOTNET_ROOT}"
+          fi
 
       - name: Verify host tools are available
         run: |
@@ -55,6 +77,10 @@ jobs:
           echo "pip: $(pip3 --version)"
           echo "Go: $(go version)"
           echo "GOROOT: $GOROOT"
+          echo "Java: $(java --version 2>&1 | head -1)"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "dotnet: $(dotnet --version 2>&1)"
+          echo "DOTNET_ROOT: $DOTNET_ROOT"
           echo "Git: $(git --version)"
           echo "curl: $(curl --version | head -1)"
 
@@ -138,6 +164,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0'
+
       - name: Capture tool paths for chroot tests
         id: tool-paths
         run: |
@@ -162,6 +193,12 @@ jobs:
             echo "Captured JAVA_HOME: ${JAVA_HOME}"
           fi
 
+          # .NET: DOTNET_ROOT is needed so entrypoint can add to PATH and set DOTNET_ROOT
+          if [ -n "$DOTNET_ROOT" ]; then
+            echo "DOTNET_ROOT=${DOTNET_ROOT}" >> $GITHUB_ENV
+            echo "Captured DOTNET_ROOT: ${DOTNET_ROOT}"
+          fi
+
       - name: Verify host tools are available
         run: |
           echo "=== Verifying host tools ==="
@@ -178,6 +215,8 @@ jobs:
           echo "CARGO_HOME: $CARGO_HOME"
           echo "Java: $(java --version 2>&1 | head -1)"
           echo "JAVA_HOME: $JAVA_HOME"
+          echo "dotnet: $(dotnet --version 2>&1)"
+          echo "DOTNET_ROOT: $DOTNET_ROOT"
 
       - name: Install dependencies
         run: npm ci

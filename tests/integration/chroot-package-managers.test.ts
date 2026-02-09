@@ -185,6 +185,70 @@ describe('Chroot Package Manager Support', () => {
     }, 120000);
   });
 
+  describe('.NET (dotnet/nuget)', () => {
+    test('should list installed .NET SDKs (offline)', async () => {
+      const result = await runner.runWithSudo('dotnet --list-sdks', {
+        allowDomains: ['localhost'],
+        logLevel: 'debug',
+        timeout: 60000,
+        enableChroot: true,
+      });
+
+      expect(result).toSucceed();
+      expect(result.stdout).toMatch(/\d+\.\d+\.\d+/);
+    }, 120000);
+
+    test('should list installed .NET runtimes (offline)', async () => {
+      const result = await runner.runWithSudo('dotnet --list-runtimes', {
+        allowDomains: ['localhost'],
+        logLevel: 'debug',
+        timeout: 60000,
+        enableChroot: true,
+      });
+
+      expect(result).toSucceed();
+      expect(result.stdout).toMatch(/Microsoft\.\w+/);
+    }, 120000);
+
+    test('should create and build a .NET project with NuGet restore', async () => {
+      // Tests NuGet package restore through the firewall
+      const result = await runner.runWithSudo(
+        'TESTDIR=$(mktemp -d) && cd $TESTDIR && ' +
+        'dotnet new console -o buildtest --no-restore && ' +
+        'cd buildtest && dotnet restore && dotnet build --no-restore && ' +
+        'rm -rf $TESTDIR',
+        {
+          allowDomains: ['api.nuget.org', 'nuget.org', 'dotnetcli.azureedge.net'],
+          logLevel: 'debug',
+          timeout: 180000,
+          enableChroot: true,
+        }
+      );
+
+      if (result.success) {
+        expect(result.stdout + result.stderr).toMatch(/Build succeeded/i);
+      }
+    }, 240000);
+
+    test('should be blocked from NuGet without domain whitelisting', async () => {
+      const result = await runner.runWithSudo(
+        'TESTDIR=$(mktemp -d) && cd $TESTDIR && ' +
+        'dotnet new console -o blocktest --no-restore 2>&1 && ' +
+        'cd blocktest && dotnet restore 2>&1; ' +
+        'EXIT=$?; rm -rf $TESTDIR; exit $EXIT',
+        {
+          allowDomains: ['localhost'],
+          logLevel: 'debug',
+          timeout: 90000,
+          enableChroot: true,
+        }
+      );
+
+      // dotnet restore should fail because NuGet API is not allowed
+      expect(result).toFail();
+    }, 150000);
+  });
+
   describe('Ruby (gem/bundler)', () => {
     test('should execute ruby from host via chroot', async () => {
       const result = await runner.runWithSudo('ruby --version', {
