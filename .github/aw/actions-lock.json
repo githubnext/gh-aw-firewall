@@ -35,15 +35,10 @@
       "version": "v3.12.0",
       "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
     },
-    "github/gh-aw/actions/setup@v0.42.0": {
+    "github/gh-aw/actions/setup@v0.42.16": {
       "repo": "github/gh-aw/actions/setup",
-      "version": "v0.42.0",
-      "sha": "a7134347103ecf66b4bd422c3e9ce6466d400c02"
-    },
-    "github/gh-aw/actions/setup@v0.42.7": {
-      "repo": "github/gh-aw/actions/setup",
-      "version": "v0.42.7",
-      "sha": "b16be66a3f0089b92ad39c580f42421b7104a849"
+      "version": "v0.42.16",
+      "sha": "15d0e133ebb103ed42485353efea00d7c8c07304"
     },
     "softprops/action-gh-release@v1": {
       "repo": "softprops/action-gh-release",

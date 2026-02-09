@@ -17,7 +17,7 @@ tools:
 safe-outputs:
   create-discussion:
     title-prefix: "[CI/CD Assessment] "
-    category: "General"
+    category: "general"
 timeout-minutes: 15
 ---
 
