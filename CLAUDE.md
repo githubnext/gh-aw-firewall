@@ -76,6 +76,24 @@ npm run lint
 npm run clean
 ```
 
+### Workflow Compilation
+
+**IMPORTANT:** When modifying smoke or build-test workflow `.md` files, you MUST run the post-processing script after compiling. The compiled `.lock.yml` files need post-processing to replace GHCR image references with local builds, remove sparse-checkout, and install awf from source.
+
+```bash
+# 1. Compile the workflow(s)
+gh-aw compile .github/workflows/smoke-claude.md
+
+# 2. Post-process ALL lock files (always run this after any compile)
+npx tsx scripts/ci/postprocess-smoke-workflows.ts
+```
+
+The post-processing script (`scripts/ci/postprocess-smoke-workflows.ts`) applies these transformations to lock files:
+- Replaces the "Install awf binary" step with local `npm ci && npm run build` steps
+- Removes sparse-checkout blocks (full repo needed for npm build)
+- Removes shallow depth settings
+- Replaces `--image-tag <version> --skip-pull` with `--build-local`
+
 ### Local Installation
 
 **For regular use:**
