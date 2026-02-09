@@ -231,10 +231,14 @@ describe('Chroot Package Manager Support', () => {
     }, 240000);
 
     test('should be blocked from NuGet without domain whitelisting', async () => {
+      // A bare 'dotnet restore' on a default console project may succeed from
+      // the local SDK cache. Adding an external package forces a network fetch.
       const result = await runner.runWithSudo(
         'TESTDIR=$(mktemp -d) && cd $TESTDIR && ' +
         'dotnet new console -o blocktest --no-restore 2>&1 && ' +
-        'cd blocktest && dotnet restore 2>&1; ' +
+        'cd blocktest && ' +
+        'dotnet add package Newtonsoft.Json --no-restore 2>&1 && ' +
+        'dotnet restore 2>&1; ' +
         'EXIT=$?; rm -rf $TESTDIR; exit $EXIT',
         {
           allowDomains: ['localhost'],
