@@ -348,10 +348,11 @@ export function generateDockerCompose(
     environment.no_proxy = environment.NO_PROXY;
     
     // Java uses a different format for non-proxy hosts (pipe-separated, not comma-separated)
-    // and doesn't support IP addresses well, so we use hostnames/patterns where possible
+    // and doesn't support IP addresses well, but 127.0.0.1 is a special case that should be included
+    // for localhost connections that may use the IP address directly
     const javaNoProxy = `localhost|127.0.0.1|host.docker.internal`;
-    // Append Java-specific NO_PROXY settings to JAVA_TOOL_OPTIONS
-    environment.JAVA_TOOL_OPTIONS += ` -Dhttp.nonProxyHosts="${javaNoProxy}"`;
+    // Append Java-specific NO_PROXY settings to JAVA_TOOL_OPTIONS (which is guaranteed to exist)
+    environment.JAVA_TOOL_OPTIONS = `${environment.JAVA_TOOL_OPTIONS} -Dhttp.nonProxyHosts="${javaNoProxy}"`;
   }
 
   // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
