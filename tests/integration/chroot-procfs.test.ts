@@ -43,8 +43,8 @@ describe('Chroot /proc Filesystem Correctness', () => {
       );
 
       expect(result).toSucceed();
-      // Should resolve to an absolute path
-      expect(result.stdout.trim()).toMatch(/^\//);
+      // Should contain an absolute path (stdout may include debug log lines)
+      expect(result.stdout).toMatch(/\/usr\/bin\/|\/bin\/|\/usr\/sbin\//);
     }, 120000);
 
     test('should resolve differently for different binaries', async () => {
