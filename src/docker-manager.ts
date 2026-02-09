@@ -644,13 +644,11 @@ export function generateDockerCompose(
       USER_GID: getSafeHostGid(),
     };
 
-    // Determine dockerfile based on chroot mode
-    let dockerfile = 'Dockerfile';
-    if (config.enableChroot) {
-      // Chroot mode: use minimal Dockerfile since user commands run on host
-      dockerfile = 'Dockerfile.minimal';
-      logger.debug('Chroot mode: building minimal agent image locally');
-    }
+    // Always use the full Dockerfile for feature parity with GHCR release images.
+    // Previously chroot mode used Dockerfile.minimal for smaller image size,
+    // but this caused missing packages (e.g., iproute2/net-tools) that
+    // setup-iptables.sh depends on for network gateway detection.
+    const dockerfile = 'Dockerfile';
 
     // For custom images (not presets), pass as BASE_IMAGE build arg
     // For 'act' preset with --build-local, use the act base image
