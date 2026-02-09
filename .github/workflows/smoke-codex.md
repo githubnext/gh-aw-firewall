@@ -4,8 +4,7 @@ on:
   schedule: every 12h
   workflow_dispatch:
   pull_request:
-    types: [labeled]
-    names: ["smoke"]
+    types: [opened, synchronize, reopened]
   reaction: "hooray"
 permissions:
   contents: read
@@ -46,8 +45,6 @@ safe-outputs:
       close-older-issues: true
     add-labels:
       allowed: [smoke-codex]
-    remove-labels:
-      allowed: [smoke]
     hide-comment:
     messages:
       footer: "> 🔮 *The oracle has spoken through [{workflow_name}]({run_url})*"
@@ -103,4 +100,3 @@ Use the `add_comment` tool to add a **mystical oracle-themed comment** to the la
 
 If all tests pass:
 - Use the `add_labels` safe-output tool to add the label `smoke-codex` to the pull request
-- Use the `remove_labels` safe-output tool to remove the label `smoke` from the pull request
