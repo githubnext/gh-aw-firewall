@@ -485,6 +485,30 @@ describe('docker-manager', () => {
       expect(env.SQUID_PROXY_PORT).toBe('3128');
     });
 
+    it('should configure JAVA_TOOL_OPTIONS with proxy settings for Java applications', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const env = agent.environment as Record<string, string>;
+
+      expect(env.JAVA_TOOL_OPTIONS).toBeDefined();
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttp.proxyHost=172.30.0.10');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttp.proxyPort=3128');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttps.proxyHost=172.30.0.10');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttps.proxyPort=3128');
+    });
+
+    it('should add http.nonProxyHosts to JAVA_TOOL_OPTIONS when host access is enabled', () => {
+      const configWithHostAccess = { ...mockConfig, enableHostAccess: true };
+      const result = generateDockerCompose(configWithHostAccess, mockNetworkConfig);
+      const agent = result.services.agent;
+      const env = agent.environment as Record<string, string>;
+
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttp.nonProxyHosts=');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('localhost');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('127.0.0.1');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('host.docker.internal');
+    });
+
     it('should mount required volumes in agent container (default behavior)', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
