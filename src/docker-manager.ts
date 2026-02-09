@@ -326,6 +326,10 @@ export function generateDockerCompose(
   const environment: Record<string, string> = {
     HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+    // Java applications don't automatically respect HTTP_PROXY/HTTPS_PROXY environment variables.
+    // Use JAVA_TOOL_OPTIONS to configure Java proxy settings for Maven, Gradle, and other Java tools.
+    // This environment variable is automatically picked up by all JVMs.
+    JAVA_TOOL_OPTIONS: `-Dhttp.proxyHost=${networkConfig.squidIp} -Dhttp.proxyPort=${SQUID_PORT} -Dhttps.proxyHost=${networkConfig.squidIp} -Dhttps.proxyPort=${SQUID_PORT}`,
     SQUID_PROXY_HOST: 'squid-proxy',
     SQUID_PROXY_PORT: SQUID_PORT.toString(),
     HOME: homeDir,
@@ -342,6 +346,12 @@ export function generateDockerCompose(
     const networkGatewayIp = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
     environment.NO_PROXY = `localhost,127.0.0.1,${networkConfig.squidIp},host.docker.internal,${networkGatewayIp}`;
     environment.no_proxy = environment.NO_PROXY;
+    
+    // Java uses a different format for non-proxy hosts (pipe-separated, not comma-separated)
+    // and doesn't support IP addresses well, so we use hostnames/patterns where possible
+    const javaNoProxy = `localhost|127.0.0.1|host.docker.internal`;
+    // Append Java-specific NO_PROXY settings to JAVA_TOOL_OPTIONS
+    environment.JAVA_TOOL_OPTIONS += ` -Dhttp.nonProxyHosts="${javaNoProxy}"`;
   }
 
   // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
