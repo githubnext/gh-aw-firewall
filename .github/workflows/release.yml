@@ -77,7 +77,7 @@ jobs:
             ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
 
       - name: Generate SBOM for Squid image
-        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0.22.2
         with:
           image: ghcr.io/${{ github.repository }}/squid@${{ steps.build_squid.outputs.digest }}
           format: spdx-json
@@ -109,7 +109,7 @@ jobs:
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
       - name: Generate SBOM for Agent image
-        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0.22.2
         with:
           image: ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
           format: spdx-json
@@ -142,7 +142,7 @@ jobs:
             ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
 
       - name: Generate SBOM for Agent-Act image
-        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0.22.2
         with:
           image: ghcr.io/${{ github.repository }}/agent-act@${{ steps.build_agent_act.outputs.digest }}
           format: spdx-json
