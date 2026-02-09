@@ -322,11 +322,9 @@ sudo awf \
 
 ### Security Considerations
 
-> ⚠️ **Security Warning**: When `--enable-host-access` is enabled, containers can access services running on the host machine via `host.docker.internal`.
+> ⚠️ **Security Warning**: When `--enable-host-access` is enabled, containers can currently access ANY port on services running on the host machine via `host.docker.internal`. This includes databases, admin panels, and other sensitive services.
 >
-> **Port restrictions:** As of v0.13.13+, access is restricted to ports 80, 443, and any ports specified with `--allow-host-ports`. This prevents access to arbitrary services like databases, admin panels, etc.
->
-> **Before v0.13.13:** All ports were accessible when host access was enabled, creating a security risk.
+> **Port restrictions:** Use `--allow-host-ports` to explicitly restrict which ports can be accessed (e.g., `--allow-host-ports 80,443,8080`). A future update will make port restrictions the default behavior.
 >
 > Only enable this for trusted workloads like MCP gateways or local testing with Playwright.
 
@@ -346,7 +344,9 @@ sudo awf \
   -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
 ```
 
-**Note:** Ports 80 and 443 are always allowed when `--enable-host-access` is enabled. Use `--allow-host-ports` to allow additional ports (e.g., for MCP gateways or development servers running on non-standard ports).
+**Note:** When `--enable-host-access` is enabled without `--allow-host-ports`, all ports on `host.docker.internal` are currently allowed. Use `--allow-host-ports` to explicitly restrict which ports can be accessed (e.g., `--allow-host-ports 80,443,8080` for web services and an MCP gateway).
+
+> **Security Note:** A future update will change the default behavior to only allow ports 80 and 443 unless `--allow-host-ports` is specified. Explicitly set `--allow-host-ports` now to ensure consistent behavior across versions.
 
 ### CONNECT Method on Port 80
 
