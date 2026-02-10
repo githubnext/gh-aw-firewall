@@ -1,0 +1,218 @@
+name: Nightly Release
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Every day at 2:00 AM UTC
+  workflow_dispatch:  # Allow manual triggers
+
+permissions:
+  contents: write   # Required for creating/deleting releases and tags
+  packages: write   # Required for pushing to GHCR
+
+jobs:
+  nightly:
+    name: Nightly Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check for new commits since last nightly
+        id: check_commits
+        run: |
+          # Get the timestamp of the existing nightly tag (if any)
+          if git rev-parse nightly >/dev/null 2>&1; then
+            LAST_NIGHTLY_SHA=$(git rev-parse nightly)
+            CURRENT_SHA=$(git rev-parse HEAD)
+            if [ "$LAST_NIGHTLY_SHA" = "$CURRENT_SHA" ]; then
+              echo "No new commits since last nightly build. Skipping."
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+            else
+              echo "New commits found since last nightly."
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No previous nightly tag found. Running first nightly build."
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: npm ci
+
+      - name: Build TypeScript
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: npm run build
+
+      - name: Get version info
+        if: steps.check_commits.outputs.has_changes == 'true'
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          NIGHTLY_VERSION="${VERSION}-nightly.${SHORT_SHA}"
+          echo "nightly_version=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "base_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build and push Squid image
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/squid
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/squid:nightly
+          cache-from: type=gha,scope=nightly-squid
+          cache-to: type=gha,mode=max,scope=nightly-squid
+
+      - name: Build and push Agent image
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/agent
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent:nightly
+          no-cache: true
+
+      - name: Build and push Agent-Act image
+        if: steps.check_commits.outputs.has_changes == 'true'
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/agent
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/agent-act:nightly
+          build-args: |
+            BASE_IMAGE=ghcr.io/catthehacker/ubuntu:act-24.04
+          no-cache: true
+
+      - name: Install pkg for binary creation
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: npm install -g pkg
+
+      - name: Create binaries
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          mkdir -p release
+          pkg . \
+            --targets node18-linux-x64 \
+            --output release/awf-linux-x64
+
+      - name: Smoke test binary
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          npx tsx scripts/ci/smoke-test-binary.ts \
+            release/awf-linux-x64 \
+            ${{ steps.version.outputs.base_version }}
+
+      - name: Create tarball for npm package
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          npm pack
+          mv *.tgz release/awf.tgz
+
+      - name: Generate checksums
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Generate changelog
+        if: steps.check_commits.outputs.has_changes == 'true'
+        id: changelog
+        run: |
+          # Get commits since last nightly (or last 20 if no previous nightly)
+          if git rev-parse nightly >/dev/null 2>&1; then
+            CHANGELOG=$(git log --oneline --pretty=format:"- %s (%h)" nightly..HEAD 2>/dev/null || echo "- Nightly build from main")
+          else
+            CHANGELOG=$(git log --oneline --pretty=format:"- %s (%h)" -20 2>/dev/null || echo "- Initial nightly build")
+          fi
+          echo "$CHANGELOG" > changelog.md
+
+      - name: Delete existing nightly release and tag
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          # Delete the release first (if it exists)
+          gh release delete nightly --yes 2>/dev/null || true
+          # Delete the remote tag
+          git push origin :refs/tags/nightly 2>/dev/null || true
+          # Delete the local tag
+          git tag -d nightly 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create nightly release
+        if: steps.check_commits.outputs.has_changes == 'true'
+        run: |
+          NIGHTLY_VERSION="${{ steps.version.outputs.nightly_version }}"
+          SHORT_SHA="${{ steps.version.outputs.short_sha }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          cat > release_notes.md <<EOF
+          ## Nightly Build — ${DATE}
+
+          Built from [\`main@${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) (${NIGHTLY_VERSION})
+
+          > [!WARNING]
+          > This is an automated nightly build from the \`main\` branch. It may contain untested or incomplete features. For stable releases, use a [versioned release](https://github.com/${{ github.repository }}/releases/latest).
+
+          ### Changes since last nightly
+
+          $(cat changelog.md)
+
+          ### Docker Images
+
+          \`\`\`bash
+          # Pull nightly images
+          docker pull ghcr.io/${{ github.repository }}/squid:nightly
+          docker pull ghcr.io/${{ github.repository }}/agent:nightly
+          docker pull ghcr.io/${{ github.repository }}/agent-act:nightly
+
+          # Use with awf
+          sudo awf --image-tag nightly --allow-domains example.com -- curl https://example.com
+          \`\`\`
+
+          ### Artifacts
+
+          | File | Description |
+          |------|-------------|
+          | \`awf-linux-x64\` | Standalone Linux binary |
+          | \`awf.tgz\` | npm package tarball |
+          | \`checksums.txt\` | SHA256 checksums |
+          EOF
+
+          gh release create nightly \
+            --title "Nightly Build (${DATE})" \
+            --notes-file release_notes.md \
+            --prerelease \
+            --target main \
+            release/awf-linux-x64 \
+            release/awf.tgz \
+            release/checksums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
