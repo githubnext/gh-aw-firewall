@@ -787,8 +787,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // Write Docker Compose config
   const dockerCompose = generateDockerCompose(config, networkConfig, sslConfig);
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
-  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose));
-  logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
+  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
+  logger.debug(`Docker Compose config written to: ${dockerComposePath} (mode 0600)`);
 }
 
 /**
@@ -887,10 +887,14 @@ export const SENSITIVE_ENV_NAMES = new Set([
 export function redactComposeSecrets(workDir: string): void {
   const composePath = path.join(workDir, 'docker-compose.yml');
   try {
-    if (!fs.existsSync(composePath)) {
+    // Read directly without existsSync to avoid TOCTOU race condition
+    let content: string;
+    try {
+      content = fs.readFileSync(composePath, 'utf-8');
+    } catch {
+      // File doesn't exist or can't be read - nothing to redact
       return;
     }
-    const content = fs.readFileSync(composePath, 'utf-8');
     const config = yaml.load(content) as DockerComposeConfig;
     if (!config?.services) {
       return;
@@ -910,7 +914,7 @@ export function redactComposeSecrets(workDir: string): void {
     }
 
     if (redacted) {
-      fs.writeFileSync(composePath, yaml.dump(config));
+      fs.writeFileSync(composePath, yaml.dump(config), { mode: 0o600 });
       logger.debug('Redacted sensitive environment variables from docker-compose.yml');
     }
   } catch (error) {

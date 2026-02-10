@@ -183,6 +183,42 @@ static void init_token_list(void) {
 
     tokens_initialized = 1;
 }
+/**
+ * Library constructor - runs before main() when loaded via LD_PRELOAD.
+ * Eagerly caches all sensitive token values and unsets them from the
+ * environment. This ensures /proc/self/environ is clean from the very
+ * start of the process, closing the window between process start and
+ * first getenv() call.
+ */
+__attribute__((constructor))
+static void eagerly_scrub_tokens(void) {
+    /* Initialize real getenv first */
+    pthread_once(&getenv_init_once, init_real_getenv_once);
+
+    /* Initialize token list */
+    pthread_mutex_lock(&token_mutex);
+    if (!tokens_initialized) {
+        init_token_list();
+    }
+
+    /* Cache and unset all tokens that have values */
+    for (int i = 0; i < num_tokens; i++) {
+        if (!token_accessed[i]) {
+            char *value = real_getenv(sensitive_tokens[i]);
+            if (value != NULL) {
+                token_cache[i] = strdup(value);
+                unsetenv(sensitive_tokens[i]);
+                fprintf(stderr, "[one-shot-token] Eagerly cached and cleared %s (value: %s)\n",
+                        sensitive_tokens[i], format_token_value(token_cache[i]));
+            }
+            token_accessed[i] = 1;
+        }
+    }
+    pthread_mutex_unlock(&token_mutex);
+
+    fprintf(stderr, "[one-shot-token] /proc/self/environ scrubbed at library load time\n");
+}
+
 /* Ensure real_getenv is initialized (thread-safe) */
 static void init_real_getenv(void) {
     pthread_once(&getenv_init_once, init_real_getenv_once);
