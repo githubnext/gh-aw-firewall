@@ -10,7 +10,7 @@ permissions:
 tools:
   github:
     toolsets: [default]
-  bash:
+  bash: true
 safe-outputs:
   create-discussion:
     title-prefix: "[CLI Flag Review] "
