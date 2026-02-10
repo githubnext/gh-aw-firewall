@@ -2,8 +2,9 @@
  * One-Shot Token LD_PRELOAD Library
  *
  * Intercepts getenv() calls for sensitive token environment variables.
- * On first access, returns the real value and immediately unsets the variable.
- * Subsequent calls return NULL, preventing token reuse by malicious code.
+ * On first access, caches the value in memory and unsets from environment.
+ * Subsequent calls return the cached value, so the process can read tokens
+ * multiple times while /proc/self/environ no longer exposes them.
  *
  * Configuration:
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
@@ -52,6 +53,11 @@ static int num_tokens = 0;
 
 /* Track which tokens have been accessed (one flag per token) */
 static int token_accessed[MAX_TOKENS] = {0};
+
+/* Cached token values - stored on first access so subsequent reads succeed
+ * even after the variable is unset from the environment. This allows
+ * /proc/self/environ to be cleaned while the process can still read tokens. */
+static char *token_cache[MAX_TOKENS] = {0};
 
 /* Mutex for thread safety */
 static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -200,11 +206,42 @@ static int get_token_index(const char *name) {
 }
 
 /**
+ * Format token value for logging: show first 4 characters + "..."
+ * Returns a static buffer (not thread-safe for the buffer, but safe for our use case
+ * since we hold token_mutex when calling this)
+ */
+static const char *format_token_value(const char *value) {
+    static char formatted[8]; /* "abcd..." + null terminator */
+    
+    if (value == NULL) {
+        return "NULL";
+    }
+    
+    size_t len = strlen(value);
+    if (len == 0) {
+        return "(empty)";
+    }
+    
+    if (len <= 4) {
+        /* If 4 chars or less, just show it all with ... */
+        snprintf(formatted, sizeof(formatted), "%s...", value);
+    } else {
+        /* Show first 4 chars + ... */
+        snprintf(formatted, sizeof(formatted), "%.4s...", value);
+    }
+    
+    return formatted;
+}
+
+/**
  * Intercepted getenv function
  *
  * For sensitive tokens:
- * - First call: returns the real value, then unsets the variable
- * - Subsequent calls: returns NULL
+ * - First call: caches the value, unsets from environment, returns cached value
+ * - Subsequent calls: returns the cached value from memory
+ *
+ * This clears tokens from /proc/self/environ while allowing the process
+ * to read them multiple times via getenv().
  *
  * For all other variables: passes through to real getenv
  */
@@ -226,30 +263,33 @@ char *getenv(const char *name) {
         return real_getenv(name);
     }
 
-    /* Sensitive token - handle one-shot access (mutex already held) */
+    /* Sensitive token - handle cached access (mutex already held) */
     char *result = NULL;
 
     if (!token_accessed[token_idx]) {
-        /* First access - get the real value */
+        /* First access - get the real value and cache it */
         result = real_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy since unsetenv will invalidate the pointer */
+            /* Cache the value so subsequent reads succeed after unsetenv */
             /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+             * for the lifetime of the process */
+            token_cache[token_idx] = strdup(result);
 
-            /* Unset the variable so it can't be accessed again */
+            /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cleared\n", name);
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n", 
+                    name, format_token_value(token_cache[token_idx]));
+
+            result = token_cache[token_idx];
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed - return NULL */
-        result = NULL;
+        /* Already accessed - return cached value */
+        result = token_cache[token_idx];
     }
 
     pthread_mutex_unlock(&token_mutex);
@@ -261,11 +301,11 @@ char *getenv(const char *name) {
  * Intercepted secure_getenv function
  *
  * This function preserves secure_getenv semantics (returns NULL in privileged contexts)
- * while applying the same one-shot token protection as getenv.
+ * while applying the same cached token protection as getenv.
  *
  * For sensitive tokens:
- * - First call: returns the real value (if not in privileged context), then unsets the variable
- * - Subsequent calls: returns NULL
+ * - First call: caches the value, unsets from environment, returns cached value
+ * - Subsequent calls: returns the cached value from memory
  *
  * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
@@ -285,7 +325,7 @@ char *secure_getenv(const char *name) {
         return real_secure_getenv(name);
     }
 
-    /* Sensitive token - handle one-shot access with secure_getenv semantics */
+    /* Sensitive token - handle cached access with secure_getenv semantics */
     pthread_mutex_lock(&token_mutex);
 
     char *result = NULL;
@@ -295,22 +335,25 @@ char *secure_getenv(const char *name) {
         result = real_secure_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy since unsetenv will invalidate the pointer */
+            /* Cache the value so subsequent reads succeed after unsetenv */
             /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+             * for the lifetime of the process */
+            token_cache[token_idx] = strdup(result);
 
-            /* Unset the variable so it can't be accessed again */
+            /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (via secure_getenv)\n", name);
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n", 
+                    name, format_token_value(token_cache[token_idx]));
+
+            result = token_cache[token_idx];
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed - return NULL */
-        result = NULL;
+        /* Already accessed - return cached value */
+        result = token_cache[token_idx];
     }
 
     pthread_mutex_unlock(&token_mutex);
