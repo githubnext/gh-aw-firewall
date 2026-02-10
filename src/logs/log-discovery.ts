@@ -154,7 +154,7 @@ export async function isContainerRunning(containerName: string): Promise<boolean
       '--filter',
       // Security: containerName is from internal constant (SQUID_CONTAINER_NAME = 'awf-squid')
       // and is not user-controlled input. The docker ps --filter is safe here.
-      // eslint-disable-next-line rulesdir/no-unsafe-execa
+      // eslint-disable-next-line local/no-unsafe-execa
       `name=^${containerName}$`,
       '--format',
       '{{.Names}}',
