@@ -158,12 +158,28 @@ This produces `one-shot-token.so` in the current directory.
 # Build the library
 ./build.sh
 
-# Test with a simple program
+# Create a simple C program that calls getenv twice
+cat > test_getenv.c << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    const char *token1 = getenv("GITHUB_TOKEN");
+    printf("First read: %s\n", token1 ? token1 : "");
+
+    const char *token2 = getenv("GITHUB_TOKEN");
+    printf("Second read: %s\n", token2 ? token2 : "");
+
+    return 0;
+}
+EOF
+
+# Compile the test program
+gcc -o test_getenv test_getenv.c
+
+# Test with the one-shot token library preloaded
 export GITHUB_TOKEN="test-token-12345"
-LD_PRELOAD=./one-shot-token.so bash -c '
-  echo "First read: $(printenv GITHUB_TOKEN)"
-  echo "Second read: $(printenv GITHUB_TOKEN)"
-'
+LD_PRELOAD=./one-shot-token.so ./test_getenv
 ```
 
 Expected output:
