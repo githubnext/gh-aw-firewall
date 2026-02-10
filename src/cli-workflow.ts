@@ -5,6 +5,7 @@ export interface WorkflowDependencies {
   setupHostIptables: (squidIp: string, port: number, dnsServers: string[]) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
   startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string, skipPull?: boolean) => Promise<void>;
+  redactComposeSecrets: (workDir: string) => void;
   runAgentCommand: (
     workDir: string,
     allowedDomains: string[],
@@ -52,6 +53,11 @@ export async function runMainWorkflow(
 
   // Step 2: Start containers
   await dependencies.startContainers(config.workDir, config.allowedDomains, config.proxyLogsDir, config.skipPull);
+
+  // Step 2.5: Redact secrets from docker-compose.yml after containers start
+  // This prevents exposure via /host/tmp/awf-*/docker-compose.yml
+  dependencies.redactComposeSecrets(config.workDir);
+
   onContainersStarted?.();
 
   // Step 3: Wait for agent to complete

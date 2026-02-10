@@ -859,6 +859,73 @@ async function checkSquidLogs(workDir: string, proxyLogsDir?: string): Promise<{
 }
 
 /**
+ * Environment variable names that contain sensitive tokens/secrets.
+ * These are redacted from docker-compose.yml after containers start
+ * to prevent exposure via the /host mount.
+ *
+ * This list must stay aligned with DEFAULT_SENSITIVE_TOKENS in:
+ * - containers/agent/one-shot-token/one-shot-token.c
+ * - containers/agent/entrypoint.sh (SENSITIVE_TOKENS variable)
+ */
+export const SENSITIVE_ENV_NAMES = new Set([
+  'COPILOT_GITHUB_TOKEN',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'GITHUB_API_TOKEN',
+  'GITHUB_PAT',
+  'GH_ACCESS_TOKEN',
+  'GITHUB_PERSONAL_ACCESS_TOKEN',
+  'OPENAI_API_KEY',
+  'OPENAI_KEY',
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_API_KEY',
+  'CODEX_API_KEY',
+]);
+
+/**
+ * Redacts sensitive environment variable values in docker-compose.yml
+ * after containers have started. This prevents exposure of secrets via
+ * the /host mount point (e.g., reading the compose file from within the container).
+ *
+ * @param workDir - Working directory containing docker-compose.yml
+ */
+export function redactComposeSecrets(workDir: string): void {
+  const composePath = path.join(workDir, 'docker-compose.yml');
+  if (!fs.existsSync(composePath)) {
+    logger.debug('No docker-compose.yml found to redact');
+    return;
+  }
+
+  try {
+    let content = fs.readFileSync(composePath, 'utf8');
+    let redactedCount = 0;
+
+    for (const name of SENSITIVE_ENV_NAMES) {
+      // Match YAML environment entries like:
+      //   - GITHUB_TOKEN=ghp_abc123
+      //   GITHUB_TOKEN: ghp_abc123
+      // Replace the value with ***REDACTED***
+      const envLinePattern = new RegExp(
+        `(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(=|:\\s*)(.+)`,
+        'g'
+      );
+      const newContent = content.replace(envLinePattern, `$1$2***REDACTED***`);
+      if (newContent !== content) {
+        redactedCount++;
+        content = newContent;
+      }
+    }
+
+    if (redactedCount > 0) {
+      fs.writeFileSync(composePath, content);
+      logger.info(`Redacted ${redactedCount} sensitive value(s) from docker-compose.yml`);
+    }
+  } catch (error) {
+    logger.warn('Could not redact docker-compose.yml secrets:', error);
+  }
+}
+
+/**
  * Starts Docker Compose services
  * @param workDir - Working directory containing Docker Compose config
  * @param allowedDomains - List of allowed domains for error reporting

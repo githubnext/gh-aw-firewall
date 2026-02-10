@@ -1,13 +1,21 @@
 /**
  * One-Shot Token LD_PRELOAD Library
  *
- * Intercepts getenv() calls for sensitive token environment variables.
- * On first access, caches the value in memory and unsets from environment.
- * Subsequent calls return the cached value, so the process can read tokens
- * multiple times while /proc/self/environ no longer exposes them.
+ * Protects sensitive token environment variables from exposure via
+ * /proc/self/environ and limits access via getenv().
+ *
+ * When loaded, the library constructor reads cached token values from
+ * AWF_TOKEN_CACHE_FILE (written by entrypoint.sh), populates an in-memory
+ * cache, and immediately deletes the file. The sensitive variables are
+ * never present in the process environment, so /proc/self/environ is clean.
+ * Subsequent getenv() calls return the cached values from memory.
+ *
+ * Fallback: If no cache file is found, tokens are read from the environment
+ * on first getenv() call, cached, and unset (original behavior).
  *
  * Configuration:
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
+ *   AWF_TOKEN_CACHE_FILE - Path to the token cache file (set by entrypoint.sh)
  *   If not set, uses built-in defaults
  *
  * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
@@ -20,6 +28,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <ctype.h>
 
 /* Default sensitive token environment variable names */
@@ -183,6 +192,121 @@ static void init_token_list(void) {
 
     tokens_initialized = 1;
 }
+
+/**
+ * Load cached token values from AWF_TOKEN_CACHE_FILE.
+ *
+ * The file format is one NAME=VALUE per line. After reading, the file
+ * is deleted immediately to minimize the exposure window.
+ *
+ * Must be called with token_mutex held and after init_token_list().
+ */
+static void load_token_cache_file(void) {
+    const char *cache_path = real_getenv("AWF_TOKEN_CACHE_FILE");
+    if (cache_path == NULL || cache_path[0] == '\0') {
+        return;
+    }
+
+    FILE *f = fopen(cache_path, "r");
+    if (f == NULL) {
+        fprintf(stderr, "[one-shot-token] WARNING: Could not open token cache file: %s\n", cache_path);
+        return;
+    }
+
+    char line[8192];
+    int loaded = 0;
+    while (fgets(line, sizeof(line), f) != NULL) {
+        /* Strip trailing newline */
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+            len--;
+        }
+
+        /* Find the '=' separator */
+        char *eq = strchr(line, '=');
+        if (eq == NULL || eq == line) continue;
+
+        *eq = '\0';
+        const char *name = line;
+        const char *value = eq + 1;
+
+        /* Find if this name matches a sensitive token */
+        int idx = get_token_index(name);
+        if (idx >= 0 && !token_accessed[idx]) {
+            token_cache[idx] = strdup(value);
+            if (token_cache[idx] != NULL) {
+                token_accessed[idx] = 1;
+                loaded++;
+                fprintf(stderr, "[one-shot-token] Loaded cached token %s (value: %s)\n",
+                        name, format_token_value(token_cache[idx]));
+            }
+        }
+    }
+
+    fclose(f);
+
+    /* Delete the cache file immediately to minimize exposure */
+    if (unlink(cache_path) == 0) {
+        fprintf(stderr, "[one-shot-token] Token cache file deleted: %s\n", cache_path);
+    } else {
+        fprintf(stderr, "[one-shot-token] WARNING: Could not delete token cache file: %s\n", cache_path);
+    }
+
+    /* Also remove AWF_TOKEN_CACHE_FILE from environ */
+    unsetenv("AWF_TOKEN_CACHE_FILE");
+
+    if (loaded > 0) {
+        fprintf(stderr, "[one-shot-token] Loaded %d token(s) from cache file\n", loaded);
+    }
+}
+
+/**
+ * Library constructor - runs when the library is loaded (before main()).
+ *
+ * If AWF_TOKEN_CACHE_FILE is set (by entrypoint.sh), loads cached token
+ * values from the file and deletes it. The sensitive variables are never
+ * present in /proc/self/environ because entrypoint.sh unsets them before
+ * exec.
+ *
+ * If no cache file exists, tokens remain in the environment and will be
+ * cached + unset on first getenv() call (original fallback behavior).
+ */
+__attribute__((constructor))
+static void one_shot_token_init(void) {
+    /* Initialize the real getenv pointer first */
+    init_real_getenv_once();
+
+    pthread_mutex_lock(&token_mutex);
+    if (!tokens_initialized) {
+        init_token_list();
+    }
+
+    /* Load tokens from cache file if available (set by entrypoint.sh) */
+    load_token_cache_file();
+
+    /* Eagerly cache any remaining sensitive tokens still in the environment
+     * (fallback for when no cache file was used) */
+    for (int i = 0; i < num_tokens; i++) {
+        if (!token_accessed[i]) {
+            char *value = real_getenv(sensitive_tokens[i]);
+            if (value != NULL) {
+                token_cache[i] = strdup(value);
+                if (token_cache[i] != NULL) {
+                    unsetenv(sensitive_tokens[i]);
+                    fprintf(stderr, "[one-shot-token] Token %s eagerly cached and scrubbed from environ (value: %s)\n",
+                            sensitive_tokens[i], format_token_value(token_cache[i]));
+                }
+                token_accessed[i] = 1;
+            }
+        }
+    }
+    pthread_mutex_unlock(&token_mutex);
+
+    fprintf(stderr, "[one-shot-token] Library initialized: %d token(s) protected, /proc/self/environ scrubbed\n",
+            num_tokens);
+}
+
 /* Ensure real_getenv is initialized (thread-safe) */
 static void init_real_getenv(void) {
     pthread_once(&getenv_init_once, init_real_getenv_once);

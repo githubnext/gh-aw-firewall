@@ -13,6 +13,7 @@ import {
   runAgentCommand,
   stopContainers,
   cleanup,
+  redactComposeSecrets,
 } from './docker-manager';
 import {
   ensureFirewallNetwork,
@@ -1023,6 +1024,7 @@ program
           setupHostIptables,
           writeConfigs,
           startContainers,
+          redactComposeSecrets,
           runAgentCommand,
         },
         {

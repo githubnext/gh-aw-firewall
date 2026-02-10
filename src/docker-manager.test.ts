@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE, redactComposeSecrets, SENSITIVE_ENV_NAMES } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1810,6 +1810,102 @@ describe('docker-manager', () => {
 
       // Should not throw
       await expect(cleanup(nonExistentDir, false)).resolves.not.toThrow();
+    });
+  });
+
+  describe('redactComposeSecrets', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-redact-test-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should redact sensitive environment variable values in docker-compose.yml', () => {
+      const composePath = path.join(tmpDir, 'docker-compose.yml');
+      const content = [
+        'services:',
+        '  agent:',
+        '    environment:',
+        '      - GITHUB_TOKEN=ghp_abc123secret456',
+        '      - ANTHROPIC_API_KEY=sk-ant-secret789',
+        '      - HOME=/root',
+        '      - PATH=/usr/bin',
+      ].join('\n');
+      fs.writeFileSync(composePath, content);
+
+      redactComposeSecrets(tmpDir);
+
+      const result = fs.readFileSync(composePath, 'utf8');
+      expect(result).toContain('GITHUB_TOKEN=***REDACTED***');
+      expect(result).toContain('ANTHROPIC_API_KEY=***REDACTED***');
+      expect(result).not.toContain('ghp_abc123secret456');
+      expect(result).not.toContain('sk-ant-secret789');
+      // Non-sensitive vars should remain
+      expect(result).toContain('HOME=/root');
+      expect(result).toContain('PATH=/usr/bin');
+    });
+
+    it('should handle YAML key-value format', () => {
+      const composePath = path.join(tmpDir, 'docker-compose.yml');
+      const content = [
+        'services:',
+        '  agent:',
+        '    environment:',
+        '      GITHUB_TOKEN: ghp_abc123secret456',
+        '      GH_TOKEN: gho_another_secret',
+      ].join('\n');
+      fs.writeFileSync(composePath, content);
+
+      redactComposeSecrets(tmpDir);
+
+      const result = fs.readFileSync(composePath, 'utf8');
+      expect(result).toContain('GITHUB_TOKEN: ***REDACTED***');
+      expect(result).toContain('GH_TOKEN: ***REDACTED***');
+      expect(result).not.toContain('ghp_abc123secret456');
+      expect(result).not.toContain('gho_another_secret');
+    });
+
+    it('should not modify file when no sensitive vars present', () => {
+      const composePath = path.join(tmpDir, 'docker-compose.yml');
+      const content = [
+        'services:',
+        '  agent:',
+        '    environment:',
+        '      - HOME=/root',
+        '      - PATH=/usr/bin',
+      ].join('\n');
+      fs.writeFileSync(composePath, content);
+
+      redactComposeSecrets(tmpDir);
+
+      const result = fs.readFileSync(composePath, 'utf8');
+      expect(result).toBe(content);
+    });
+
+    it('should handle missing docker-compose.yml gracefully', () => {
+      // Should not throw
+      expect(() => redactComposeSecrets(tmpDir)).not.toThrow();
+    });
+
+    it('should redact all known sensitive env names', () => {
+      const composePath = path.join(tmpDir, 'docker-compose.yml');
+      const lines = Array.from(SENSITIVE_ENV_NAMES).map(
+        name => `      - ${name}=secret_value_for_${name}`
+      );
+      const content = ['services:', '  agent:', '    environment:', ...lines].join('\n');
+      fs.writeFileSync(composePath, content);
+
+      redactComposeSecrets(tmpDir);
+
+      const result = fs.readFileSync(composePath, 'utf8');
+      for (const name of SENSITIVE_ENV_NAMES) {
+        expect(result).toContain(`${name}=***REDACTED***`);
+        expect(result).not.toContain(`secret_value_for_${name}`);
+      }
     });
   });
 });

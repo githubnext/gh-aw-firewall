@@ -389,9 +389,50 @@ AWFEOF
     LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
   fi
 
+  # Scrub sensitive tokens from the environment before exec to prevent
+  # /proc/self/environ exposure. Write values to a cache file so the
+  # LD_PRELOAD library can still serve them via getenv().
+  SCRUB_CMD=""
+  if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
+    TOKEN_CACHE_FILE="/tmp/.awf-token-cache-$$"
+    # Write sensitive token values to cache file (inside chroot perspective)
+    # The LD_PRELOAD constructor reads this file and deletes it immediately
+    : > "/host${TOKEN_CACHE_FILE}"
+    chmod 600 "/host${TOKEN_CACHE_FILE}"
+    # Use AWF_ONE_SHOT_TOKENS if set, otherwise use defaults
+    if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
+      SENSITIVE_TOKENS="${AWF_ONE_SHOT_TOKENS}"
+    else
+      SENSITIVE_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+    fi
+    IFS=',' read -ra TOKEN_NAMES <<< "${SENSITIVE_TOKENS}"
+    for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
+      TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)  # trim whitespace
+      if [ -n "$TOKEN_NAME" ]; then
+        TOKEN_VALUE=$(eval echo "\${${TOKEN_NAME}:-}")
+        if [ -n "$TOKEN_VALUE" ]; then
+          echo "${TOKEN_NAME}=${TOKEN_VALUE}" >> "/host${TOKEN_CACHE_FILE}"
+          echo "[entrypoint] Token ${TOKEN_NAME} written to cache file and will be scrubbed from environ"
+        fi
+      fi
+    done
+    chown "$(id -u awfuser):$(id -g awfuser)" "/host${TOKEN_CACHE_FILE}" 2>/dev/null || true
+    SCRUB_CMD="export AWF_TOKEN_CACHE_FILE=${TOKEN_CACHE_FILE};"
+    # Unset sensitive vars so they don't appear in /proc/self/environ of exec'd process
+    for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
+      TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)
+      if [ -n "$TOKEN_NAME" ]; then
+        unset "$TOKEN_NAME" 2>/dev/null || true
+      fi
+    done
+    # Also add cache file cleanup to the exit trap
+    CLEANUP_CMD="${CLEANUP_CMD}; rm -f ${TOKEN_CACHE_FILE} 2>/dev/null || true"
+  fi
+
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
     trap '${CLEANUP_CMD}' EXIT
+    ${SCRUB_CMD}
     ${LD_PRELOAD_CMD}
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
   "
@@ -409,5 +450,39 @@ else
   # Enable one-shot token protection - tokens are cached in memory and
   # unset from the environment so /proc/self/environ is cleared
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
+
+  # Scrub sensitive tokens from the environment before exec to prevent
+  # /proc/self/environ exposure. Write values to a cache file so the
+  # LD_PRELOAD library can still serve them via getenv().
+  TOKEN_CACHE_FILE="/tmp/.awf-token-cache-$$"
+  : > "${TOKEN_CACHE_FILE}"
+  chmod 600 "${TOKEN_CACHE_FILE}"
+  # Use AWF_ONE_SHOT_TOKENS if set, otherwise use defaults
+  if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
+    SENSITIVE_TOKENS="${AWF_ONE_SHOT_TOKENS}"
+  else
+    SENSITIVE_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+  fi
+  IFS=',' read -ra TOKEN_NAMES <<< "${SENSITIVE_TOKENS}"
+  for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
+    TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)  # trim whitespace
+    if [ -n "$TOKEN_NAME" ]; then
+      TOKEN_VALUE=$(eval echo "\${${TOKEN_NAME}:-}")
+      if [ -n "$TOKEN_VALUE" ]; then
+        echo "${TOKEN_NAME}=${TOKEN_VALUE}" >> "${TOKEN_CACHE_FILE}"
+        echo "[entrypoint] Token ${TOKEN_NAME} written to cache file and will be scrubbed from environ"
+      fi
+    fi
+  done
+  chown "$(id -u awfuser):$(id -g awfuser)" "${TOKEN_CACHE_FILE}" 2>/dev/null || true
+  export AWF_TOKEN_CACHE_FILE="${TOKEN_CACHE_FILE}"
+  # Unset sensitive vars so they don't appear in /proc/self/environ of exec'd process
+  for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
+    TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)
+    if [ -n "$TOKEN_NAME" ]; then
+      unset "$TOKEN_NAME" 2>/dev/null || true
+    fi
+  done
+
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi

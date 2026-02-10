@@ -35,6 +35,9 @@ describe('runMainWorkflow', () => {
       startContainers: jest.fn().mockImplementation(async () => {
         callOrder.push('startContainers');
       }),
+      redactComposeSecrets: jest.fn().mockImplementation(() => {
+        callOrder.push('redactComposeSecrets');
+      }),
       runAgentCommand: jest.fn().mockImplementation(async () => {
         callOrder.push('runAgentCommand');
         return { exitCode: 0 };
@@ -55,6 +58,7 @@ describe('runMainWorkflow', () => {
       'setupHostIptables',
       'writeConfigs',
       'startContainers',
+      'redactComposeSecrets',
       'runAgentCommand',
       'performCleanup',
     ]);
@@ -79,6 +83,9 @@ describe('runMainWorkflow', () => {
       startContainers: jest.fn().mockImplementation(async () => {
         callOrder.push('startContainers');
       }),
+      redactComposeSecrets: jest.fn().mockImplementation(() => {
+        callOrder.push('redactComposeSecrets');
+      }),
       runAgentCommand: jest.fn().mockImplementation(async () => {
         callOrder.push('runAgentCommand');
         return { exitCode: 42 };
@@ -100,6 +107,7 @@ describe('runMainWorkflow', () => {
       'setupHostIptables',
       'writeConfigs',
       'startContainers',
+      'redactComposeSecrets',
       'runAgentCommand',
       'performCleanup',
     ]);
