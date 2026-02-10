@@ -104,7 +104,7 @@ jobs:
       - name: Run chroot language tests
         run: |
           echo "=== Running chroot language tests ==="
-          npm run test:integration -- --testPathPattern="chroot-languages" --verbose
+          npm run test:integration -- --testPathPatterns="chroot-languages" --verbose
         env:
           JEST_TIMEOUT: 180000
 
@@ -238,7 +238,7 @@ jobs:
       - name: Run chroot package manager tests
         run: |
           echo "=== Running chroot package manager tests ==="
-          npm run test:integration -- --testPathPattern="chroot-package-managers" --verbose
+          npm run test:integration -- --testPathPatterns="chroot-package-managers" --verbose
         env:
           JEST_TIMEOUT: 300000
 
@@ -312,7 +312,7 @@ jobs:
       - name: Run chroot procfs tests
         run: |
           echo "=== Running chroot procfs tests ==="
-          npm run test:integration -- --testPathPattern="chroot-procfs" --verbose
+          npm run test:integration -- --testPathPatterns="chroot-procfs" --verbose
         env:
           JEST_TIMEOUT: 180000
 
@@ -368,7 +368,7 @@ jobs:
       - name: Run chroot edge case tests
         run: |
           echo "=== Running chroot edge case tests ==="
-          npm run test:integration -- --testPathPattern="chroot-edge-cases" --verbose
+          npm run test:integration -- --testPathPatterns="chroot-edge-cases" --verbose
         env:
           JEST_TIMEOUT: 180000
 

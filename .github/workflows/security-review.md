@@ -25,7 +25,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "[Security Review] "
-    category: "General"
+    category: "general"
 timeout-minutes: 45
 ---
 

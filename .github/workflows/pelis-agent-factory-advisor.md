@@ -26,7 +26,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "[Pelis Agent Factory Advisor] "
-    category: "General"
+    category: "general"
 timeout-minutes: 30
 ---
 

@@ -504,7 +504,7 @@ export function parseVolumeMounts(mounts: string[]): ParseVolumeMountsResult | P
 
     // Validate host path exists
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('fs');
       if (!fs.existsSync(hostPath)) {
         return {
