@@ -386,7 +386,7 @@ AWFEOF
   # Build LD_PRELOAD command for one-shot token protection
   LD_PRELOAD_CMD=""
   if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
-    LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
+    LD_PRELOAD_CMD="export AWF_ONE_SHOT_SKIP_UNSET=1; export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
   fi
 
   exec chroot /host /bin/bash -c "
@@ -407,6 +407,8 @@ else
   # 3. exec replaces the current process with the user command
   #
   # Enable one-shot token protection to prevent tokens from being read multiple times
+  # Skip unsetting tokens (for debugging/testing - logs accesses but doesn't clear them)
+  export AWF_ONE_SHOT_SKIP_UNSET=1
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi
