@@ -45,16 +45,22 @@ static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
-/* Initialize the real getenv pointer */
-static void init_real_getenv(void) {
+/* pthread_once control for thread-safe initialization */
+static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
+
+/* Initialize the real getenv pointer (called exactly once via pthread_once) */
+static void init_real_getenv_once(void) {
+    real_getenv = dlsym(RTLD_NEXT, "getenv");
     if (real_getenv == NULL) {
-        real_getenv = dlsym(RTLD_NEXT, "getenv");
-        if (real_getenv == NULL) {
-            fprintf(stderr, "[one-shot-token] ERROR: Could not find real getenv: %s\n", dlerror());
-            /* Fall back to a no-op to prevent crash */
-            abort();
-        }
+        fprintf(stderr, "[one-shot-token] FATAL: Could not find real getenv: %s\n", dlerror());
+        /* Cannot recover - abort to prevent undefined behavior */
+        abort();
     }
+}
+
+/* Ensure real_getenv is initialized (thread-safe) */
+static void init_real_getenv(void) {
+    pthread_once(&getenv_init_once, init_real_getenv_once);
 }
 
 /* Check if a variable name is a sensitive token */
