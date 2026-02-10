@@ -167,6 +167,29 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
     exit 1
   fi
 
+  # Copy one-shot-token library to host filesystem for LD_PRELOAD in chroot
+  # This prevents tokens from being read multiple times by malicious code
+  # Note: /tmp is always writable in chroot mode (mounted from host /tmp as rw)
+  ONE_SHOT_TOKEN_LIB=""
+  if [ -f /usr/local/lib/one-shot-token.so ]; then
+    # Create the library directory in /tmp (always writable)
+    if mkdir -p /host/tmp/awf-lib 2>/dev/null; then
+      # Copy the library and verify it exists after copying
+      if cp /usr/local/lib/one-shot-token.so /host/tmp/awf-lib/one-shot-token.so 2>/dev/null && \
+         [ -f /host/tmp/awf-lib/one-shot-token.so ]; then
+        ONE_SHOT_TOKEN_LIB="/tmp/awf-lib/one-shot-token.so"
+        echo "[entrypoint] One-shot token library copied to chroot at ${ONE_SHOT_TOKEN_LIB}"
+      else
+        echo "[entrypoint][WARN] Could not copy one-shot-token library to /tmp/awf-lib"
+        echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
+      fi
+    else
+      echo "[entrypoint][ERROR] Could not create /tmp/awf-lib directory"
+      echo "[entrypoint][ERROR] This should not happen - /tmp is mounted read-write in chroot mode"
+      echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
+    fi
+  fi
+
   # Verify capsh is available on the host (required for privilege drop)
   if ! chroot /host which capsh >/dev/null 2>&1; then
     echo "[entrypoint][ERROR] capsh not found on host system"
@@ -355,10 +378,21 @@ AWFEOF
     CLEANUP_CMD="${CLEANUP_CMD}; sed -i '/^[0-9.]\\+[[:space:]]\\+host\\.docker\\.internal\$/d' /etc/hosts 2>/dev/null || true"
     echo "[entrypoint] host.docker.internal will be removed from /etc/hosts on exit"
   fi
+  # Clean up the one-shot-token library if it was copied
+  if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
+    CLEANUP_CMD="${CLEANUP_CMD}; rm -rf /tmp/awf-lib 2>/dev/null || true"
+  fi
+
+  # Build LD_PRELOAD command for one-shot token protection
+  LD_PRELOAD_CMD=""
+  if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
+    LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
+  fi
 
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
     trap '${CLEANUP_CMD}' EXIT
+    ${LD_PRELOAD_CMD}
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
   "
 else
@@ -371,5 +405,9 @@ else
   # 1. capsh drops capabilities from the bounding set (cannot be regained)
   # 2. gosu switches to awfuser (drops root privileges)
   # 3. exec replaces the current process with the user command
+  #
+  # Enable one-shot token protection - tokens are cached in memory and
+  # unset from the environment so /proc/self/environ is cleared
+  export LD_PRELOAD=/usr/local/lib/one-shot-token.so
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi
