@@ -495,18 +495,47 @@ export function generateDockerCompose(
     );
 
     // Mount /etc/hosts for host name resolution inside chroot
-    // When BOTH chroot and host access are enabled, we create a copy with host.docker.internal
-    // injected. Docker only adds this to the container's /etc/hosts via extra_hosts, but the
-    // chroot uses the host's /etc/hosts which lacks this entry. MCP servers need it to connect
-    // to the MCP gateway running on the host.
-    if (config.enableHostAccess) {
-      const chrootHostsPath = path.join(config.workDir, 'chroot-hosts');
+    // Always create a custom hosts file in chroot mode to:
+    // 1. Pre-resolve allowed domains using the host's DNS stack (supports Tailscale MagicDNS,
+    //    split DNS, and other custom resolvers not available inside the container)
+    // 2. Inject host.docker.internal when --enable-host-access is set
+    const chrootHostsPath = path.join(config.workDir, 'chroot-hosts');
+    try {
+      fs.copyFileSync('/etc/hosts', chrootHostsPath);
+    } catch {
+      fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n');
+    }
+
+    // Pre-resolve allowed domains on the host and inject into /etc/hosts
+    // This is critical for domains that rely on custom DNS (e.g., Tailscale MagicDNS
+    // at 100.100.100.100) which is unreachable from inside the Docker container's
+    // network namespace. Resolution runs on the host where all DNS resolvers are available.
+    const hostsContent = fs.readFileSync(chrootHostsPath, 'utf-8');
+    for (const domain of config.allowedDomains) {
+      // Skip patterns that aren't resolvable hostnames
+      if (domain.startsWith('*.') || domain.startsWith('.') || domain.includes('*')) continue;
+      // Skip if already in hosts file
+      if (hostsContent.includes(domain)) continue;
+
       try {
-        fs.copyFileSync('/etc/hosts', chrootHostsPath);
+        const { stdout } = execa.sync('getent', ['hosts', domain], { timeout: 5000 });
+        const parts = stdout.trim().split(/\s+/);
+        const ip = parts[0];
+        if (ip) {
+          fs.appendFileSync(chrootHostsPath, `${ip}\t${domain}\n`);
+          logger.debug(`Pre-resolved ${domain} -> ${ip} for chroot /etc/hosts`);
+        }
       } catch {
-        fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n');
+        // Domain couldn't be resolved on the host - it will use DNS at runtime
+        logger.debug(`Could not pre-resolve ${domain} for chroot /etc/hosts (will use DNS at runtime)`);
       }
-      // Resolve host-gateway IP from Docker bridge and append host.docker.internal
+    }
+
+    // Add host.docker.internal when host access is enabled
+    // Docker only adds this to the container's /etc/hosts via extra_hosts, but the
+    // chroot uses the host's /etc/hosts which lacks this entry. MCP servers need it
+    // to connect to the MCP gateway running on the host.
+    if (config.enableHostAccess) {
       try {
         const { stdout } = execa.sync('docker', [
           'network', 'inspect', 'bridge',
@@ -520,11 +549,10 @@ export function generateDockerCompose(
       } catch (err) {
         logger.debug(`Could not resolve Docker bridge gateway: ${err}`);
       }
-      fs.chmodSync(chrootHostsPath, 0o644);
-      agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts:ro`);
-    } else {
-      agentVolumes.push('/etc/hosts:/host/etc/hosts:ro');
     }
+
+    fs.chmodSync(chrootHostsPath, 0o644);
+    agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts:ro`);
 
     // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'
     // An attacker could otherwise spawn a new container without network restrictions
