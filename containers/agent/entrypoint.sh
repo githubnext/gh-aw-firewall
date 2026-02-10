@@ -406,7 +406,8 @@ else
   # 2. gosu switches to awfuser (drops root privileges)
   # 3. exec replaces the current process with the user command
   #
-  # Enable one-shot token protection to prevent tokens from being read multiple times
+  # Enable one-shot token protection - tokens are cached in memory and
+  # unset from the environment so /proc/self/environ is cleared
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi
