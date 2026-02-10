@@ -1528,6 +1528,20 @@ describe('docker-manager', () => {
 
       await expect(startContainers(testDir, ['github.com'])).rejects.toThrow();
     });
+
+    it('should delete docker-compose.yml after containers start (security: removes sensitive env vars)', async () => {
+      // Create a docker-compose.yml file with sensitive data
+      const composeFile = path.join(testDir, 'docker-compose.yml');
+      fs.writeFileSync(composeFile, 'environment:\n  GITHUB_TOKEN: secret123\n');
+
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await startContainers(testDir, ['github.com']);
+
+      // docker-compose.yml should be deleted after containers start
+      expect(fs.existsSync(composeFile)).toBe(false);
+    });
   });
 
   describe('stopContainers', () => {
