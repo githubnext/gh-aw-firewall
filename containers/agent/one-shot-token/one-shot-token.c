@@ -128,11 +128,62 @@ char *getenv(const char *name) {
 }
 
 /**
- * Also intercept secure_getenv for completeness
- * (some security-conscious code uses this instead of getenv)
+ * Intercepted secure_getenv function
+ *
+ * This function preserves secure_getenv semantics (returns NULL in privileged contexts)
+ * while applying the same one-shot token protection as getenv.
+ *
+ * For sensitive tokens:
+ * - First call: returns the real value (if not in privileged context), then unsets the variable
+ * - Subsequent calls: returns NULL
+ *
+ * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
 char *secure_getenv(const char *name) {
-    /* secure_getenv returns NULL if the program is running with elevated privileges.
-     * We delegate to our intercepted getenv which handles the one-shot logic. */
-    return getenv(name);
+    init_real_secure_getenv();
+    init_real_getenv();
+
+    /* If secure_getenv is not available, fall back to our intercepted getenv */
+    if (real_secure_getenv == NULL) {
+        return getenv(name);
+    }
+
+    int token_idx = get_token_index(name);
+
+    /* Not a sensitive token - pass through to real secure_getenv */
+    if (token_idx < 0) {
+        return real_secure_getenv(name);
+    }
+
+    /* Sensitive token - handle one-shot access with secure_getenv semantics */
+    pthread_mutex_lock(&token_mutex);
+
+    char *result = NULL;
+
+    if (!token_accessed[token_idx]) {
+        /* First access - get the real value using secure_getenv */
+        result = real_secure_getenv(name);
+
+        if (result != NULL) {
+            /* Make a copy since unsetenv will invalidate the pointer */
+            /* Note: This memory is intentionally never freed - it must persist
+             * for the lifetime of the caller's use of the returned pointer */
+            result = strdup(result);
+
+            /* Unset the variable so it can't be accessed again */
+            unsetenv(name);
+
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (via secure_getenv)\n", name);
+        }
+
+        /* Mark as accessed even if NULL (prevents repeated log messages) */
+        token_accessed[token_idx] = 1;
+    } else {
+        /* Already accessed - return NULL */
+        result = NULL;
+    }
+
+    pthread_mutex_unlock(&token_mutex);
+
+    return result;
 }
