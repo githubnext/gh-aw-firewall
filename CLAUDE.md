@@ -250,6 +250,14 @@ DNS traffic is restricted to trusted DNS servers only to prevent DNS-based data 
 - Container DNS config (`containers/agent/entrypoint.sh`): Configures `/etc/resolv.conf`
 - Docker Compose (`src/docker-manager.ts`): Sets container `dns:` config and `AWF_DNS_SERVERS` env var
 
+## Proxy Environment Variables
+
+AWF sets the following proxy-related environment variables in the agent container:
+
+- `HTTP_PROXY` / `HTTPS_PROXY`: Standard proxy variables (used by curl, wget, pip, npm, etc.)
+- `SQUID_PROXY_HOST` / `SQUID_PROXY_PORT`: Raw proxy host and port for tools that need them separately
+- `JAVA_TOOL_OPTIONS`: JVM system properties (`-Dhttp.proxyHost`, `-Dhttps.proxyHost`, etc.) for Java tools. Works for Gradle, SBT, and most JVM tools. **Maven requires separate `~/.m2/settings.xml` configuration** — see `docs/troubleshooting.md`.
+
 **Example**:
 ```bash
 # Use Cloudflare DNS instead of Google DNS

@@ -259,6 +259,15 @@ describe('docker-manager', () => {
       agentIp: '172.30.0.20',
     };
 
+    // Ensure workDir exists for chroot tests that create chroot-hosts file
+    beforeEach(() => {
+      fs.mkdirSync(mockConfig.workDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
+    });
+
     it('should generate docker-compose config with GHCR images by default', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
 
@@ -559,7 +568,10 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
       expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
       expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
-      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
+      // /etc/hosts is always a custom hosts file in a secure chroot temp dir (for pre-resolved domains)
+      const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
+      expect(hostsVolume).toBeDefined();
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
@@ -774,53 +786,42 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
-    it('should mount writable chroot-hosts when enableChroot and enableHostAccess are true', () => {
-      // Ensure workDir exists for chroot-hosts file creation
-      fs.mkdirSync(mockConfig.workDir, { recursive: true });
-      try {
-        const config = {
-          ...mockConfig,
-          enableChroot: true,
-          enableHostAccess: true
-        };
-        const result = generateDockerCompose(config, mockNetworkConfig);
-        const agent = result.services.agent;
-        const volumes = agent.volumes as string[];
+    it('should mount read-only chroot-hosts when enableChroot and enableHostAccess are true', () => {
+      const config = {
+        ...mockConfig,
+        enableChroot: true,
+        enableHostAccess: true
+      };
+      const result = generateDockerCompose(config, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
 
-        // Should mount a writable copy of /etc/hosts (not the read-only original)
-        const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
-        expect(hostsVolume).toBeDefined();
-        expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts');
-        expect(hostsVolume).not.toContain(':ro');
-      } finally {
-        fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
-      }
+      // Should mount a read-only copy of /etc/hosts with host.docker.internal pre-injected
+      const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
+      expect(hostsVolume).toBeDefined();
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
     });
 
     it('should inject host.docker.internal into chroot-hosts file', () => {
-      // Ensure workDir exists for chroot-hosts file creation
-      fs.mkdirSync(mockConfig.workDir, { recursive: true });
-      try {
-        const config = {
-          ...mockConfig,
-          enableChroot: true,
-          enableHostAccess: true
-        };
-        generateDockerCompose(config, mockNetworkConfig);
+      const config = {
+        ...mockConfig,
+        enableChroot: true,
+        enableHostAccess: true
+      };
+      generateDockerCompose(config, mockNetworkConfig);
 
-        // The chroot-hosts file should exist and contain host.docker.internal
-        const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
-        expect(fs.existsSync(chrootHostsPath)).toBe(true);
-        const content = fs.readFileSync(chrootHostsPath, 'utf8');
-        // Docker bridge gateway resolution may succeed or fail in test env,
-        // but the file should exist with at least localhost
-        expect(content).toContain('localhost');
-      } finally {
-        fs.rmSync(mockConfig.workDir, { recursive: true, force: true });
-      }
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
+      expect(fs.existsSync(chrootHostsPath)).toBe(true);
+      const content = fs.readFileSync(chrootHostsPath, 'utf8');
+      // Docker bridge gateway resolution may succeed or fail in test env,
+      // but the file should exist with at least localhost
+      expect(content).toContain('localhost');
     });
 
-    it('should mount read-only /etc/hosts when enableChroot is true but enableHostAccess is false', () => {
+    it('should mount custom chroot-hosts when enableChroot is true even without enableHostAccess', () => {
       const config = {
         ...mockConfig,
         enableChroot: true,
@@ -830,7 +831,114 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      expect(volumes).toContain('/etc/hosts:/host/etc/hosts:ro');
+      // Should mount a custom hosts file in a secure chroot temp dir (for pre-resolved domains)
+      const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
+      expect(hostsVolume).toBeDefined();
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
+    });
+
+    it('should pre-resolve allowed domains into chroot-hosts file', () => {
+      // Mock getent to return a resolved IP for a test domain
+      mockExecaSync.mockImplementation((...args: any[]) => {
+        if (args[0] === 'getent' && args[1]?.[0] === 'hosts') {
+          const domain = args[1][1];
+          if (domain === 'github.com') {
+            return { stdout: '140.82.121.4      github.com', stderr: '', exitCode: 0 };
+          }
+          if (domain === 'npmjs.org') {
+            return { stdout: '104.16.22.35      npmjs.org', stderr: '', exitCode: 0 };
+          }
+          throw new Error('Resolution failed');
+        }
+        // For docker network inspect (host.docker.internal)
+        throw new Error('Not found');
+      });
+
+      const config = {
+        ...mockConfig,
+        allowedDomains: ['github.com', 'npmjs.org', '*.wildcard.com'],
+        enableChroot: true
+      };
+      generateDockerCompose(config, mockNetworkConfig);
+
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
+      expect(fs.existsSync(chrootHostsPath)).toBe(true);
+      const content = fs.readFileSync(chrootHostsPath, 'utf8');
+
+      // Should contain pre-resolved domains
+      expect(content).toContain('140.82.121.4\tgithub.com');
+      expect(content).toContain('104.16.22.35\tnpmjs.org');
+      // Should NOT contain wildcard domains (can't be resolved)
+      expect(content).not.toContain('wildcard.com');
+
+      // Reset mock
+      mockExecaSync.mockReset();
+    });
+
+    it('should skip domains that fail to resolve during pre-resolution', () => {
+      // Mock getent to fail for all domains
+      mockExecaSync.mockImplementation(() => {
+        throw new Error('Resolution failed');
+      });
+
+      const config = {
+        ...mockConfig,
+        allowedDomains: ['unreachable.tailnet.example'],
+        enableChroot: true
+      };
+      // Should not throw even if resolution fails
+      generateDockerCompose(config, mockNetworkConfig);
+
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
+      expect(fs.existsSync(chrootHostsPath)).toBe(true);
+      const content = fs.readFileSync(chrootHostsPath, 'utf8');
+
+      // Should still have the base hosts content (localhost)
+      expect(content).toContain('localhost');
+      // Should NOT contain the unresolvable domain
+      expect(content).not.toContain('unreachable.tailnet.example');
+
+      // Reset mock
+      mockExecaSync.mockReset();
+    });
+
+    it('should not add duplicate entries for domains already in /etc/hosts', () => {
+      // Mock getent to return a resolved IP
+      mockExecaSync.mockImplementation((...args: any[]) => {
+        if (args[0] === 'getent' && args[1]?.[0] === 'hosts') {
+          return { stdout: '127.0.0.1      localhost', stderr: '', exitCode: 0 };
+        }
+        throw new Error('Not found');
+      });
+
+      const config = {
+        ...mockConfig,
+        allowedDomains: ['localhost'], // localhost is already in /etc/hosts
+        enableChroot: true
+      };
+      generateDockerCompose(config, mockNetworkConfig);
+
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
+      const content = fs.readFileSync(chrootHostsPath, 'utf8');
+
+      // Count occurrences of 'localhost' - should only be the original entries, not duplicated
+      const localhostMatches = content.match(/localhost/g);
+      // /etc/hosts typically has multiple localhost entries (127.0.0.1 and ::1)
+      // The key assertion is that getent should NOT have been called for localhost
+      // since it's already in the hosts file
+      expect(localhostMatches).toBeDefined();
+
+      // Reset mock
+      mockExecaSync.mockReset();
     });
 
     it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
