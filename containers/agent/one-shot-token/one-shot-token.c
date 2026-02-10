@@ -45,37 +45,22 @@ static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
-/* Pointer to the real secure_getenv function (may be NULL if unavailable) */
-static char *(*real_secure_getenv)(const char *name) = NULL;
+/* pthread_once control for thread-safe initialization */
+static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
 
-/* Flag to track whether we've tried to resolve secure_getenv */
-static int secure_getenv_initialized = 0;
-
-/* Initialize the real getenv pointer */
-static void init_real_getenv(void) {
+/* Initialize the real getenv pointer (called exactly once via pthread_once) */
+static void init_real_getenv_once(void) {
+    real_getenv = dlsym(RTLD_NEXT, "getenv");
     if (real_getenv == NULL) {
-        real_getenv = dlsym(RTLD_NEXT, "getenv");
-        if (real_getenv == NULL) {
-            fprintf(stderr, "[one-shot-token] ERROR: Could not find real getenv: %s\n", dlerror());
-            /* Fall back to a no-op to prevent crash */
-            abort();
-        }
+        fprintf(stderr, "[one-shot-token] FATAL: Could not find real getenv: %s\n", dlerror());
+        /* Cannot recover - abort to prevent undefined behavior */
+        abort();
     }
 }
 
-/* Initialize the real secure_getenv pointer (thread-safe) */
-static void init_real_secure_getenv(void) {
-    pthread_mutex_lock(&token_mutex);
-    if (!secure_getenv_initialized) {
-        real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
-        secure_getenv_initialized = 1;
-        /* Only log once when secure_getenv is not available */
-        if (real_secure_getenv == NULL) {
-            /* secure_getenv is not available on all systems, which is fine */
-            fprintf(stderr, "[one-shot-token] INFO: secure_getenv not available, will fall back to getenv\n");
-        }
-    }
-    pthread_mutex_unlock(&token_mutex);
+/* Ensure real_getenv is initialized (thread-safe) */
+static void init_real_getenv(void) {
+    pthread_once(&getenv_init_once, init_real_getenv_once);
 }
 
 /* Check if a variable name is a sensitive token */
