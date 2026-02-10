@@ -245,15 +245,16 @@ char *getenv(const char *name) {
         result = real_getenv(name);
 
         if (result != NULL) {
+            /* Make a copy for safety - this ensures the pointer remains valid
+             * even if the environment is modified elsewhere */
+            /* Note: This memory is intentionally never freed - it must persist
+             * for the lifetime of the caller's use of the returned pointer */
+            result = strdup(result);
+
             if (skip_unset) {
                 /* Skip unset mode - just log the access, don't clear */
                 fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared)\n", name);
             } else {
-                /* Make a copy since unsetenv will invalidate the pointer */
-                /* Note: This memory is intentionally never freed - it must persist
-                 * for the lifetime of the caller's use of the returned pointer */
-                result = strdup(result);
-
                 /* Unset the variable so it can't be accessed again */
                 unsetenv(name);
 
@@ -268,6 +269,9 @@ char *getenv(const char *name) {
         if (skip_unset) {
             /* Skip unset mode - return the value again (since we didn't clear it) */
             result = real_getenv(name);
+            if (result != NULL) {
+                result = strdup(result);
+            }
         } else {
             /* Normal mode - return NULL (token was cleared) */
             result = NULL;
@@ -317,15 +321,16 @@ char *secure_getenv(const char *name) {
         result = real_secure_getenv(name);
 
         if (result != NULL) {
+            /* Make a copy for safety - this ensures the pointer remains valid
+             * even if the environment is modified elsewhere */
+            /* Note: This memory is intentionally never freed - it must persist
+             * for the lifetime of the caller's use of the returned pointer */
+            result = strdup(result);
+
             if (skip_unset) {
                 /* Skip unset mode - just log the access, don't clear */
                 fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared) (via secure_getenv)\n", name);
             } else {
-                /* Make a copy since unsetenv will invalidate the pointer */
-                /* Note: This memory is intentionally never freed - it must persist
-                 * for the lifetime of the caller's use of the returned pointer */
-                result = strdup(result);
-
                 /* Unset the variable so it can't be accessed again */
                 unsetenv(name);
 
@@ -340,6 +345,9 @@ char *secure_getenv(const char *name) {
         if (skip_unset) {
             /* Skip unset mode - return the value again (since we didn't clear it) */
             result = real_secure_getenv(name);
+            if (result != NULL) {
+                result = strdup(result);
+            }
         } else {
             /* Normal mode - return NULL (token was cleared) */
             result = NULL;
