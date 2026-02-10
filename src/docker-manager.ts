@@ -944,7 +944,7 @@ export function redactComposeSecrets(workDir: string): void {
         `(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(=|:\\s*)([^\\n]+)`,
         'g'
       );
-      const newContent = content.replace(envLinePattern, `$1$2***REDACTED***`);
+      const newContent = content.replace(envLinePattern, `$1$2"***REDACTED***"`);
       if (newContent !== content) {
         redactedCount++;
         content = newContent;

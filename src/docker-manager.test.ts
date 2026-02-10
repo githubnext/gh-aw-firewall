@@ -1948,8 +1948,8 @@ describe('docker-manager', () => {
       redactComposeSecrets(tmpDir);
 
       const result = fs.readFileSync(composePath, 'utf8');
-      expect(result).toContain('GITHUB_TOKEN=***REDACTED***');
-      expect(result).toContain('ANTHROPIC_API_KEY=***REDACTED***');
+      expect(result).toContain('GITHUB_TOKEN="***REDACTED***"');
+      expect(result).toContain('ANTHROPIC_API_KEY="***REDACTED***"');
       expect(result).not.toContain('ghp_abc123secret456');
       expect(result).not.toContain('sk-ant-secret789');
       // Non-sensitive vars should remain
@@ -1971,8 +1971,8 @@ describe('docker-manager', () => {
       redactComposeSecrets(tmpDir);
 
       const result = fs.readFileSync(composePath, 'utf8');
-      expect(result).toContain('GITHUB_TOKEN: ***REDACTED***');
-      expect(result).toContain('GH_TOKEN: ***REDACTED***');
+      expect(result).toContain('GITHUB_TOKEN: "***REDACTED***"');
+      expect(result).toContain('GH_TOKEN: "***REDACTED***"');
       expect(result).not.toContain('ghp_abc123secret456');
       expect(result).not.toContain('gho_another_secret');
     });
@@ -2011,7 +2011,7 @@ describe('docker-manager', () => {
 
       const result = fs.readFileSync(composePath, 'utf8');
       for (const name of SENSITIVE_ENV_NAMES) {
-        expect(result).toContain(`${name}=***REDACTED***`);
+        expect(result).toContain(`${name}="***REDACTED***"`);
         expect(result).not.toContain(`secret_value_for_${name}`);
       }
     });
