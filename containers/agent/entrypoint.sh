@@ -397,8 +397,8 @@ AWFEOF
     TOKEN_CACHE_FILE="/tmp/.awf-token-cache-$$"
     # Write sensitive token values to cache file (inside chroot perspective)
     # The LD_PRELOAD constructor reads this file and deletes it immediately
-    : > "/host${TOKEN_CACHE_FILE}"
-    chmod 600 "/host${TOKEN_CACHE_FILE}"
+    # Use umask to create the file with restricted permissions atomically
+    (umask 077 && : > "/host${TOKEN_CACHE_FILE}")
     # Use AWF_ONE_SHOT_TOKENS if set, otherwise use defaults
     if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
       SENSITIVE_TOKENS="${AWF_ONE_SHOT_TOKENS}"
@@ -409,7 +409,7 @@ AWFEOF
     for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
       TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)  # trim whitespace
       if [ -n "$TOKEN_NAME" ]; then
-        TOKEN_VALUE=$(eval echo "\${${TOKEN_NAME}:-}")
+        TOKEN_VALUE=$(printenv "$TOKEN_NAME" 2>/dev/null || true)
         if [ -n "$TOKEN_VALUE" ]; then
           echo "${TOKEN_NAME}=${TOKEN_VALUE}" >> "/host${TOKEN_CACHE_FILE}"
           echo "[entrypoint] Token ${TOKEN_NAME} written to cache file and will be scrubbed from environ"
@@ -455,8 +455,8 @@ else
   # /proc/self/environ exposure. Write values to a cache file so the
   # LD_PRELOAD library can still serve them via getenv().
   TOKEN_CACHE_FILE="/tmp/.awf-token-cache-$$"
-  : > "${TOKEN_CACHE_FILE}"
-  chmod 600 "${TOKEN_CACHE_FILE}"
+  # Use umask to create the file with restricted permissions atomically
+  (umask 077 && : > "${TOKEN_CACHE_FILE}")
   # Use AWF_ONE_SHOT_TOKENS if set, otherwise use defaults
   if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
     SENSITIVE_TOKENS="${AWF_ONE_SHOT_TOKENS}"
@@ -467,7 +467,7 @@ else
   for TOKEN_NAME in "${TOKEN_NAMES[@]}"; do
     TOKEN_NAME=$(echo "$TOKEN_NAME" | xargs)  # trim whitespace
     if [ -n "$TOKEN_NAME" ]; then
-      TOKEN_VALUE=$(eval echo "\${${TOKEN_NAME}:-}")
+      TOKEN_VALUE=$(printenv "$TOKEN_NAME" 2>/dev/null || true)
       if [ -n "$TOKEN_VALUE" ]; then
         echo "${TOKEN_NAME}=${TOKEN_VALUE}" >> "${TOKEN_CACHE_FILE}"
         echo "[entrypoint] Token ${TOKEN_NAME} written to cache file and will be scrubbed from environ"

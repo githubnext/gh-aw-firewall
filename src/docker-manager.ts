@@ -906,7 +906,7 @@ export function redactComposeSecrets(workDir: string): void {
       //   GITHUB_TOKEN: ghp_abc123
       // Replace the value with ***REDACTED***
       const envLinePattern = new RegExp(
-        `(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(=|:\\s*)(.+)`,
+        `(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(=|:\\s*)([^\\n]+)`,
         'g'
       );
       const newContent = content.replace(envLinePattern, `$1$2***REDACTED***`);

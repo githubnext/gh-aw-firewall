@@ -2,7 +2,11 @@
 
 ## Overview
 
-The one-shot token library is an `LD_PRELOAD` shared library that provides **cached access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. When a process reads a protected token via `getenv()`, the library caches the value in memory and immediately unsets the environment variable. Subsequent `getenv()` calls return the cached value, allowing the process to read tokens multiple times while `/proc/self/environ` is cleared.
+The one-shot token library is an `LD_PRELOAD` shared library that provides **cached access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. On library load, a constructor eagerly caches all sensitive tokens and removes them from the process environment, ensuring `/proc/self/environ` never exposes secrets to user code.
+
+The library supports two token loading mechanisms:
+1. **Token cache file** (preferred): `entrypoint.sh` writes token values to a temporary file (`AWF_TOKEN_CACHE_FILE`) and unsets the env vars before `exec`. The constructor reads the file, populates the cache, and immediately deletes it.
+2. **Environment fallback**: If no cache file exists, tokens are read from the environment on library load, cached, and unset (original behavior).
 
 This protects against exfiltration via `/proc/self/environ` inspection while allowing legitimate multi-read access patterns that programs like the Copilot CLI require.
 
@@ -48,8 +52,20 @@ LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
 - If `AWF_ONE_SHOT_TOKENS` is set but contains only whitespace or commas (e.g., `"   "` or `",,,"`), the library falls back to the default token list to maintain protection
 - Use comma-separated token names (whitespace is automatically trimmed)
 - Maximum of 100 tokens can be protected
-- The configuration is read once at library initialization (first `getenv()` call)
+- The configuration is read once at library initialization (constructor on library load)
 - Uses `strtok_r()` internally, which is thread-safe and won't interfere with application code using `strtok()`
+
+### Token Cache File
+
+The `AWF_TOKEN_CACHE_FILE` environment variable specifies a file containing pre-cached token values. This is set automatically by `entrypoint.sh` to eliminate the `/proc/self/environ` exposure window across `exec` chains.
+
+**Format:** One `NAME=VALUE` pair per line:
+```
+GITHUB_TOKEN=ghp_abc123...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The file is read by the library constructor and immediately deleted. This is an internal mechanism managed by AWF's entrypoint — users should not set this variable manually.
 
 ## How It Works
 

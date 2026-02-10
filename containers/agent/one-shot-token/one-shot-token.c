@@ -238,8 +238,7 @@ static void load_token_cache_file(void) {
             if (token_cache[idx] != NULL) {
                 token_accessed[idx] = 1;
                 loaded++;
-                fprintf(stderr, "[one-shot-token] Loaded cached token %s (value: %s)\n",
-                        name, format_token_value(token_cache[idx]));
+                fprintf(stderr, "[one-shot-token] Loaded cached token %s from file\n", name);
             }
         }
     }
@@ -294,8 +293,8 @@ static void one_shot_token_init(void) {
                 token_cache[i] = strdup(value);
                 if (token_cache[i] != NULL) {
                     unsetenv(sensitive_tokens[i]);
-                    fprintf(stderr, "[one-shot-token] Token %s eagerly cached and scrubbed from environ (value: %s)\n",
-                            sensitive_tokens[i], format_token_value(token_cache[i]));
+                    fprintf(stderr, "[one-shot-token] Token %s eagerly cached and scrubbed from environ\n",
+                            sensitive_tokens[i]);
                 }
                 token_accessed[i] = 1;
             }
