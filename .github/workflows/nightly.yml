@@ -5,6 +5,10 @@ on:
     - cron: '0 2 * * *'  # Every day at 2:00 AM UTC
   workflow_dispatch:  # Allow manual triggers
 
+concurrency:
+  group: nightly-release
+  cancel-in-progress: true
+
 permissions:
   contents: write   # Required for creating/deleting releases and tags
   packages: write   # Required for pushing to GHCR
@@ -13,6 +17,7 @@ jobs:
   nightly:
     name: Nightly Build and Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -24,20 +29,27 @@ jobs:
       - name: Check for new commits since last nightly
         id: check_commits
         run: |
-          # Get the timestamp of the existing nightly tag (if any)
+          # Always build on manual trigger
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual trigger — forcing build."
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # For scheduled runs, skip if no new commits
           if git rev-parse nightly >/dev/null 2>&1; then
             LAST_NIGHTLY_SHA=$(git rev-parse nightly)
             CURRENT_SHA=$(git rev-parse HEAD)
             if [ "$LAST_NIGHTLY_SHA" = "$CURRENT_SHA" ]; then
               echo "No new commits since last nightly build. Skipping."
-              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
             else
               echo "New commits found since last nightly."
-              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "No previous nightly tag found. Running first nightly build."
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Node.js
@@ -62,9 +74,9 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           SHORT_SHA=$(git rev-parse --short HEAD)
           NIGHTLY_VERSION="${VERSION}-nightly.${SHORT_SHA}"
-          echo "nightly_version=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "base_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "nightly_version=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         if: steps.check_commits.outputs.has_changes == 'true'
@@ -122,6 +134,8 @@ jobs:
           pkg . \
             --targets node18-linux-x64 \
             --output release/awf-linux-x64
+          ls -lh release/
+          file release/awf-linux-x64
 
       - name: Smoke test binary
         if: steps.check_commits.outputs.has_changes == 'true'
@@ -144,24 +158,18 @@ jobs:
 
       - name: Generate changelog
         if: steps.check_commits.outputs.has_changes == 'true'
-        id: changelog
         run: |
-          # Get commits since last nightly (or last 20 if no previous nightly)
           if git rev-parse nightly >/dev/null 2>&1; then
-            CHANGELOG=$(git log --oneline --pretty=format:"- %s (%h)" nightly..HEAD 2>/dev/null || echo "- Nightly build from main")
+            git log --pretty=format:"- %s (%h)" nightly..HEAD > changelog.md 2>/dev/null || echo "- Nightly build from main" > changelog.md
           else
-            CHANGELOG=$(git log --oneline --pretty=format:"- %s (%h)" -20 2>/dev/null || echo "- Initial nightly build")
+            git log --pretty=format:"- %s (%h)" -20 > changelog.md 2>/dev/null || echo "- Initial nightly build" > changelog.md
           fi
-          echo "$CHANGELOG" > changelog.md
 
       - name: Delete existing nightly release and tag
         if: steps.check_commits.outputs.has_changes == 'true'
         run: |
-          # Delete the release first (if it exists)
           gh release delete nightly --yes 2>/dev/null || true
-          # Delete the remote tag
           git push origin :refs/tags/nightly 2>/dev/null || true
-          # Delete the local tag
           git tag -d nightly 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -173,6 +181,7 @@ jobs:
           SHORT_SHA="${{ steps.version.outputs.short_sha }}"
           DATE=$(date -u +%Y-%m-%d)
 
+          # Build release notes in parts to avoid shell expansion of changelog content
           cat > release_notes.md <<EOF
           ## Nightly Build — ${DATE}
 
@@ -183,11 +192,17 @@ jobs:
 
           ### Changes since last nightly
 
-          $(cat changelog.md)
+          EOF
+
+          # Append changelog safely (no shell expansion of commit messages)
+          cat changelog.md >> release_notes.md
+
+          # Append static footer (quoted heredoc — no shell expansion)
+          cat >> release_notes.md <<'EOF'
 
           ### Docker Images
 
-          \`\`\`bash
+          ```bash
           # Pull nightly images
           docker pull ghcr.io/${{ github.repository }}/squid:nightly
           docker pull ghcr.io/${{ github.repository }}/agent:nightly
@@ -195,15 +210,15 @@ jobs:
 
           # Use with awf
           sudo awf --image-tag nightly --allow-domains example.com -- curl https://example.com
-          \`\`\`
+          ```
 
           ### Artifacts
 
           | File | Description |
           |------|-------------|
-          | \`awf-linux-x64\` | Standalone Linux binary |
-          | \`awf.tgz\` | npm package tarball |
-          | \`checksums.txt\` | SHA256 checksums |
+          | `awf-linux-x64` | Standalone Linux binary |
+          | `awf.tgz` | npm package tarball |
+          | `checksums.txt` | SHA256 checksums |
           EOF
 
           gh release create nightly \
@@ -216,3 +231,11 @@ jobs:
             release/checksums.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts (for debugging)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: nightly-artifacts
+          path: release/
+          retention-days: 7
