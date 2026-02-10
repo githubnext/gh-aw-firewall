@@ -5,6 +5,10 @@
  * On first access, returns the real value and immediately unsets the variable.
  * Subsequent calls return NULL, preventing token reuse by malicious code.
  *
+ * Configuration:
+ *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
+ *   If not set, uses built-in defaults
+ *
  * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
  * Usage: LD_PRELOAD=/path/to/one-shot-token.so ./your-program
  */
@@ -16,8 +20,8 @@
 #include <pthread.h>
 #include <stdio.h>
 
-/* Sensitive token environment variable names */
-static const char *SENSITIVE_TOKENS[] = {
+/* Default sensitive token environment variable names */
+static const char *DEFAULT_SENSITIVE_TOKENS[] = {
     /* GitHub tokens */
     "COPILOT_GITHUB_TOKEN",
     "GITHUB_TOKEN",
@@ -36,11 +40,21 @@ static const char *SENSITIVE_TOKENS[] = {
     NULL
 };
 
+/* Maximum number of tokens we can track (for static allocation) */
+#define MAX_TOKENS 100
+
+/* Runtime token list (populated from AWF_ONE_SHOT_TOKENS or defaults) */
+static char *sensitive_tokens[MAX_TOKENS];
+static int num_tokens = 0;
+
 /* Track which tokens have been accessed (one flag per token) */
-static int token_accessed[sizeof(SENSITIVE_TOKENS) / sizeof(SENSITIVE_TOKENS[0])] = {0};
+static int token_accessed[MAX_TOKENS] = {0};
 
 /* Mutex for thread safety */
 static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* Initialization flag */
+static int tokens_initialized = 0;
 
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
@@ -57,12 +71,74 @@ static void init_real_getenv(void) {
     }
 }
 
+/**
+ * Initialize the token list from AWF_ONE_SHOT_TOKENS environment variable
+ * or use defaults if not set. This is called once at first getenv() call.
+ */
+static void init_token_list(void) {
+    if (tokens_initialized) {
+        return;
+    }
+
+    /* Get the configuration from environment */
+    const char *config = real_getenv("AWF_ONE_SHOT_TOKENS");
+    
+    if (config != NULL && config[0] != '\0') {
+        /* Parse comma-separated token list */
+        char *config_copy = strdup(config);
+        if (config_copy == NULL) {
+            fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for token list\n");
+            abort();
+        }
+
+        char *token = strtok(config_copy, ",");
+        while (token != NULL && num_tokens < MAX_TOKENS) {
+            /* Trim leading/trailing whitespace */
+            while (*token == ' ' || *token == '\t') token++;
+            char *end = token + strlen(token) - 1;
+            while (end > token && (*end == ' ' || *end == '\t')) {
+                *end = '\0';
+                end--;
+            }
+
+            if (*token != '\0') {
+                sensitive_tokens[num_tokens] = strdup(token);
+                if (sensitive_tokens[num_tokens] == NULL) {
+                    fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for token name\n");
+                    abort();
+                }
+                num_tokens++;
+            }
+
+            token = strtok(NULL, ",");
+        }
+
+        free(config_copy);
+
+        fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
+    } else {
+        /* Use default token list */
+        for (int i = 0; DEFAULT_SENSITIVE_TOKENS[i] != NULL && num_tokens < MAX_TOKENS; i++) {
+            sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
+            if (sensitive_tokens[num_tokens] == NULL) {
+                fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
+                abort();
+            }
+            num_tokens++;
+        }
+
+        fprintf(stderr, "[one-shot-token] Initialized with %d default token(s)\n", num_tokens);
+    }
+
+    tokens_initialized = 1;
+}
+
 /* Check if a variable name is a sensitive token */
 static int get_token_index(const char *name) {
     if (name == NULL) return -1;
 
-    for (int i = 0; SENSITIVE_TOKENS[i] != NULL; i++) {
-        if (strcmp(name, SENSITIVE_TOKENS[i]) == 0) {
+    for (int i = 0; i < num_tokens; i++) {
+        if (strcmp(name, sensitive_tokens[i]) == 0) {
             return i;
         }
     }
@@ -80,6 +156,14 @@ static int get_token_index(const char *name) {
  */
 char *getenv(const char *name) {
     init_real_getenv();
+
+    /* Initialize token list on first call (but skip if we're initializing) */
+    static int initializing = 0;
+    if (!tokens_initialized && !initializing) {
+        initializing = 1;
+        init_token_list();
+        initializing = 0;
+    }
 
     int token_idx = get_token_index(name);
 
