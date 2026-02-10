@@ -32,7 +32,7 @@ jobs:
 
       - name: Build Agent image
         run: |
-          docker build -t awf-agent:${{ github.sha }} ./containers/agent
+          docker build --no-cache -t awf-agent:${{ github.sha }} ./containers/agent
 
       - name: Run Trivy vulnerability scanner (table output)
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
@@ -67,7 +67,7 @@ jobs:
 
       - name: Build Squid image
         run: |
-          docker build -t awf-squid:${{ github.sha }} ./containers/squid
+          docker build --no-cache -t awf-squid:${{ github.sha }} ./containers/squid
 
       - name: Run Trivy vulnerability scanner (table output)
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1

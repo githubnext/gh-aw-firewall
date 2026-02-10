@@ -74,8 +74,8 @@ steps:
   - name: Build local containers
     run: |
       echo "=== Building local containers ==="
-      docker build -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
-      docker build -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
+      docker build --no-cache -t ghcr.io/github/gh-aw-firewall/squid:latest containers/squid/
+      docker build --no-cache -t ghcr.io/github/gh-aw-firewall/agent:latest containers/agent/
   - name: Run chroot version tests
     run: |
       echo "=== Running chroot version tests ==="
