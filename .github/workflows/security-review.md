@@ -16,7 +16,7 @@ tools:
   agentic-workflows:
   github:
     toolsets: [default, actions, code_security]
-  bash:
+  bash: true
   web-fetch:
   cache-memory: true
 network:
@@ -25,7 +25,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "[Security Review] "
-    category: "General"
+    category: "general"
 timeout-minutes: 45
 ---
 
