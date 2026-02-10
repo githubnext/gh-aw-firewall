@@ -429,15 +429,34 @@ export function generateDockerCompose(
   // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
   // Build volumes list for agent execution container
-  // For chroot mode, use the real user's home (not /root when running with sudo)
+  // SECURITY: Mount only specific paths needed, NOT the entire home directory
+  // This prevents access to sensitive paths like ~/actions-runner, ~/work (other repos), etc.
   const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${effectiveHome}:${effectiveHome}:rw`,
-    // Mount agent logs directory to workDir for persistence
-    `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
+
+  // Mount specific subdirectories of home instead of the entire home directory
+  // This prevents access to sensitive paths like ~/actions-runner, ~/work (other repos)
+  const copilotConfigDir = path.join(effectiveHome, '.copilot');
+
+  // Ensure .copilot directory exists on host before mounting
+  if (!fs.existsSync(copilotConfigDir)) {
+    fs.mkdirSync(copilotConfigDir, { recursive: true });
+  }
+
+  // Mount ~/.copilot for MCP config (read-only) and logs (write via separate mount)
+  agentVolumes.push(`${copilotConfigDir}:${copilotConfigDir}:ro`);
+  // Mount agent logs directory to workDir for persistence (overlays the ro mount above)
+  agentVolumes.push(`${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`);
+
+  // Mount the workspace directory if specified (the actual project being worked on)
+  if (config.containerWorkDir && config.containerWorkDir !== '/workspace') {
+    // Only mount if it's a real path (not the default /workspace)
+    agentVolumes.push(`${config.containerWorkDir}:${config.containerWorkDir}:rw`);
+    logger.debug(`Mounting workspace directory: ${config.containerWorkDir}`);
+  }
 
   // Add chroot-related volume mounts when --enable-chroot is specified
   // These mounts enable chroot /host to work properly for running host binaries
@@ -472,11 +491,33 @@ export function generateDockerCompose(
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
 
-    // User home directory for project files and Rust/Cargo (read-write)
-    // Note: $HOME is already mounted at the container level, this adds it under /host
-    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
+    // SECURITY: Mount specific home subdirectories instead of entire $HOME
+    // This prevents access to sensitive paths like ~/actions-runner, ~/work (other repos)
     const userHome = getRealUserHome();
-    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+
+    // Mount ~/.copilot for MCP config under /host (read-only for chroot)
+    const hostCopilotDir = path.join(userHome, '.copilot');
+    if (fs.existsSync(hostCopilotDir)) {
+      agentVolumes.push(`${hostCopilotDir}:/host${hostCopilotDir}:ro`);
+    }
+
+    // Mount ~/.cargo for Rust binaries (read-only) if it exists
+    const hostCargoDir = path.join(userHome, '.cargo');
+    if (fs.existsSync(hostCargoDir)) {
+      agentVolumes.push(`${hostCargoDir}:/host${hostCargoDir}:ro`);
+    }
+
+    // Mount ~/.local/bin for user-installed tools (read-only) if it exists
+    const hostLocalBin = path.join(userHome, '.local', 'bin');
+    if (fs.existsSync(hostLocalBin)) {
+      agentVolumes.push(`${hostLocalBin}:/host${hostLocalBin}:ro`);
+    }
+
+    // Mount the workspace directory under /host if specified
+    if (config.containerWorkDir && config.containerWorkDir !== '/workspace') {
+      agentVolumes.push(`${config.containerWorkDir}:/host${config.containerWorkDir}:rw`);
+      logger.debug(`Mounting workspace directory under /host: ${config.containerWorkDir}`);
+    }
 
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
@@ -533,7 +574,7 @@ export function generateDockerCompose(
     // Also hide /run/docker.sock (symlink on some systems)
     agentVolumes.push('/dev/null:/host/run/docker.sock:ro');
 
-    logger.debug('Selective mounts configured: system paths (ro), home (rw), Docker socket hidden');
+    logger.debug('Selective mounts configured: system paths (ro), workspace (rw), Docker socket hidden');
   }
 
   // Add SSL CA certificate mount if SSL Bump is enabled
