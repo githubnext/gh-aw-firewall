@@ -2,7 +2,7 @@
 
 ## Overview
 
-The one-shot token library is an `LD_PRELOAD` shared library that provides **single-use access** to sensitive token environment variables. When a process reads a protected token via `getenv()`, the library returns the value once and immediately unsets the environment variable, preventing subsequent reads.
+The one-shot token library is an `LD_PRELOAD` shared library that provides **single-use access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. When a process reads a protected token via `getenv()`, the library returns the value once and immediately unsets the environment variable, preventing subsequent reads.
 
 This protects against malicious code that might attempt to exfiltrate tokens after the legitimate application has already consumed them.
 
@@ -182,12 +182,28 @@ This produces `one-shot-token.so` in the current directory.
 # Build the library
 ./build.sh
 
-# Test with a default protected token
+# Create a simple C program that calls getenv twice
+cat > test_getenv.c << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    const char *token1 = getenv("GITHUB_TOKEN");
+    printf("First read: %s\n", token1 ? token1 : "");
+
+    const char *token2 = getenv("GITHUB_TOKEN");
+    printf("Second read: %s\n", token2 ? token2 : "");
+
+    return 0;
+}
+EOF
+
+# Compile the test program
+gcc -o test_getenv test_getenv.c
+
+# Test with the one-shot token library preloaded
 export GITHUB_TOKEN="test-token-12345"
-LD_PRELOAD=./one-shot-token.so bash -c '
-  echo "First read: $(printenv GITHUB_TOKEN)"
-  echo "Second read: $(printenv GITHUB_TOKEN)"
-'
+LD_PRELOAD=./one-shot-token.so ./test_getenv
 ```
 
 Expected output:
