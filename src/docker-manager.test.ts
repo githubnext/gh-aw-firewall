@@ -1,4 +1,4 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
+import { generateDockerCompose, generateMavenSettings, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -507,6 +507,41 @@ describe('docker-manager', () => {
       expect(env.JAVA_TOOL_OPTIONS).toContain('localhost');
       expect(env.JAVA_TOOL_OPTIONS).toContain('127.0.0.1');
       expect(env.JAVA_TOOL_OPTIONS).toContain('host.docker.internal');
+    });
+
+    it('should not include quotes in JAVA_TOOL_OPTIONS nonProxyHosts value', () => {
+      const configWithHostAccess = { ...mockConfig, enableHostAccess: true };
+      const result = generateDockerCompose(configWithHostAccess, mockNetworkConfig);
+      const agent = result.services.agent;
+      const env = agent.environment as Record<string, string>;
+
+      // Verify no embedded quotes in nonProxyHosts value
+      // JAVA_TOOL_OPTIONS parsing treats quotes as literal characters, not grouping
+      expect(env.JAVA_TOOL_OPTIONS).not.toContain('"localhost');
+      expect(env.JAVA_TOOL_OPTIONS).not.toContain('internal"');
+      expect(env.JAVA_TOOL_OPTIONS).toContain('-Dhttp.nonProxyHosts=localhost|');
+    });
+
+    it('should mount Maven settings.xml for proxy configuration', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      const mavenMount = volumes.find((v: string) => v.includes('maven-settings.xml'));
+      expect(mavenMount).toBeDefined();
+      expect(mavenMount).toContain('.m2/settings.xml:ro');
+    });
+
+    it('should mount Maven settings.xml under /host in chroot mode', () => {
+      const chrootConfig = { ...mockConfig, enableChroot: true };
+      const result = generateDockerCompose(chrootConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      const mavenMount = volumes.find((v: string) => v.includes('maven-settings.xml'));
+      expect(mavenMount).toBeDefined();
+      expect(mavenMount).toContain('/host');
+      expect(mavenMount).toContain('.m2/settings.xml:ro');
     });
 
     it('should mount required volumes in agent container (default behavior)', () => {
@@ -1834,6 +1869,34 @@ describe('docker-manager', () => {
 
       // Should not throw
       await expect(cleanup(nonExistentDir, false)).resolves.not.toThrow();
+    });
+  });
+
+  describe('generateMavenSettings', () => {
+    it('should generate valid Maven settings.xml with proxy configuration', () => {
+      const result = generateMavenSettings('172.30.0.10', 3128);
+
+      expect(result).toContain('<settings');
+      expect(result).toContain('<proxies>');
+      expect(result).toContain('<protocol>http</protocol>');
+      expect(result).toContain('<protocol>https</protocol>');
+      expect(result).toContain('<host>172.30.0.10</host>');
+      expect(result).toContain('<port>3128</port>');
+      // Should not include nonProxyHosts when not provided
+      expect(result).not.toContain('<nonProxyHosts>');
+    });
+
+    it('should include nonProxyHosts when provided', () => {
+      const result = generateMavenSettings('172.30.0.10', 3128, 'localhost|127.0.0.1|host.docker.internal');
+
+      expect(result).toContain('<nonProxyHosts>localhost|127.0.0.1|host.docker.internal</nonProxyHosts>');
+    });
+
+    it('should have both HTTP and HTTPS proxy entries', () => {
+      const result = generateMavenSettings('172.30.0.10', 3128);
+
+      expect(result).toContain('<id>awf-http</id>');
+      expect(result).toContain('<id>awf-https</id>');
     });
   });
 });
