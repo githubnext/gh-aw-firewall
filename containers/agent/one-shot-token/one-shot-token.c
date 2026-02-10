@@ -2,12 +2,12 @@
  * One-Shot Token LD_PRELOAD Library
  *
  * Intercepts getenv() calls for sensitive token environment variables.
- * On first access, returns the real value and immediately unsets the variable.
- * Subsequent calls return NULL, preventing token reuse by malicious code.
+ * On first access, caches the value in memory and unsets from environment.
+ * Subsequent calls return the cached value, so the process can read tokens
+ * multiple times while /proc/self/environ no longer exposes them.
  *
  * Configuration:
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
- *   AWF_ONE_SHOT_SKIP_UNSET - If set to "1", skip unsetting but still log accesses
  *   If not set, uses built-in defaults
  *
  * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
@@ -54,14 +54,16 @@ static int num_tokens = 0;
 /* Track which tokens have been accessed (one flag per token) */
 static int token_accessed[MAX_TOKENS] = {0};
 
+/* Cached token values - stored on first access so subsequent reads succeed
+ * even after the variable is unset from the environment. This allows
+ * /proc/self/environ to be cleaned while the process can still read tokens. */
+static char *token_cache[MAX_TOKENS] = {0};
+
 /* Mutex for thread safety */
 static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Initialization flag */
 static int tokens_initialized = 0;
-
-/* Skip unset flag - if true, log accesses but don't unset variables */
-static int skip_unset = 0;
 
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
@@ -100,13 +102,6 @@ static void init_real_secure_getenv_once(void) {
 static void init_token_list(void) {
     if (tokens_initialized) {
         return;
-    }
-
-    /* Check if we should skip unsetting (for debugging/testing) */
-    const char *skip_unset_env = real_getenv("AWF_ONE_SHOT_SKIP_UNSET");
-    if (skip_unset_env != NULL && strcmp(skip_unset_env, "1") == 0) {
-        skip_unset = 1;
-        fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_SKIP_UNSET=1 - tokens will NOT be unset after access\n");
     }
 
     /* Get the configuration from environment */
@@ -242,8 +237,11 @@ static const char *format_token_value(const char *value) {
  * Intercepted getenv function
  *
  * For sensitive tokens:
- * - First call: returns the real value, then unsets the variable
- * - Subsequent calls: returns NULL
+ * - First call: caches the value, unsets from environment, returns cached value
+ * - Subsequent calls: returns the cached value from memory
+ *
+ * This clears tokens from /proc/self/environ while allowing the process
+ * to read them multiple times via getenv().
  *
  * For all other variables: passes through to real getenv
  */
@@ -265,47 +263,33 @@ char *getenv(const char *name) {
         return real_getenv(name);
     }
 
-    /* Sensitive token - handle one-shot access (mutex already held) */
+    /* Sensitive token - handle cached access (mutex already held) */
     char *result = NULL;
 
     if (!token_accessed[token_idx]) {
-        /* First access - get the real value */
+        /* First access - get the real value and cache it */
         result = real_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy for safety - this ensures the pointer remains valid
-             * even if the environment is modified elsewhere */
+            /* Cache the value so subsequent reads succeed after unsetenv */
             /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+             * for the lifetime of the process */
+            token_cache[token_idx] = strdup(result);
 
-            if (skip_unset) {
-                /* Skip unset mode - just log the access, don't clear */
-                fprintf(stderr, "[one-shot-token] Token %s accessed (value: %s, skip_unset=1, not cleared)\n", 
-                        name, format_token_value(result));
-            } else {
-                /* Unset the variable so it can't be accessed again */
-                unsetenv(name);
+            /* Unset the variable from the environment so /proc/self/environ is cleared */
+            unsetenv(name);
 
-                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (value: %s)\n", 
-                        name, format_token_value(result));
-            }
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n", 
+                    name, format_token_value(token_cache[token_idx]));
+
+            result = token_cache[token_idx];
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed */
-        if (skip_unset) {
-            /* Skip unset mode - return the value again (since we didn't clear it) */
-            result = real_getenv(name);
-            if (result != NULL) {
-                result = strdup(result);
-            }
-        } else {
-            /* Normal mode - return NULL (token was cleared) */
-            result = NULL;
-        }
+        /* Already accessed - return cached value */
+        result = token_cache[token_idx];
     }
 
     pthread_mutex_unlock(&token_mutex);
@@ -317,11 +301,11 @@ char *getenv(const char *name) {
  * Intercepted secure_getenv function
  *
  * This function preserves secure_getenv semantics (returns NULL in privileged contexts)
- * while applying the same one-shot token protection as getenv.
+ * while applying the same cached token protection as getenv.
  *
  * For sensitive tokens:
- * - First call: returns the real value (if not in privileged context), then unsets the variable
- * - Subsequent calls: returns NULL
+ * - First call: caches the value, unsets from environment, returns cached value
+ * - Subsequent calls: returns the cached value from memory
  *
  * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
@@ -341,7 +325,7 @@ char *secure_getenv(const char *name) {
         return real_secure_getenv(name);
     }
 
-    /* Sensitive token - handle one-shot access with secure_getenv semantics */
+    /* Sensitive token - handle cached access with secure_getenv semantics */
     pthread_mutex_lock(&token_mutex);
 
     char *result = NULL;
@@ -351,39 +335,25 @@ char *secure_getenv(const char *name) {
         result = real_secure_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy for safety - this ensures the pointer remains valid
-             * even if the environment is modified elsewhere */
+            /* Cache the value so subsequent reads succeed after unsetenv */
             /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+             * for the lifetime of the process */
+            token_cache[token_idx] = strdup(result);
 
-            if (skip_unset) {
-                /* Skip unset mode - just log the access, don't clear */
-                fprintf(stderr, "[one-shot-token] Token %s accessed (value: %s, skip_unset=1, not cleared) (via secure_getenv)\n", 
-                        name, format_token_value(result));
-            } else {
-                /* Unset the variable so it can't be accessed again */
-                unsetenv(name);
+            /* Unset the variable from the environment so /proc/self/environ is cleared */
+            unsetenv(name);
 
-                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (value: %s) (via secure_getenv)\n", 
-                        name, format_token_value(result));
-            }
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n", 
+                    name, format_token_value(token_cache[token_idx]));
+
+            result = token_cache[token_idx];
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed */
-        if (skip_unset) {
-            /* Skip unset mode - return the value again (since we didn't clear it) */
-            result = real_secure_getenv(name);
-            if (result != NULL) {
-                result = strdup(result);
-            }
-        } else {
-            /* Normal mode - return NULL (token was cleared) */
-            result = NULL;
-        }
+        /* Already accessed - return cached value */
+        result = token_cache[token_idx];
     }
 
     pthread_mutex_unlock(&token_mutex);

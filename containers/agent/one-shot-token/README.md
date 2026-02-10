@@ -2,9 +2,9 @@
 
 ## Overview
 
-The one-shot token library is an `LD_PRELOAD` shared library that provides **single-use access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. When a process reads a protected token via `getenv()`, the library returns the value once and immediately unsets the environment variable, preventing subsequent reads.
+The one-shot token library is an `LD_PRELOAD` shared library that provides **cached access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. When a process reads a protected token via `getenv()`, the library caches the value in memory and immediately unsets the environment variable. Subsequent `getenv()` calls return the cached value, allowing the process to read tokens multiple times while `/proc/self/environ` is cleared.
 
-This protects against malicious code that might attempt to exfiltrate tokens after the legitimate application has already consumed them.
+This protects against exfiltration via `/proc/self/environ` inspection while allowing legitimate multi-read access patterns that programs like the Copilot CLI require.
 
 ## Configuration
 
@@ -51,29 +51,6 @@ LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
 - The configuration is read once at library initialization (first `getenv()` call)
 - Uses `strtok_r()` internally, which is thread-safe and won't interfere with application code using `strtok()`
 
-### Skip Unset Mode (Debug/Testing)
-
-For debugging or testing purposes, you can enable skip-unset mode to log token accesses without actually clearing them:
-
-```bash
-# Enable skip-unset mode
-export AWF_ONE_SHOT_SKIP_UNSET=1
-
-# Tokens will be logged on first access but NOT cleared
-LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
-```
-
-**Behavior in skip-unset mode:**
-- Token accesses are logged with `(value: xxxx..., skip_unset=1, not cleared)` message (shows first 4 chars)
-- Tokens remain in the environment after first access
-- Subsequent `getenv()` calls return the token value (not NULL)
-- **WARNING:** This mode disables the security protection and should only be used for debugging/testing
-
-**Use cases:**
-- Debugging why a token is being cleared unexpectedly
-- Testing token access patterns without breaking multi-read workflows
-- Temporarily disabling protection while investigating issues
-
 ## How It Works
 
 ### The LD_PRELOAD Mechanism
@@ -101,7 +78,7 @@ Linux's dynamic linker (`ld.so`) supports an environment variable called `LD_PRE
 │  Application calls getenv("GITHUB_TOKEN"):                      │
 │  1. Resolves to one-shot-token.so's getenv()                    │
 │  2. We check if it's a sensitive token                          │
-│  3. If yes: call real getenv(), copy value, unsetenv(), return  │
+│  3. If yes: cache value, unsetenv(), return cached value        │
 │  4. If no: pass through to real getenv()                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -123,7 +100,7 @@ Second getenv("GITHUB_TOKEN") call:
 ┌─────────────┐     ┌──────────────────┐
 │ Application │────→│ one-shot-token.so │
 │             │     │                    │
-│             │←────│ Returns: NULL      │  (token already accessed)
+│             │←────│ Returns: "ghp_..." │  (from in-memory cache)
 └─────────────┘     └──────────────────────┘
 ```
 
@@ -141,16 +118,17 @@ When `LD_PRELOAD=/usr/local/lib/one-shot-token.so` is set, the dynamic linker lo
 
 We use `dlsym(RTLD_NEXT, "getenv")` to get a pointer to the **next** `getenv` in the symbol search order (libc's implementation). This allows us to:
 - Call the real `getenv()` to retrieve the actual value
-- Return that value to the caller
-- Then call `unsetenv()` to remove it from the environment
+- Cache the value in an in-memory array
+- Call `unsetenv()` to remove it from the environment (clears `/proc/self/environ`)
+- Return the cached value to the caller
 
-### 3. State Tracking
+### 3. State Tracking and Caching
 
-We maintain an array of flags (`token_accessed[]`) to track which tokens have been read. Once a token is marked as accessed, subsequent calls return `NULL` without consulting the environment.
+We maintain an array of flags (`token_accessed[]`) and a parallel cache array (`token_cache[]`). On first access, the token value is cached and the environment variable is unset. Subsequent calls return the cached value directly.
 
 ### 4. Memory Management
 
-When we retrieve a token value, we `strdup()` it before calling `unsetenv()`. This is necessary because:
+When we retrieve a token value, we `strdup()` it into the cache before calling `unsetenv()`. This is necessary because:
 - `getenv()` returns a pointer to memory owned by the environment
 - `unsetenv()` invalidates that pointer
 - The caller expects a valid string, so we must copy it first
@@ -232,9 +210,9 @@ LD_PRELOAD=./one-shot-token.so ./test_getenv
 Expected output:
 ```
 [one-shot-token] Initialized with 11 default token(s)
-[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: test...)
+[one-shot-token] Token GITHUB_TOKEN accessed and cached (value: test...)
 First read: test-token-12345
-Second read:
+Second read: test-token-12345
 ```
 
 ### Custom Token Test
@@ -259,12 +237,12 @@ LD_PRELOAD=./one-shot-token.so bash -c '
 Expected output:
 ```
 [one-shot-token] Initialized with 2 custom token(s) from AWF_ONE_SHOT_TOKENS
-[one-shot-token] Token MY_API_KEY accessed and cleared (value: secr...)
+[one-shot-token] Token MY_API_KEY accessed and cached (value: secr...)
 First MY_API_KEY: secret-value-123
-Second MY_API_KEY:
-[one-shot-token] Token SECRET_TOKEN accessed and cleared (value: anot...)
+Second MY_API_KEY: secret-value-123
+[one-shot-token] Token SECRET_TOKEN accessed and cached (value: anot...)
 First SECRET_TOKEN: another-secret
-Second SECRET_TOKEN:
+Second SECRET_TOKEN: another-secret
 ```
 
 ### Integration with AWF
@@ -286,13 +264,14 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 
 ### What This Protects Against
 
-- **Token reuse by injected code**: If malicious code runs after the legitimate application has read its token, it cannot retrieve the token again
-- **Token leakage via environment inspection**: Tools like `printenv` or reading `/proc/self/environ` will not show the token after first access
+- **Token leakage via environment inspection**: `/proc/self/environ` and tools like `printenv` (in the same process) will not show the token after first access — the environment variable is unset
+- **Token exfiltration via /proc**: Other processes reading `/proc/<pid>/environ` cannot see the token
 
 ### What This Does NOT Protect Against
 
-- **Memory inspection**: The token exists in process memory (as the returned string)
+- **Memory inspection**: The token exists in process memory (in the cache array)
 - **Interception before first read**: If malicious code runs before the legitimate code reads the token, it gets the value
+- **In-process getenv() calls**: Since values are cached, any code in the same process can still call `getenv()` and get the cached token
 - **Static linking**: Programs statically linked with libc bypass LD_PRELOAD
 - **Direct syscalls**: Code that reads `/proc/self/environ` directly (without getenv) bypasses this protection
 
@@ -302,13 +281,13 @@ This library is one layer in AWF's security model:
 1. **Network isolation**: iptables rules redirect traffic through Squid proxy
 2. **Domain allowlisting**: Squid blocks requests to non-allowed domains
 3. **Capability dropping**: CAP_NET_ADMIN is dropped to prevent iptables modification
-4. **One-shot tokens**: This library prevents token reuse
+4. **Token environment cleanup**: This library clears tokens from `/proc/self/environ` while caching for legitimate use
 
 ## Limitations
 
 - **x86_64 Linux only**: The library is compiled for x86_64 Ubuntu
 - **glibc programs only**: Programs using musl libc or statically linked programs are not affected
-- **Single process**: Child processes inherit the LD_PRELOAD but have their own token state (each can read once)
+- **Single process**: Child processes inherit the LD_PRELOAD but have their own token state and cache (each starts fresh)
 
 ## Files
 
