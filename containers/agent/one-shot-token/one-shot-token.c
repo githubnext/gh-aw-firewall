@@ -63,16 +63,19 @@ static void init_real_getenv(void) {
     }
 }
 
-/* Initialize the real secure_getenv pointer */
+/* Initialize the real secure_getenv pointer (thread-safe) */
 static void init_real_secure_getenv(void) {
+    pthread_mutex_lock(&token_mutex);
     if (!secure_getenv_initialized) {
         real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
+        secure_getenv_initialized = 1;
+        /* Only log once when secure_getenv is not available */
         if (real_secure_getenv == NULL) {
             /* secure_getenv is not available on all systems, which is fine */
             fprintf(stderr, "[one-shot-token] INFO: secure_getenv not available, will fall back to getenv\n");
         }
-        secure_getenv_initialized = 1;
     }
+    pthread_mutex_unlock(&token_mutex);
 }
 
 /* Check if a variable name is a sensitive token */
