@@ -2,7 +2,7 @@
 
 ## Overview
 
-The one-shot token library is an `LD_PRELOAD` shared library that provides **single-use access** to sensitive GitHub token environment variables. When a process reads a protected token via `getenv()`, the library returns the value once and immediately unsets the environment variable, preventing subsequent reads.
+The one-shot token library is an `LD_PRELOAD` shared library that provides **single-use access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. When a process reads a protected token via `getenv()`, the library returns the value once and immediately unsets the environment variable, preventing subsequent reads.
 
 This protects against malicious code that might attempt to exfiltrate tokens after the legitimate application has already consumed them.
 
