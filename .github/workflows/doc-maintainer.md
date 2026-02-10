@@ -14,7 +14,7 @@ tools:
   github:
     toolsets: [default]
   edit:
-  bash:
+  bash: true
 safe-outputs:
   create-pull-request:
     title-prefix: "[docs] "

@@ -363,6 +363,10 @@ export function generateDockerCompose(
     if (process.env.JAVA_HOME) {
       environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
     }
+    // .NET: Pass DOTNET_ROOT so entrypoint can add it to PATH and set DOTNET_ROOT
+    if (process.env.DOTNET_ROOT) {
+      environment.AWF_DOTNET_ROOT = process.env.DOTNET_ROOT;
+    }
     // Bun: Pass BUN_INSTALL so entrypoint can add $BUN_INSTALL/bin to PATH
     // Bun crashes with core dump when installed inside chroot (restricted /proc access),
     // so it must be pre-installed on the host via setup-bun action
@@ -457,10 +461,13 @@ export function generateDockerCompose(
     agentVolumes.push('/opt:/host/opt:ro');
 
     // Special filesystem mounts for chroot (needed for devices and runtime introspection)
-    // NOTE: Only /proc/self is mounted (not full /proc) to prevent exposure of other
-    // processes' environment variables while still allowing binaries like Go to find themselves
+    // NOTE: /proc is NOT bind-mounted here. Instead, a fresh container-scoped procfs is
+    // mounted at /host/proc in entrypoint.sh via 'mount -t proc'. This provides:
+    //   - Dynamic /proc/self/exe (required by .NET CLR and other runtimes)
+    //   - /proc/cpuinfo, /proc/meminfo (required by JVM, .NET GC)
+    //   - Container-scoped only (does not expose host process info)
+    // The mount requires SYS_ADMIN capability, which is dropped before user code runs.
     agentVolumes.push(
-      '/proc/self:/host/proc/self:ro', // Process self-info only (needed by Go to find GOROOT)
       '/sys:/host/sys:ro',             // Read-only sysfs
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
@@ -471,8 +478,9 @@ export function generateDockerCompose(
     const userHome = getRealUserHome();
     agentVolumes.push(`${userHome}:/host${userHome}:rw`);
 
-    // /tmp is needed for chroot mode to write temporary command scripts
-    // The entrypoint.sh writes to /host/tmp/awf-cmd-$$.sh
+    // /tmp is needed for chroot mode to write:
+    // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
+    // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
 
     // Minimal /etc - only what's needed for runtime
@@ -568,10 +576,11 @@ export function generateDockerCompose(
     },
     // NET_ADMIN is required for iptables setup in entrypoint.sh.
     // SYS_CHROOT is added when --enable-chroot is specified for chroot operations.
-    // Security: Both capabilities are dropped before running user commands
-    // via 'capsh --drop=cap_net_admin,cap_sys_chroot' in containers/agent/entrypoint.sh.
-    // This prevents malicious code from modifying iptables rules or using chroot.
-    cap_add: config.enableChroot ? ['NET_ADMIN', 'SYS_CHROOT'] : ['NET_ADMIN'],
+    // SYS_ADMIN is added in chroot mode to mount procfs at /host/proc (required for
+    // dynamic /proc/self/exe resolution needed by .NET CLR and other runtimes).
+    // Security: All capabilities are dropped before running user commands
+    // via 'capsh --drop=cap_net_admin,cap_sys_chroot,cap_sys_admin' in entrypoint.sh.
+    cap_add: config.enableChroot ? ['NET_ADMIN', 'SYS_CHROOT', 'SYS_ADMIN'] : ['NET_ADMIN'],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
@@ -581,9 +590,13 @@ export function generateDockerCompose(
       'MKNOD',        // Prevents device node creation
     ],
     // Apply seccomp profile and no-new-privileges to restrict dangerous syscalls and prevent privilege escalation
+    // In chroot mode, AppArmor is set to unconfined to allow mounting procfs at /host/proc
+    // (Docker's default AppArmor profile blocks mount). This is safe because SYS_ADMIN is
+    // dropped via capsh before user code runs, so user code cannot mount anything.
     security_opt: [
       'no-new-privileges:true',
       `seccomp=${config.workDir}/seccomp-profile.json`,
+      ...(config.enableChroot ? ['apparmor:unconfined'] : []),
     ],
     // Resource limits to prevent DoS attacks (conservative defaults)
     mem_limit: '4g',           // 4GB memory limit
@@ -632,13 +645,11 @@ export function generateDockerCompose(
       USER_GID: getSafeHostGid(),
     };
 
-    // Determine dockerfile based on chroot mode
-    let dockerfile = 'Dockerfile';
-    if (config.enableChroot) {
-      // Chroot mode: use minimal Dockerfile since user commands run on host
-      dockerfile = 'Dockerfile.minimal';
-      logger.debug('Chroot mode: building minimal agent image locally');
-    }
+    // Always use the full Dockerfile for feature parity with GHCR release images.
+    // Previously chroot mode used Dockerfile.minimal for smaller image size,
+    // but this caused missing packages (e.g., iproute2/net-tools) that
+    // setup-iptables.sh depends on for network gateway detection.
+    const dockerfile = 'Dockerfile';
 
     // For custom images (not presets), pass as BASE_IMAGE build arg
     // For 'act' preset with --build-local, use the act base image

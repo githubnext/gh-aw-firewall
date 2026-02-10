@@ -50,11 +50,30 @@ Clone and test the following projects from the test repository:
 1. **Clone Repository**: `gh repo clone Mossaka/gh-aw-firewall-test-java /tmp/test-java`
    - **CRITICAL**: If clone fails, immediately call `safeoutputs-missing_tool` with message "CLONE_FAILED: Unable to clone test repository" and stop execution
 
-2. **Test Projects**:
+2. **Configure Maven Proxy**: Maven ignores Java system properties for proxy configuration, so you must create `~/.m2/settings.xml` before running any Maven commands:
+   ```bash
+   mkdir -p ~/.m2
+   cat > ~/.m2/settings.xml << SETTINGS
+   <settings>
+     <proxies>
+       <proxy>
+         <id>awf-http</id><active>true</active><protocol>http</protocol>
+         <host>${SQUID_PROXY_HOST}</host><port>${SQUID_PROXY_PORT}</port>
+       </proxy>
+       <proxy>
+         <id>awf-https</id><active>true</active><protocol>https</protocol>
+         <host>${SQUID_PROXY_HOST}</host><port>${SQUID_PROXY_PORT}</port>
+       </proxy>
+     </proxies>
+   </settings>
+   SETTINGS
+   ```
+
+3. **Test Projects**:
    - `gson`: `cd /tmp/test-java/gson && mvn compile && mvn test`
    - `caffeine`: `cd /tmp/test-java/caffeine && mvn compile && mvn test`
 
-3. **For each project**, capture:
+4. **For each project**, capture:
    - Compile success/failure
    - Test pass/fail count
    - Any error messages

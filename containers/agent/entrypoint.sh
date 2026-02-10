@@ -133,9 +133,10 @@ echo "[entrypoint] =================================="
 # Determine which capabilities to drop
 # - CAP_NET_ADMIN is always dropped (prevents iptables bypass)
 # - CAP_SYS_CHROOT is dropped when chroot mode is enabled (prevents user code from using chroot)
+# - CAP_SYS_ADMIN is dropped when chroot mode is enabled (was needed for mounting procfs)
 if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
-  CAPS_TO_DROP="cap_net_admin,cap_sys_chroot"
-  echo "[entrypoint] Chroot mode enabled - dropping CAP_NET_ADMIN and CAP_SYS_CHROOT"
+  CAPS_TO_DROP="cap_net_admin,cap_sys_chroot,cap_sys_admin"
+  echo "[entrypoint] Chroot mode enabled - dropping CAP_NET_ADMIN, CAP_SYS_CHROOT, and CAP_SYS_ADMIN"
 else
   CAPS_TO_DROP="cap_net_admin"
   echo "[entrypoint] Dropping CAP_NET_ADMIN capability"
@@ -149,6 +150,45 @@ echo ""
 # This provides transparent host binary access - user command sees host filesystem as /
 if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   echo "[entrypoint] Chroot mode: running command inside host filesystem (/host)"
+
+  # Mount a container-scoped procfs at /host/proc
+  # This provides dynamic /proc/self/exe resolution (required by .NET CLR, JVM, and other
+  # runtimes that read /proc/self/exe to find themselves). A static bind mount of /proc/self
+  # always resolves to the parent shell's exe, causing runtime failures.
+  # Security: This procfs is container-scoped (only shows container processes, not host).
+  # SYS_ADMIN capability (required for mount) is dropped before user code runs.
+  mkdir -p /host/proc
+  if mount -t proc -o nosuid,nodev,noexec proc /host/proc; then
+    echo "[entrypoint] Mounted procfs at /host/proc (nosuid,nodev,noexec)"
+  else
+    echo "[entrypoint][ERROR] Failed to mount procfs at /host/proc"
+    echo "[entrypoint][ERROR] This is required for Java, .NET, and other runtimes that read /proc/self/exe"
+    echo "[entrypoint][ERROR] Ensure the container has SYS_ADMIN capability (it will be dropped before user code runs)"
+    exit 1
+  fi
+
+  # Copy one-shot-token library to host filesystem for LD_PRELOAD in chroot
+  # This prevents tokens from being read multiple times by malicious code
+  # Note: /tmp is always writable in chroot mode (mounted from host /tmp as rw)
+  ONE_SHOT_TOKEN_LIB=""
+  if [ -f /usr/local/lib/one-shot-token.so ]; then
+    # Create the library directory in /tmp (always writable)
+    if mkdir -p /host/tmp/awf-lib 2>/dev/null; then
+      # Copy the library and verify it exists after copying
+      if cp /usr/local/lib/one-shot-token.so /host/tmp/awf-lib/one-shot-token.so 2>/dev/null && \
+         [ -f /host/tmp/awf-lib/one-shot-token.so ]; then
+        ONE_SHOT_TOKEN_LIB="/tmp/awf-lib/one-shot-token.so"
+        echo "[entrypoint] One-shot token library copied to chroot at ${ONE_SHOT_TOKEN_LIB}"
+      else
+        echo "[entrypoint][WARN] Could not copy one-shot-token library to /tmp/awf-lib"
+        echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
+      fi
+    else
+      echo "[entrypoint][ERROR] Could not create /tmp/awf-lib directory"
+      echo "[entrypoint][ERROR] This should not happen - /tmp is mounted read-write in chroot mode"
+      echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
+    fi
+  fi
 
   # Verify capsh is available on the host (required for privilege drop)
   if ! chroot /host which capsh >/dev/null 2>&1; then
@@ -262,6 +302,12 @@ AWFEOF
       # Java needs LD_LIBRARY_PATH to find libjli.so and other shared libs
       echo "export LD_LIBRARY_PATH=\"${AWF_JAVA_HOME}/lib:${AWF_JAVA_HOME}/lib/server:\$LD_LIBRARY_PATH\"" >> "/host${SCRIPT_FILE}"
     fi
+    # Add DOTNET_ROOT to PATH if provided (for .NET on GitHub Actions)
+    if [ -n "${AWF_DOTNET_ROOT}" ]; then
+      echo "[entrypoint] Adding DOTNET_ROOT to PATH: ${AWF_DOTNET_ROOT}"
+      echo "export PATH=\"${AWF_DOTNET_ROOT}:\$PATH\"" >> "/host${SCRIPT_FILE}"
+      echo "export DOTNET_ROOT=\"${AWF_DOTNET_ROOT}\"" >> "/host${SCRIPT_FILE}"
+    fi
     # Add GOROOT/bin to PATH if provided (required for Go on GitHub Actions with trimmed binaries)
     # This ensures the correct Go version is found even if AWF_HOST_PATH has wrong ordering
     if [ -n "${AWF_GOROOT}" ]; then
@@ -332,10 +378,21 @@ AWFEOF
     CLEANUP_CMD="${CLEANUP_CMD}; sed -i '/^[0-9.]\\+[[:space:]]\\+host\\.docker\\.internal\$/d' /etc/hosts 2>/dev/null || true"
     echo "[entrypoint] host.docker.internal will be removed from /etc/hosts on exit"
   fi
+  # Clean up the one-shot-token library if it was copied
+  if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
+    CLEANUP_CMD="${CLEANUP_CMD}; rm -rf /tmp/awf-lib 2>/dev/null || true"
+  fi
+
+  # Build LD_PRELOAD command for one-shot token protection
+  LD_PRELOAD_CMD=""
+  if [ -n "${ONE_SHOT_TOKEN_LIB}" ]; then
+    LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
+  fi
 
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
     trap '${CLEANUP_CMD}' EXIT
+    ${LD_PRELOAD_CMD}
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
   "
 else
@@ -348,5 +405,9 @@ else
   # 1. capsh drops capabilities from the bounding set (cannot be regained)
   # 2. gosu switches to awfuser (drops root privileges)
   # 3. exec replaces the current process with the user command
+  #
+  # Enable one-shot token protection - tokens are cached in memory and
+  # unset from the environment so /proc/self/environ is cleared
+  export LD_PRELOAD=/usr/local/lib/one-shot-token.so
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi

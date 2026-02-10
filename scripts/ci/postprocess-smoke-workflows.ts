@@ -9,6 +9,7 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/smoke-copilot.lock.yml'),
   path.join(repoRoot, '.github/workflows/smoke-claude.lock.yml'),
   path.join(repoRoot, '.github/workflows/smoke-chroot.lock.yml'),
+  path.join(repoRoot, '.github/workflows/smoke-codex.lock.yml'),
   // Build test workflows
   path.join(repoRoot, '.github/workflows/build-test-node.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-go.lock.yml'),
@@ -17,6 +18,7 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/build-test-cpp.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-deno.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-bun.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-dotnet.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:
@@ -60,6 +62,13 @@ function buildLocalInstallSteps(indent: string): string {
   ].join('\n') + '\n';
 }
 
+// Remove sparse-checkout from the agent job's checkout step so the full repo
+// is available for npm ci / npm run build. The compiler generates sparse-checkout
+// for .github and .agents only, but we need src/, package.json, tsconfig.json etc.
+// Match the sparse-checkout block (key + indented content lines) and the depth line.
+const sparseCheckoutRegex = /^(\s+)sparse-checkout: \|\n(?:\1  .+\n)+/gm;
+const shallowDepthRegex = /^(\s+)depth: 1\n/gm;
+
 // Replace --image-tag <version> --skip-pull with --build-local so smoke tests
 // use locally-built container images (with the latest entrypoint.sh, setup-iptables.sh, etc.)
 // instead of pre-built GHCR images that may be stale.
@@ -84,6 +93,22 @@ for (const workflowPath of workflowPaths) {
     );
     modified = true;
     console.log(`  Replaced awf install step with local build`);
+  }
+
+  // Remove sparse-checkout from agent job checkout (need full repo for npm build)
+  const sparseMatches = content.match(sparseCheckoutRegex);
+  if (sparseMatches) {
+    content = content.replace(sparseCheckoutRegex, '');
+    modified = true;
+    console.log(`  Removed ${sparseMatches.length} sparse-checkout block(s)`);
+  }
+
+  // Remove shallow depth (depth: 1) since full checkout is needed
+  const depthMatches = content.match(shallowDepthRegex);
+  if (depthMatches) {
+    content = content.replace(shallowDepthRegex, '');
+    modified = true;
+    console.log(`  Removed ${depthMatches.length} shallow depth setting(s)`);
   }
 
   // Replace GHCR image tags with local builds

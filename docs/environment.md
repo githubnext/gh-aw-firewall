@@ -17,9 +17,11 @@ awf --env-all 'command'
 
 When using `sudo -E`, these host variables are automatically passed: `GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `USER`, `TERM`, `HOME`, `XDG_CONFIG_HOME`.
 
-The following are always set/overridden: `HTTP_PROXY`, `HTTPS_PROXY` (Squid proxy), `PATH` (container values).
+The following are always set/overridden: `PATH` (container values).
 
 Variables from `--env` flags override everything else.
+
+**Note:** As of v0.13.5, `HTTP_PROXY` and `HTTPS_PROXY` are no longer automatically set. Traffic is transparently redirected to Squid via iptables NAT rules. If needed, you can still set these manually with `--env HTTP_PROXY=...`
 
 ## Security Warning: `--env-all`
 
@@ -30,7 +32,9 @@ Using `--env-all` passes all host environment variables to the container, which 
 3. **Unnecessary Access**: Extra variables increase attack surface (violates least privilege)
 4. **Accidental Sharing**: Easy to forget what's in your environment when sharing commands
 
-**Excluded variables** (even with `--env-all`): `PATH`, `PWD`, `OLDPWD`, `SHLVL`, `_`, `SUDO_*`
+**Excluded variables** (even with `--env-all`): `PATH`, `PWD`, `OLDPWD`, `SHLVL`, `_`, `SUDO_*`, `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`
+
+**Proxy variables:** Host proxy settings are excluded to prevent conflicts with iptables-based traffic redirection. The firewall uses transparent proxying via iptables NAT rules instead of environment variable-based proxy configuration.
 
 ## Best Practices
 
@@ -58,12 +62,13 @@ The following environment variables are set internally by the firewall and used 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `AWF_DNS_SERVERS` | Comma-separated list of trusted DNS servers | `8.8.8.8,8.8.4.4` |
-| `HTTP_PROXY` | Squid proxy URL for HTTP traffic | `http://172.30.0.10:3128` |
-| `HTTPS_PROXY` | Squid proxy URL for HTTPS traffic | `http://172.30.0.10:3128` |
-| `SQUID_PROXY_HOST` | Squid container hostname | `squid-proxy` |
-| `SQUID_PROXY_PORT` | Squid proxy port | `3128` |
+| `AWF_CHROOT_ENABLED` | Whether chroot mode is enabled | `true` |
+| `AWF_HOST_PATH` | Host PATH passed to chroot environment | `/usr/local/bin:/usr/bin` |
+| `NO_PROXY` | Domains bypassing Squid (host access mode) | `localhost,host.docker.internal` |
 
 **Note:** These are set automatically based on CLI options and should not be overridden manually.
+
+**Historical note:** Prior to v0.13.5, `HTTP_PROXY` and `HTTPS_PROXY` were set to point to Squid. These have been removed in favor of transparent iptables-based redirection, which is more reliable and avoids conflicts with tools that don't honor proxy environment variables.
 
 ## Troubleshooting
 
