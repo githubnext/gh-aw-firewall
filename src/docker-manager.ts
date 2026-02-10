@@ -787,8 +787,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // Write Docker Compose config
   const dockerCompose = generateDockerCompose(config, networkConfig, sslConfig);
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
-  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose));
-  logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
+  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
+  logger.debug(`Docker Compose config written to: ${dockerComposePath} (mode 0600)`);
 }
 
 /**
@@ -891,13 +891,16 @@ export const SENSITIVE_ENV_NAMES = new Set([
  */
 export function redactComposeSecrets(workDir: string): void {
   const composePath = path.join(workDir, 'docker-compose.yml');
-  if (!fs.existsSync(composePath)) {
-    logger.debug('No docker-compose.yml found to redact');
-    return;
-  }
 
   try {
-    let content = fs.readFileSync(composePath, 'utf8');
+    // Read directly without existsSync to avoid TOCTOU race condition
+    let content: string;
+    try {
+      content = fs.readFileSync(composePath, 'utf8');
+    } catch {
+      logger.debug('No docker-compose.yml found to redact');
+      return;
+    }
     let redactedCount = 0;
 
     for (const name of SENSITIVE_ENV_NAMES) {
@@ -917,7 +920,7 @@ export function redactComposeSecrets(workDir: string): void {
     }
 
     if (redactedCount > 0) {
-      fs.writeFileSync(composePath, content);
+      fs.writeFileSync(composePath, content, { mode: 0o600 });
       logger.info(`Redacted ${redactedCount} sensitive value(s) from docker-compose.yml`);
     }
   } catch (error) {

@@ -84,6 +84,10 @@ static char *(*real_secure_getenv)(const char *name) = NULL;
 static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
 static pthread_once_t secure_getenv_init_once = PTHREAD_ONCE_INIT;
 
+/* Forward declarations */
+static int get_token_index(const char *name);
+static const char *format_token_value(const char *value);
+
 /* Initialize the real getenv pointer (called exactly once via pthread_once) */
 static void init_real_getenv_once(void) {
     real_getenv = dlsym(RTLD_NEXT, "getenv");
