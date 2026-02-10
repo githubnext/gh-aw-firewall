@@ -142,6 +142,11 @@ else
   echo "[entrypoint] Dropping CAP_NET_ADMIN capability"
 fi
 
+# Default sensitive token names to scrub from /proc/self/environ before exec.
+# Matches the one-shot-token library defaults plus GITHUB_PERSONAL_ACCESS_TOKEN.
+# Override via AWF_ONE_SHOT_TOKENS environment variable.
+DEFAULT_SENSITIVE_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY,GITHUB_PERSONAL_ACCESS_TOKEN"
+
 echo "[entrypoint] Switching to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
@@ -396,7 +401,7 @@ AWFEOF
   if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
     SCRUB_TOKENS="${AWF_ONE_SHOT_TOKENS}"
   else
-    SCRUB_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+    SCRUB_TOKENS="${DEFAULT_SENSITIVE_TOKENS}"
   fi
   IFS=',' read -ra TOKENS_TO_SCRUB <<< "$SCRUB_TOKENS"
   for token_name in "${TOKENS_TO_SCRUB[@]}"; do
@@ -433,7 +438,7 @@ else
   if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
     SCRUB_TOKENS="${AWF_ONE_SHOT_TOKENS}"
   else
-    SCRUB_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+    SCRUB_TOKENS="${DEFAULT_SENSITIVE_TOKENS}"
   fi
   IFS=',' read -ra TOKENS_TO_SCRUB <<< "$SCRUB_TOKENS"
   for token_name in "${TOKENS_TO_SCRUB[@]}"; do

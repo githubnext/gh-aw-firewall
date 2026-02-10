@@ -272,6 +272,7 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 - **Interception before first read**: If malicious code runs before the legitimate code reads the token, it gets the value
 - **Static linking**: Programs statically linked with libc bypass LD_PRELOAD
 - **Direct syscalls**: Code that reads `/proc/self/environ` directly (without getenv) bypasses this protection
+  - **Mitigated by AWF**: The entrypoint scrubs sensitive env vars from the process environment before `exec`, so `/proc/self/environ` of the user process will not contain them
 
 ### Defense in Depth
 
