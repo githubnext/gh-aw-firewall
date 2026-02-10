@@ -66,6 +66,17 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
+# Build one-shot-token LD_PRELOAD library for single-use token access
+# This prevents tokens from being read multiple times (e.g., by malicious code)
+COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libc6-dev && \
+    gcc -shared -fPIC -O2 -Wall -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
+    rm /tmp/one-shot-token.c && \
+    apt-get remove -y gcc libc6-dev && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install Docker stub script that shows helpful error message
 # Docker-in-Docker support was removed in v0.9.1
 COPY docker-stub.sh /usr/bin/docker
