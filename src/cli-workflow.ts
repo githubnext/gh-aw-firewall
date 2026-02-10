@@ -54,16 +54,20 @@ export async function runMainWorkflow(
   // Step 2: Start containers
   await dependencies.startContainers(config.workDir, config.allowedDomains, config.proxyLogsDir, config.skipPull);
 
-  // Step 2.5: Redact secrets from docker-compose.yml after containers start
-  // This prevents exposure via /host/tmp/awf-*/docker-compose.yml
+  // Step 3: Redact secrets from docker-compose.yml after containers start
+  // This must happen AFTER docker compose up because Docker reads the file
+  // to configure container environment variables. Redacting before would
+  // prevent containers from receiving the tokens they need.
+  // The race window is mitigated by the file being written with mode 0600
+  // (root-only readable), so the agent (running as awfuser) cannot read it.
   dependencies.redactComposeSecrets(config.workDir);
 
   onContainersStarted?.();
 
-  // Step 3: Wait for agent to complete
+  // Step 4: Wait for agent to complete
   const result = await dependencies.runAgentCommand(config.workDir, config.allowedDomains, config.proxyLogsDir);
 
-  // Step 4: Cleanup (logs will be preserved automatically if they exist)
+  // Step 5: Cleanup (logs will be preserved automatically if they exist)
   await performCleanup();
 
   if (result.exitCode === 0) {

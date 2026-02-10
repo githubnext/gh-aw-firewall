@@ -863,9 +863,9 @@ async function checkSquidLogs(workDir: string, proxyLogsDir?: string): Promise<{
  * These are redacted from docker-compose.yml after containers start
  * to prevent exposure via the /host mount.
  *
- * This list must stay aligned with DEFAULT_SENSITIVE_TOKENS in:
- * - containers/agent/one-shot-token/one-shot-token.c
- * - containers/agent/entrypoint.sh (SENSITIVE_TOKENS variable)
+ * This list must stay aligned with:
+ * - DEFAULT_SENSITIVE_TOKENS in containers/agent/one-shot-token/one-shot-token.c
+ * - DEFAULT_SENSITIVE_TOKENS in containers/agent/entrypoint.sh
  */
 export const SENSITIVE_ENV_NAMES = new Set([
   'COPILOT_GITHUB_TOKEN',

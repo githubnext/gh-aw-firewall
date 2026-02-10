@@ -5,13 +5,18 @@
  * /proc/self/environ and limits access via getenv().
  *
  * When loaded, the library constructor reads cached token values from
- * AWF_TOKEN_CACHE_FILE (written by entrypoint.sh), populates an in-memory
- * cache, and immediately deletes the file. The sensitive variables are
- * never present in the process environment, so /proc/self/environ is clean.
+ * AWF_TOKEN_CACHE_FILE (written by entrypoint.sh) and populates an
+ * in-memory cache. The file is NOT deleted by the library because the
+ * constructor runs in every process in the exec chain (capsh → gosu →
+ * user command), and each exec() resets static data. The file is
+ * cleaned up by the EXIT trap in entrypoint.sh instead.
+ *
+ * The sensitive variables are never present in the process environment
+ * (entrypoint.sh unsets them before exec), so /proc/self/environ is clean.
  * Subsequent getenv() calls return the cached values from memory.
  *
  * Fallback: If no cache file is found, tokens are read from the environment
- * on first getenv() call, cached, and unset (original behavior).
+ * on library load, cached, and unset (original behavior).
  *
  * Configuration:
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
@@ -40,6 +45,7 @@ static const char *DEFAULT_SENSITIVE_TOKENS[] = {
     "GITHUB_API_TOKEN",
     "GITHUB_PAT",
     "GH_ACCESS_TOKEN",
+    "GITHUB_PERSONAL_ACCESS_TOKEN",
     /* OpenAI tokens */
     "OPENAI_API_KEY",
     "OPENAI_KEY",
@@ -200,8 +206,13 @@ static void init_token_list(void) {
 /**
  * Load cached token values from AWF_TOKEN_CACHE_FILE.
  *
- * The file format is one NAME=VALUE per line. After reading, the file
- * is deleted immediately to minimize the exposure window.
+ * The file format is one NAME=VALUE per line. The file is NOT deleted here
+ * because the LD_PRELOAD constructor runs in every process in the exec chain
+ * (capsh → gosu → user command), and each exec() creates a fresh process
+ * image with reset static data. Deleting here would cause subsequent processes
+ * to lose access to the cached tokens. The file is cleaned up by the EXIT
+ * trap in entrypoint.sh instead. The file is created with mode 0600 and
+ * owned by awfuser, so it is not readable by other users.
  *
  * Must be called with token_mutex held and after init_token_list().
  */
@@ -235,7 +246,7 @@ static void load_token_cache_file(void) {
         const char *name = line;
         const char *value = eq + 1;
 
-        /* Find if this name matches a sensitive token */
+        /* Find if this name matches a sensitive token (first-wins for duplicates) */
         int idx = get_token_index(name);
         if (idx >= 0 && !token_accessed[idx]) {
             token_cache[idx] = strdup(value);
@@ -249,16 +260,6 @@ static void load_token_cache_file(void) {
 
     fclose(f);
 
-    /* Delete the cache file immediately to minimize exposure */
-    if (unlink(cache_path) == 0) {
-        fprintf(stderr, "[one-shot-token] Token cache file deleted: %s\n", cache_path);
-    } else {
-        fprintf(stderr, "[one-shot-token] WARNING: Could not delete token cache file: %s\n", cache_path);
-    }
-
-    /* Also remove AWF_TOKEN_CACHE_FILE from environ */
-    unsetenv("AWF_TOKEN_CACHE_FILE");
-
     if (loaded > 0) {
         fprintf(stderr, "[one-shot-token] Loaded %d token(s) from cache file\n", loaded);
     }
@@ -268,9 +269,8 @@ static void load_token_cache_file(void) {
  * Library constructor - runs when the library is loaded (before main()).
  *
  * If AWF_TOKEN_CACHE_FILE is set (by entrypoint.sh), loads cached token
- * values from the file and deletes it. The sensitive variables are never
- * present in /proc/self/environ because entrypoint.sh unsets them before
- * exec.
+ * values from the file. The sensitive variables are never present in
+ * /proc/self/environ because entrypoint.sh unsets them before exec.
  *
  * If no cache file exists, tokens remain in the environment and will be
  * cached + unset on first getenv() call (original fallback behavior).

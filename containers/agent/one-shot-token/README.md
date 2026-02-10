@@ -5,8 +5,8 @@
 The one-shot token library is an `LD_PRELOAD` shared library that provides **cached access** to sensitive environment variables containing GitHub, OpenAI, Anthropic/Claude, and Codex API tokens. On library load, a constructor eagerly caches all sensitive tokens and removes them from the process environment, ensuring `/proc/self/environ` never exposes secrets to user code.
 
 The library supports two token loading mechanisms:
-1. **Token cache file** (preferred): `entrypoint.sh` writes token values to a temporary file (`AWF_TOKEN_CACHE_FILE`) and unsets the env vars before `exec`. The constructor reads the file, populates the cache, and immediately deletes it.
-2. **Environment fallback**: If no cache file exists, tokens are read from the environment on library load, cached, and unset (original behavior).
+1. **Token cache file** (preferred): `entrypoint.sh` writes token values to a temporary file (`AWF_TOKEN_CACHE_FILE`) and unsets the env vars before `exec`. The constructor reads the file and populates the cache. The file is NOT deleted by the library — it must survive the full exec chain (`capsh → gosu → user command`) since each `exec()` resets static data. Cleanup is handled by the EXIT trap in `entrypoint.sh`.
+2. **Environment fallback**: If no cache file exists, tokens are read from the environment on library load, cached, and unset.
 
 This protects against exfiltration via `/proc/self/environ` inspection while allowing legitimate multi-read access patterns that programs like the Copilot CLI require.
 
@@ -23,6 +23,7 @@ By default, the library protects these token variables:
 - `GITHUB_API_TOKEN`
 - `GITHUB_PAT`
 - `GH_ACCESS_TOKEN`
+- `GITHUB_PERSONAL_ACCESS_TOKEN`
 
 **OpenAI:**
 - `OPENAI_API_KEY`
