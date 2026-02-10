@@ -446,6 +446,14 @@ export function generateDockerCompose(
     fs.mkdirSync(copilotConfigDir, { recursive: true });
   }
 
+  // Ensure .copilot/logs directory exists on host before mounting
+  // This is critical: Docker needs the mount point to exist before it can overlay
+  // the read-write mount on top of the read-only parent mount
+  const copilotLogsDir = path.join(copilotConfigDir, 'logs');
+  if (!fs.existsSync(copilotLogsDir)) {
+    fs.mkdirSync(copilotLogsDir, { recursive: true });
+  }
+
   // Mount ~/.copilot for MCP config (read-only) and logs (write via separate mount)
   agentVolumes.push(`${copilotConfigDir}:${copilotConfigDir}:ro`);
   // Mount agent logs directory to workDir for persistence (overlays the ro mount above)
