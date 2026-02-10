@@ -1179,6 +1179,32 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
         }
       }
 
+      // Preserve configuration files before cleanup for debugging
+      const configDestination = path.join(os.tmpdir(), `awf-configs-${timestamp}`);
+      const configFiles = ['docker-compose.yml', 'squid.conf', 'seccomp-profile.json'];
+      const preservedFiles: string[] = [];
+
+      for (const configFile of configFiles) {
+        const configPath = path.join(workDir, configFile);
+        if (fs.existsSync(configPath)) {
+          try {
+            // Create config destination directory if it doesn't exist
+            if (!fs.existsSync(configDestination)) {
+              fs.mkdirSync(configDestination, { recursive: true });
+            }
+            // Copy config file to preserve it
+            fs.copyFileSync(configPath, path.join(configDestination, configFile));
+            preservedFiles.push(configFile);
+          } catch (error) {
+            logger.debug(`Could not preserve ${configFile}:`, error);
+          }
+        }
+      }
+
+      if (preservedFiles.length > 0) {
+        logger.info(`Configuration files preserved at: ${configDestination} (${preservedFiles.join(', ')})`);
+      }
+
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });
       logger.debug('Temporary files cleaned up');
