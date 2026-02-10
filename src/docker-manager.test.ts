@@ -861,7 +861,7 @@ describe('docker-manager', () => {
       expect(agent.build).toBeUndefined();
     });
 
-    it('should build locally with minimal Dockerfile when enableChroot with custom image', () => {
+    it('should build locally with full Dockerfile when enableChroot with custom image', () => {
       const configWithChroot = {
         ...mockConfig,
         enableChroot: true,
@@ -870,14 +870,14 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // Chroot mode with custom image should build locally with minimal Dockerfile
+      // Chroot mode with custom image should build locally with full Dockerfile for feature parity
       expect(agent.build).toBeDefined();
-      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.build.dockerfile).toBe('Dockerfile');
       expect(agent.build.args.BASE_IMAGE).toBe('ubuntu:24.04');
       expect(agent.image).toBeUndefined();
     });
 
-    it('should build locally with minimal Dockerfile when buildLocal and enableChroot are both true', () => {
+    it('should build locally with full Dockerfile when buildLocal and enableChroot are both true', () => {
       const configWithChrootAndBuildLocal = {
         ...mockConfig,
         enableChroot: true,
@@ -886,9 +886,9 @@ describe('docker-manager', () => {
       const result = generateDockerCompose(configWithChrootAndBuildLocal, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // When both buildLocal and enableChroot are set, should build locally
+      // When both buildLocal and enableChroot are set, should use full Dockerfile for feature parity
       expect(agent.build).toBeDefined();
-      expect(agent.build.dockerfile).toBe('Dockerfile.minimal');
+      expect(agent.build.dockerfile).toBe('Dockerfile');
       expect(agent.image).toBeUndefined();
     });
 
