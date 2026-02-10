@@ -45,8 +45,12 @@ static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
+/* Pointer to the real secure_getenv function */
+static char *(*real_secure_getenv)(const char *name) = NULL;
+
 /* pthread_once control for thread-safe initialization */
 static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
+static pthread_once_t secure_getenv_init_once = PTHREAD_ONCE_INIT;
 
 /* Initialize the real getenv pointer (called exactly once via pthread_once) */
 static void init_real_getenv_once(void) {
@@ -61,6 +65,20 @@ static void init_real_getenv_once(void) {
 /* Ensure real_getenv is initialized (thread-safe) */
 static void init_real_getenv(void) {
     pthread_once(&getenv_init_once, init_real_getenv_once);
+}
+
+/* Initialize the real secure_getenv pointer (called exactly once via pthread_once) */
+static void init_real_secure_getenv_once(void) {
+    real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
+    /* secure_getenv may not exist on all systems - this is OK, we'll fall back to getenv */
+    if (real_secure_getenv == NULL) {
+        fprintf(stderr, "[one-shot-token] INFO: secure_getenv not available, will fall back to getenv\n");
+    }
+}
+
+/* Ensure real_secure_getenv is initialized (thread-safe) */
+static void init_real_secure_getenv(void) {
+    pthread_once(&secure_getenv_init_once, init_real_secure_getenv_once);
 }
 
 /* Check if a variable name is a sensitive token */
