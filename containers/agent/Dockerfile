@@ -9,8 +9,9 @@ FROM ${BASE_IMAGE}
 
 # Install required packages and Node.js 22
 # Note: Some packages may already exist in runner-like base images, apt handles this gracefully
+# Retry logic handles transient 404s when Ubuntu archive supersedes package versions mid-build
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    ( apt-get install -y --no-install-recommends \
     iptables \
     curl \
     ca-certificates \
@@ -21,7 +22,13 @@ RUN apt-get update && \
     net-tools \
     netcat-openbsd \
     gosu \
-    libcap2-bin && \
+    libcap2-bin || \
+    (echo "apt-get install failed, retrying with fresh package index..." && \
+     rm -rf /var/lib/apt/lists/* && \
+     apt-get update && \
+     apt-get install -y --no-install-recommends \
+     iptables curl ca-certificates git gh gnupg dnsutils \
+     net-tools netcat-openbsd gosu libcap2-bin) ) && \
     # Prefer system binaries over runner toolcache (e.g., act images) for Node checks.
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" && \
     # Install Node.js 22 from NodeSource
@@ -70,7 +77,9 @@ RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/
 # This prevents tokens from being read multiple times (e.g., by malicious code)
 COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libc6-dev && \
+    ( apt-get install -y --no-install-recommends gcc libc6-dev || \
+      (rm -rf /var/lib/apt/lists/* && apt-get update && \
+       apt-get install -y --no-install-recommends gcc libc6-dev) ) && \
     gcc -shared -fPIC -O2 -Wall -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
     rm /tmp/one-shot-token.c && \
     apt-get remove -y gcc libc6-dev && \
