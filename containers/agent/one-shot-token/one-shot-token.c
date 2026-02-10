@@ -7,6 +7,7 @@
  *
  * Configuration:
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
+ *   AWF_ONE_SHOT_SKIP_UNSET - If set to "1", skip unsetting but still log accesses
  *   If not set, uses built-in defaults
  *
  * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
@@ -59,6 +60,9 @@ static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Initialization flag */
 static int tokens_initialized = 0;
 
+/* Skip unset flag - if true, log accesses but don't unset variables */
+static int skip_unset = 0;
+
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
@@ -96,6 +100,13 @@ static void init_real_secure_getenv_once(void) {
 static void init_token_list(void) {
     if (tokens_initialized) {
         return;
+    }
+
+    /* Check if we should skip unsetting (for debugging/testing) */
+    const char *skip_unset_env = real_getenv("AWF_ONE_SHOT_SKIP_UNSET");
+    if (skip_unset_env != NULL && strcmp(skip_unset_env, "1") == 0) {
+        skip_unset = 1;
+        fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_SKIP_UNSET=1 - tokens will NOT be unset after access\n");
     }
 
     /* Get the configuration from environment */
@@ -234,22 +245,33 @@ char *getenv(const char *name) {
         result = real_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy since unsetenv will invalidate the pointer */
-            /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+            if (skip_unset) {
+                /* Skip unset mode - just log the access, don't clear */
+                fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared)\n", name);
+            } else {
+                /* Make a copy since unsetenv will invalidate the pointer */
+                /* Note: This memory is intentionally never freed - it must persist
+                 * for the lifetime of the caller's use of the returned pointer */
+                result = strdup(result);
 
-            /* Unset the variable so it can't be accessed again */
-            unsetenv(name);
+                /* Unset the variable so it can't be accessed again */
+                unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cleared\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared\n", name);
+            }
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed - return NULL */
-        result = NULL;
+        /* Already accessed */
+        if (skip_unset) {
+            /* Skip unset mode - return the value again (since we didn't clear it) */
+            result = real_getenv(name);
+        } else {
+            /* Normal mode - return NULL (token was cleared) */
+            result = NULL;
+        }
     }
 
     pthread_mutex_unlock(&token_mutex);
@@ -295,22 +317,33 @@ char *secure_getenv(const char *name) {
         result = real_secure_getenv(name);
 
         if (result != NULL) {
-            /* Make a copy since unsetenv will invalidate the pointer */
-            /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the caller's use of the returned pointer */
-            result = strdup(result);
+            if (skip_unset) {
+                /* Skip unset mode - just log the access, don't clear */
+                fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared) (via secure_getenv)\n", name);
+            } else {
+                /* Make a copy since unsetenv will invalidate the pointer */
+                /* Note: This memory is intentionally never freed - it must persist
+                 * for the lifetime of the caller's use of the returned pointer */
+                result = strdup(result);
 
-            /* Unset the variable so it can't be accessed again */
-            unsetenv(name);
+                /* Unset the variable so it can't be accessed again */
+                unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (via secure_getenv)\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (via secure_getenv)\n", name);
+            }
         }
 
         /* Mark as accessed even if NULL (prevents repeated log messages) */
         token_accessed[token_idx] = 1;
     } else {
-        /* Already accessed - return NULL */
-        result = NULL;
+        /* Already accessed */
+        if (skip_unset) {
+            /* Skip unset mode - return the value again (since we didn't clear it) */
+            result = real_secure_getenv(name);
+        } else {
+            /* Normal mode - return NULL (token was cleared) */
+            result = NULL;
+        }
     }
 
     pthread_mutex_unlock(&token_mutex);

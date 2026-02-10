@@ -51,6 +51,29 @@ LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
 - The configuration is read once at library initialization (first `getenv()` call)
 - Uses `strtok_r()` internally, which is thread-safe and won't interfere with application code using `strtok()`
 
+### Skip Unset Mode (Debug/Testing)
+
+For debugging or testing purposes, you can enable skip-unset mode to log token accesses without actually clearing them:
+
+```bash
+# Enable skip-unset mode
+export AWF_ONE_SHOT_SKIP_UNSET=1
+
+# Tokens will be logged on first access but NOT cleared
+LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
+```
+
+**Behavior in skip-unset mode:**
+- Token accesses are logged with `(skip_unset=1, not cleared)` message
+- Tokens remain in the environment after first access
+- Subsequent `getenv()` calls return the token value (not NULL)
+- **WARNING:** This mode disables the security protection and should only be used for debugging/testing
+
+**Use cases:**
+- Debugging why a token is being cleared unexpectedly
+- Testing token access patterns without breaking multi-read workflows
+- Temporarily disabling protection while investigating issues
+
 ## How It Works
 
 ### The LD_PRELOAD Mechanism

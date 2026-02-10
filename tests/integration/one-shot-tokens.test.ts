@@ -459,4 +459,109 @@ print(f"Second: [{second}]")
       expect(result.stdout).toContain('Second: []');
     }, 120000);
   });
+
+  describe('Skip Unset Mode', () => {
+    test('should log accesses but not clear tokens when AWF_ONE_SHOT_SKIP_UNSET=1', async () => {
+      const testScript = `
+        FIRST_READ=$(printenv GITHUB_TOKEN)
+        SECOND_READ=$(printenv GITHUB_TOKEN)
+        THIRD_READ=$(printenv GITHUB_TOKEN)
+        echo "First read: [$FIRST_READ]"
+        echo "Second read: [$SECOND_READ]"
+        echo "Third read: [$THIRD_READ]"
+      `;
+
+      const result = await runner.runWithSudo(
+        testScript,
+        {
+          allowDomains: ['localhost'],
+          logLevel: 'debug',
+          timeout: 60000,
+          buildLocal: true,
+          env: {
+            GITHUB_TOKEN: 'ghp_skip_unset_test',
+            AWF_ONE_SHOT_SKIP_UNSET: '1',
+          },
+        }
+      );
+
+      expect(result).toSucceed();
+      // All reads should return the token value (not cleared)
+      expect(result.stdout).toContain('First read: [ghp_skip_unset_test]');
+      expect(result.stdout).toContain('Second read: [ghp_skip_unset_test]');
+      expect(result.stdout).toContain('Third read: [ghp_skip_unset_test]');
+      // Should log that skip_unset is enabled
+      expect(result.stderr).toContain('[one-shot-token] WARNING: AWF_ONE_SHOT_SKIP_UNSET=1 - tokens will NOT be unset after access');
+      // Should log first access with skip_unset flag
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed (skip_unset=1, not cleared)');
+    }, 120000);
+
+    test('should work with multiple tokens in skip-unset mode', async () => {
+      const testScript = `
+        # Read each token multiple times
+        GH1=$(printenv GITHUB_TOKEN)
+        GH2=$(printenv GITHUB_TOKEN)
+        OA1=$(printenv OPENAI_API_KEY)
+        OA2=$(printenv OPENAI_API_KEY)
+        
+        echo "GitHub first: [$GH1]"
+        echo "GitHub second: [$GH2]"
+        echo "OpenAI first: [$OA1]"
+        echo "OpenAI second: [$OA2]"
+      `;
+
+      const result = await runner.runWithSudo(
+        testScript,
+        {
+          allowDomains: ['localhost'],
+          logLevel: 'debug',
+          timeout: 60000,
+          buildLocal: true,
+          env: {
+            GITHUB_TOKEN: 'ghp_skip_multi_1',
+            OPENAI_API_KEY: 'sk-skip-multi-2',
+            AWF_ONE_SHOT_SKIP_UNSET: '1',
+          },
+        }
+      );
+
+      expect(result).toSucceed();
+      // All reads should succeed
+      expect(result.stdout).toContain('GitHub first: [ghp_skip_multi_1]');
+      expect(result.stdout).toContain('GitHub second: [ghp_skip_multi_1]');
+      expect(result.stdout).toContain('OpenAI first: [sk-skip-multi-2]');
+      expect(result.stdout).toContain('OpenAI second: [sk-skip-multi-2]');
+    }, 120000);
+
+    test('should work in chroot mode with skip-unset', async () => {
+      const testScript = `
+        FIRST=$(printenv GITHUB_TOKEN)
+        SECOND=$(printenv GITHUB_TOKEN)
+        echo "First: [$FIRST]"
+        echo "Second: [$SECOND]"
+      `;
+
+      const result = await runner.runWithSudo(
+        testScript,
+        {
+          allowDomains: ['localhost'],
+          logLevel: 'debug',
+          timeout: 60000,
+          buildLocal: true,
+          enableChroot: true,
+          env: {
+            GITHUB_TOKEN: 'ghp_chroot_skip_unset',
+            AWF_ONE_SHOT_SKIP_UNSET: '1',
+          },
+        }
+      );
+
+      expect(result).toSucceed();
+      // Both reads should succeed in chroot with skip_unset
+      expect(result.stdout).toContain('First: [ghp_chroot_skip_unset]');
+      expect(result.stdout).toContain('Second: [ghp_chroot_skip_unset]');
+      expect(result.stderr).toContain('[one-shot-token] WARNING: AWF_ONE_SHOT_SKIP_UNSET=1');
+      expect(result.stderr).toContain('(skip_unset=1, not cleared)');
+    }, 120000);
+  });
 });
