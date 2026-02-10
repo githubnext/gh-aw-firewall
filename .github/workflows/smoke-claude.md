@@ -48,6 +48,23 @@ safe-outputs:
       run-success: "🎬 **THE END** — [{workflow_name}]({run_url}) **MISSION: ACCOMPLISHED!** The hero saves the day! ✨"
       run-failure: "💫 **TO BE CONTINUED...** [{workflow_name}]({run_url}) {status}! Our hero faces unexpected challenges..."
 timeout-minutes: 10
+post-steps:
+  - name: Validate safe outputs were invoked
+    run: |
+      OUTPUTS_FILE="${GH_AW_SAFE_OUTPUTS:-/opt/gh-aw/safeoutputs/outputs.jsonl}"
+      if [ ! -s "$OUTPUTS_FILE" ]; then
+        echo "::error::No safe outputs were invoked. Smoke tests require the agent to call safe output tools."
+        exit 1
+      fi
+      echo "Safe output entries found: $(wc -l < "$OUTPUTS_FILE")"
+      if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+        if ! grep -q '"add_comment"' "$OUTPUTS_FILE"; then
+          echo "::error::Agent did not call add_comment on a pull_request trigger."
+          exit 1
+        fi
+        echo "add_comment verified for PR trigger"
+      fi
+      echo "Safe output validation passed"
 ---
 
 # Smoke Test: Claude Engine Validation
