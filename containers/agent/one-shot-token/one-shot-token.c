@@ -41,9 +41,9 @@ static const char *DEFAULT_SENSITIVE_TOKENS[] = {
     NULL
 };
 
-/* Maximum number of tokens we can track (for static allocation) */
-/* This limit balances memory usage with practical needs - 100 tokens should be
- * more than sufficient for any reasonable use case while keeping memory overhead low */
+/* Maximum number of tokens we can track (for static allocation). This limit
+ * balances memory usage with practical needs - 100 tokens should be more than
+ * sufficient for any reasonable use case while keeping memory overhead low. */
 #define MAX_TOKENS 100
 
 /* Runtime token list (populated from AWF_ONE_SHOT_TOKENS or defaults) */
