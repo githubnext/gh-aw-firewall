@@ -42,6 +42,8 @@ static const char *DEFAULT_SENSITIVE_TOKENS[] = {
 };
 
 /* Maximum number of tokens we can track (for static allocation) */
+/* This limit balances memory usage with practical needs - 100 tokens should be
+ * more than sufficient for any reasonable use case while keeping memory overhead low */
 #define MAX_TOKENS 100
 
 /* Runtime token list (populated from AWF_ONE_SHOT_TOKENS or defaults) */
@@ -99,8 +101,9 @@ static void init_token_list(void) {
             while (*token && isspace((unsigned char)*token)) token++;
             
             /* Trim trailing whitespace (only if string is non-empty) */
-            if (strlen(token) > 0) {
-                char *end = token + strlen(token) - 1;
+            size_t token_len = strlen(token);
+            if (token_len > 0) {
+                char *end = token + token_len - 1;
                 while (end > token && isspace((unsigned char)*end)) {
                     *end = '\0';
                     end--;
