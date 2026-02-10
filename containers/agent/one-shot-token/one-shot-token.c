@@ -98,11 +98,13 @@ static void init_token_list(void) {
             /* Trim leading whitespace */
             while (*token && isspace((unsigned char)*token)) token++;
             
-            /* Trim trailing whitespace */
-            char *end = token + strlen(token) - 1;
-            while (end > token && isspace((unsigned char)*end)) {
-                *end = '\0';
-                end--;
+            /* Trim trailing whitespace (only if string is non-empty) */
+            if (strlen(token) > 0) {
+                char *end = token + strlen(token) - 1;
+                while (end > token && isspace((unsigned char)*end)) {
+                    *end = '\0';
+                    end--;
+                }
             }
 
             if (*token != '\0') {
@@ -175,18 +177,17 @@ char *getenv(const char *name) {
     if (!tokens_initialized) {
         init_token_list();
     }
-    pthread_mutex_unlock(&token_mutex);
 
+    /* Get token index while holding mutex to avoid race with initialization */
     int token_idx = get_token_index(name);
 
-    /* Not a sensitive token - pass through */
+    /* Not a sensitive token - release mutex and pass through */
     if (token_idx < 0) {
+        pthread_mutex_unlock(&token_mutex);
         return real_getenv(name);
     }
 
-    /* Sensitive token - handle one-shot access */
-    pthread_mutex_lock(&token_mutex);
-
+    /* Sensitive token - handle one-shot access (mutex already held) */
     char *result = NULL;
 
     if (!token_accessed[token_idx]) {
