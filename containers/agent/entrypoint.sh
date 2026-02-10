@@ -389,6 +389,24 @@ AWFEOF
     LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
   fi
 
+  # Scrub sensitive tokens from environment before exec to prevent
+  # /proc/self/environ from exposing them (bypasses LD_PRELOAD interception)
+  # Build the token list from AWF_ONE_SHOT_TOKENS or use defaults
+  SCRUB_TOKENS=""
+  if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
+    SCRUB_TOKENS="${AWF_ONE_SHOT_TOKENS}"
+  else
+    SCRUB_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+  fi
+  IFS=',' read -ra TOKENS_TO_SCRUB <<< "$SCRUB_TOKENS"
+  for token_name in "${TOKENS_TO_SCRUB[@]}"; do
+    token_name=$(echo "$token_name" | tr -d ' ')
+    if [ -n "$token_name" ]; then
+      unset "$token_name" 2>/dev/null || true
+    fi
+  done
+  echo "[entrypoint] Scrubbed sensitive tokens from environment (/proc/self/environ protection)"
+
   exec chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
     trap '${CLEANUP_CMD}' EXIT
@@ -408,5 +426,23 @@ else
   #
   # Enable one-shot token protection to prevent tokens from being read multiple times
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
+
+  # Scrub sensitive tokens from environment before exec to prevent
+  # /proc/self/environ from exposing them (bypasses LD_PRELOAD interception)
+  SCRUB_TOKENS=""
+  if [ -n "${AWF_ONE_SHOT_TOKENS}" ]; then
+    SCRUB_TOKENS="${AWF_ONE_SHOT_TOKENS}"
+  else
+    SCRUB_TOKENS="COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN,GITHUB_API_TOKEN,GITHUB_PAT,GH_ACCESS_TOKEN,OPENAI_API_KEY,OPENAI_KEY,ANTHROPIC_API_KEY,CLAUDE_API_KEY,CODEX_API_KEY"
+  fi
+  IFS=',' read -ra TOKENS_TO_SCRUB <<< "$SCRUB_TOKENS"
+  for token_name in "${TOKENS_TO_SCRUB[@]}"; do
+    token_name=$(echo "$token_name" | tr -d ' ')
+    if [ -n "$token_name" ]; then
+      unset "$token_name" 2>/dev/null || true
+    fi
+  done
+  echo "[entrypoint] Scrubbed sensitive tokens from environment (/proc/self/environ protection)"
+
   exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
 fi

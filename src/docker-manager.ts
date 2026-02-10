@@ -859,6 +859,67 @@ async function checkSquidLogs(workDir: string, proxyLogsDir?: string): Promise<{
 }
 
 /**
+ * Sensitive environment variable names that may contain secrets.
+ * Matches the default list in the one-shot-token LD_PRELOAD library.
+ * @internal Exported for testing
+ */
+export const SENSITIVE_ENV_NAMES = new Set([
+  'COPILOT_GITHUB_TOKEN',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'GITHUB_API_TOKEN',
+  'GITHUB_PAT',
+  'GH_ACCESS_TOKEN',
+  'OPENAI_API_KEY',
+  'OPENAI_KEY',
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_API_KEY',
+  'CODEX_API_KEY',
+  'GITHUB_PERSONAL_ACCESS_TOKEN',
+]);
+
+/**
+ * Redacts sensitive environment variable values from the docker-compose.yml file.
+ * Called after containers start to prevent the agent from reading secrets via
+ * /host/tmp/awf-* mount. The file has already been consumed by docker compose up.
+ * @internal Exported for testing
+ */
+export function redactComposeSecrets(workDir: string): void {
+  const composePath = path.join(workDir, 'docker-compose.yml');
+  try {
+    if (!fs.existsSync(composePath)) {
+      return;
+    }
+    const content = fs.readFileSync(composePath, 'utf-8');
+    const config = yaml.load(content) as DockerComposeConfig;
+    if (!config?.services) {
+      return;
+    }
+
+    let redacted = false;
+    for (const service of Object.values(config.services)) {
+      const env = (service as any).environment;
+      if (env && typeof env === 'object') {
+        for (const key of Object.keys(env)) {
+          if (SENSITIVE_ENV_NAMES.has(key) && env[key]) {
+            env[key] = '**REDACTED**';
+            redacted = true;
+          }
+        }
+      }
+    }
+
+    if (redacted) {
+      fs.writeFileSync(composePath, yaml.dump(config));
+      logger.debug('Redacted sensitive environment variables from docker-compose.yml');
+    }
+  } catch (error) {
+    // Non-fatal: redaction is a defense-in-depth measure
+    logger.debug('Could not redact docker-compose.yml secrets:', error);
+  }
+}
+
+/**
  * Starts Docker Compose services
  * @param workDir - Working directory containing Docker Compose config
  * @param allowedDomains - List of allowed domains for error reporting
@@ -891,6 +952,11 @@ export async function startContainers(workDir: string, allowedDomains: string[],
       stdio: 'inherit',
     });
     logger.success('Containers started successfully');
+
+    // Redact sensitive environment variables from docker-compose.yml
+    // The file has been consumed by docker compose up, but remains readable
+    // from inside the container via /host mount. Redact to prevent exposure.
+    redactComposeSecrets(workDir);
   } catch (error) {
     // Check if this is a healthcheck failure
     const errorMsg = error instanceof Error ? error.message : String(error);

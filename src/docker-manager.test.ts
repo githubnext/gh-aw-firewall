@@ -1,8 +1,9 @@
-import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE } from './docker-manager';
+import { generateDockerCompose, subnetsOverlap, writeConfigs, startContainers, stopContainers, cleanup, runAgentCommand, validateIdNotInSystemRange, getSafeHostUid, getSafeHostGid, getRealUserHome, MIN_REGULAR_UID, ACT_PRESET_BASE_IMAGE, redactComposeSecrets, SENSITIVE_ENV_NAMES } from './docker-manager';
 import { WrapperConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as yaml from 'js-yaml';
 
 // Create mock functions
 const mockExecaFn = jest.fn();
@@ -1810,6 +1811,148 @@ describe('docker-manager', () => {
 
       // Should not throw
       await expect(cleanup(nonExistentDir, false)).resolves.not.toThrow();
+    });
+  });
+
+  describe('redactComposeSecrets', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-redact-test-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should redact sensitive environment variables from docker-compose.yml', () => {
+      const composeConfig = {
+        services: {
+          agent: {
+            environment: {
+              GITHUB_TOKEN: 'ghp_secret_token_12345',
+              HOME: '/home/user',
+              PATH: '/usr/bin',
+            },
+          },
+        },
+      };
+      fs.writeFileSync(path.join(tmpDir, 'docker-compose.yml'), yaml.dump(composeConfig));
+
+      redactComposeSecrets(tmpDir);
+
+      const result = yaml.load(fs.readFileSync(path.join(tmpDir, 'docker-compose.yml'), 'utf-8')) as any;
+      expect(result.services.agent.environment.GITHUB_TOKEN).toBe('**REDACTED**');
+      expect(result.services.agent.environment.HOME).toBe('/home/user');
+      expect(result.services.agent.environment.PATH).toBe('/usr/bin');
+    });
+
+    it('should redact multiple sensitive tokens', () => {
+      const composeConfig = {
+        services: {
+          agent: {
+            environment: {
+              GITHUB_TOKEN: 'ghp_token',
+              GH_TOKEN: 'gh_token',
+              COPILOT_GITHUB_TOKEN: 'copilot_token',
+              ANTHROPIC_API_KEY: 'sk-ant-key',
+              OPENAI_API_KEY: 'sk-openai-key',
+              GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_pat',
+              USER: 'testuser',
+            },
+          },
+        },
+      };
+      fs.writeFileSync(path.join(tmpDir, 'docker-compose.yml'), yaml.dump(composeConfig));
+
+      redactComposeSecrets(tmpDir);
+
+      const result = yaml.load(fs.readFileSync(path.join(tmpDir, 'docker-compose.yml'), 'utf-8')) as any;
+      expect(result.services.agent.environment.GITHUB_TOKEN).toBe('**REDACTED**');
+      expect(result.services.agent.environment.GH_TOKEN).toBe('**REDACTED**');
+      expect(result.services.agent.environment.COPILOT_GITHUB_TOKEN).toBe('**REDACTED**');
+      expect(result.services.agent.environment.ANTHROPIC_API_KEY).toBe('**REDACTED**');
+      expect(result.services.agent.environment.OPENAI_API_KEY).toBe('**REDACTED**');
+      expect(result.services.agent.environment.GITHUB_PERSONAL_ACCESS_TOKEN).toBe('**REDACTED**');
+      expect(result.services.agent.environment.USER).toBe('testuser');
+    });
+
+    it('should not modify file when no sensitive tokens are present', () => {
+      const composeConfig = {
+        services: {
+          agent: {
+            environment: {
+              HOME: '/home/user',
+              USER: 'testuser',
+            },
+          },
+        },
+      };
+      const content = yaml.dump(composeConfig);
+      fs.writeFileSync(path.join(tmpDir, 'docker-compose.yml'), content);
+
+      redactComposeSecrets(tmpDir);
+
+      const result = fs.readFileSync(path.join(tmpDir, 'docker-compose.yml'), 'utf-8');
+      expect(result).toBe(content);
+    });
+
+    it('should handle missing docker-compose.yml gracefully', () => {
+      // Should not throw
+      expect(() => redactComposeSecrets(tmpDir)).not.toThrow();
+    });
+
+    it('should handle empty environment section gracefully', () => {
+      const composeConfig = {
+        services: {
+          agent: {
+            environment: {},
+          },
+        },
+      };
+      fs.writeFileSync(path.join(tmpDir, 'docker-compose.yml'), yaml.dump(composeConfig));
+
+      expect(() => redactComposeSecrets(tmpDir)).not.toThrow();
+    });
+
+    it('should not redact empty or falsy token values', () => {
+      const composeConfig = {
+        services: {
+          agent: {
+            environment: {
+              GITHUB_TOKEN: '',
+              HOME: '/home/user',
+            },
+          },
+        },
+      };
+      fs.writeFileSync(path.join(tmpDir, 'docker-compose.yml'), yaml.dump(composeConfig));
+
+      redactComposeSecrets(tmpDir);
+
+      const result = yaml.load(fs.readFileSync(path.join(tmpDir, 'docker-compose.yml'), 'utf-8')) as any;
+      // Empty values should not be redacted (no secret to protect)
+      expect(result.services.agent.environment.GITHUB_TOKEN).toBe('');
+    });
+  });
+
+  describe('SENSITIVE_ENV_NAMES', () => {
+    it('should include all default one-shot-token library tokens', () => {
+      expect(SENSITIVE_ENV_NAMES.has('COPILOT_GITHUB_TOKEN')).toBe(true);
+      expect(SENSITIVE_ENV_NAMES.has('GITHUB_TOKEN')).toBe(true);
+      expect(SENSITIVE_ENV_NAMES.has('GH_TOKEN')).toBe(true);
+      expect(SENSITIVE_ENV_NAMES.has('OPENAI_API_KEY')).toBe(true);
+      expect(SENSITIVE_ENV_NAMES.has('ANTHROPIC_API_KEY')).toBe(true);
+    });
+
+    it('should include GITHUB_PERSONAL_ACCESS_TOKEN', () => {
+      expect(SENSITIVE_ENV_NAMES.has('GITHUB_PERSONAL_ACCESS_TOKEN')).toBe(true);
+    });
+
+    it('should not include non-sensitive variables', () => {
+      expect(SENSITIVE_ENV_NAMES.has('HOME')).toBe(false);
+      expect(SENSITIVE_ENV_NAMES.has('PATH')).toBe(false);
+      expect(SENSITIVE_ENV_NAMES.has('USER')).toBe(false);
     });
   });
 });
