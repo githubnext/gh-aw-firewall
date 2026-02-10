@@ -2,17 +2,12 @@ FROM ubuntu/squid:latest
 
 # Install additional tools for debugging, healthcheck, and SSL Bump
 # Retry logic handles transient 404s when Ubuntu archive supersedes package versions mid-build
-RUN apt-get update && \
-    ( apt-get install -y --no-install-recommends \
-    curl \
-    dnsutils \
-    net-tools \
-    netcat-openbsd \
-    openssl \
-    squid-openssl || \
-    (rm -rf /var/lib/apt/lists/* && apt-get update && \
-     apt-get install -y --no-install-recommends \
-     curl dnsutils net-tools netcat-openbsd openssl squid-openssl) ) && \
+RUN set -eux; \
+    PKGS="curl dnsutils net-tools netcat-openbsd openssl squid-openssl"; \
+    apt-get update && \
+    ( apt-get install -y --no-install-recommends $PKGS || \
+      (rm -rf /var/lib/apt/lists/* && apt-get update && \
+       apt-get install -y --no-install-recommends $PKGS) ) && \
     rm -rf /var/lib/apt/lists/*
 
 # Create log directory and SSL database directory
