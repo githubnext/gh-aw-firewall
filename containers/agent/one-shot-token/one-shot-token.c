@@ -88,14 +88,15 @@ static void init_token_list(void) {
     const char *config = real_getenv("AWF_ONE_SHOT_TOKENS");
     
     if (config != NULL && config[0] != '\0') {
-        /* Parse comma-separated token list */
+        /* Parse comma-separated token list using strtok_r for thread safety */
         char *config_copy = strdup(config);
         if (config_copy == NULL) {
             fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for token list\n");
             abort();
         }
 
-        char *token = strtok(config_copy, ",");
+        char *saveptr = NULL;
+        char *token = strtok_r(config_copy, ",", &saveptr);
         while (token != NULL && num_tokens < MAX_TOKENS) {
             /* Trim leading whitespace */
             while (*token && isspace((unsigned char)*token)) token++;
@@ -124,29 +125,39 @@ static void init_token_list(void) {
                 num_tokens++;
             }
 
-            token = strtok(NULL, ",");
+            token = strtok_r(NULL, ",", &saveptr);
         }
 
         free(config_copy);
 
-        fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
-    } else {
-        /* Use default token list */
-        for (int i = 0; DEFAULT_SENSITIVE_TOKENS[i] != NULL && num_tokens < MAX_TOKENS; i++) {
-            sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
-            if (sensitive_tokens[num_tokens] == NULL) {
-                fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
-                /* Clean up previously allocated tokens */
-                for (int j = 0; j < num_tokens; j++) {
-                    free(sensitive_tokens[j]);
-                }
-                abort();
-            }
-            num_tokens++;
+        /* If AWF_ONE_SHOT_TOKENS was set but resulted in zero tokens (e.g., ",,," or whitespace only),
+         * fall back to defaults to avoid silently disabling all protection */
+        if (num_tokens == 0) {
+            fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens\n");
+            fprintf(stderr, "[one-shot-token] WARNING: Falling back to default token list to maintain protection\n");
+            /* Fall through to default initialization below */
+        } else {
+            fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
+            tokens_initialized = 1;
+            return;
         }
-
-        fprintf(stderr, "[one-shot-token] Initialized with %d default token(s)\n", num_tokens);
     }
+    
+    /* Use default token list (when AWF_ONE_SHOT_TOKENS is unset, empty, or parsed to zero tokens) */
+    for (int i = 0; DEFAULT_SENSITIVE_TOKENS[i] != NULL && num_tokens < MAX_TOKENS; i++) {
+        sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
+        if (sensitive_tokens[num_tokens] == NULL) {
+            fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
+            /* Clean up previously allocated tokens */
+            for (int j = 0; j < num_tokens; j++) {
+                free(sensitive_tokens[j]);
+            }
+            abort();
+        }
+        num_tokens++;
+    }
+
+    fprintf(stderr, "[one-shot-token] Initialized with %d default token(s)\n", num_tokens);
 
     tokens_initialized = 1;
 }
