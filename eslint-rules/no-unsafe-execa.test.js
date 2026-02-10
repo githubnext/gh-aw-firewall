@@ -9,7 +9,7 @@ const { RuleTester } = require('eslint');
 const rule = require('./no-unsafe-execa');
 
 const ruleTester = new RuleTester({
-  parserOptions: {
+  languageOptions: {
     ecmaVersion: 2020,
     sourceType: 'module',
   },
