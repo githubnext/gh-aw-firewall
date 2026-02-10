@@ -64,8 +64,8 @@ describe('One-Shot Token Protection', () => {
       expect(result.stdout).toContain('First read: [ghp_test_token_12345]');
       // Second read should be empty (token has been cleared)
       expect(result.stdout).toContain('Second read: []');
-      // Verify the one-shot-token library logged the token access
-      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared');
+      // Verify the one-shot-token library logged the token access with value preview
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: ghp_...)');
     }, 120000);
 
     test('should allow COPILOT_GITHUB_TOKEN to be read once, then clear it', async () => {
@@ -92,7 +92,7 @@ describe('One-Shot Token Protection', () => {
       expect(result).toSucceed();
       expect(result.stdout).toContain('First read: [copilot_test_token_67890]');
       expect(result.stdout).toContain('Second read: []');
-      expect(result.stderr).toContain('[one-shot-token] Token COPILOT_GITHUB_TOKEN accessed and cleared');
+      expect(result.stderr).toContain('[one-shot-token] Token COPILOT_GITHUB_TOKEN accessed and cleared (value: copi...)');
     }, 120000);
 
     test('should allow OPENAI_API_KEY to be read once, then clear it', async () => {
@@ -119,7 +119,7 @@ describe('One-Shot Token Protection', () => {
       expect(result).toSucceed();
       expect(result.stdout).toContain('First read: [sk-test-openai-key]');
       expect(result.stdout).toContain('Second read: []');
-      expect(result.stderr).toContain('[one-shot-token] Token OPENAI_API_KEY accessed and cleared');
+      expect(result.stderr).toContain('[one-shot-token] Token OPENAI_API_KEY accessed and cleared (value: sk-t...)');
     }, 120000);
 
     test('should handle multiple different tokens independently', async () => {
@@ -222,7 +222,7 @@ print(f"Second: [{second}]")
       expect(result).toSucceed();
       expect(result.stdout).toContain('First: [ghp_python_test_token]');
       expect(result.stdout).toContain('Second: []');
-      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared');
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: ghp_...)');
     }, 120000);
   });
 
@@ -254,8 +254,8 @@ print(f"Second: [{second}]")
       expect(result.stdout).toContain('Second read: []');
       // Verify the library was copied to the chroot
       expect(result.stderr).toContain('One-shot token library copied to chroot');
-      // Verify the one-shot-token library logged the token access
-      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared');
+      // Verify the one-shot-token library logged the token access with value preview
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: ghp_...)');
     }, 120000);
 
     test('should allow COPILOT_GITHUB_TOKEN to be read once in chroot mode', async () => {
@@ -283,7 +283,7 @@ print(f"Second: [{second}]")
       expect(result).toSucceed();
       expect(result.stdout).toContain('First read: [copilot_chroot_token_67890]');
       expect(result.stdout).toContain('Second read: []');
-      expect(result.stderr).toContain('[one-shot-token] Token COPILOT_GITHUB_TOKEN accessed and cleared');
+      expect(result.stderr).toContain('[one-shot-token] Token COPILOT_GITHUB_TOKEN accessed and cleared (value: copi...)');
     }, 120000);
 
     test('should work with programmatic getenv() calls in chroot mode', async () => {
@@ -312,7 +312,7 @@ print(f"Second: [{second}]")
       expect(result).toSucceed();
       expect(result.stdout).toContain('First: [ghp_chroot_python_token]');
       expect(result.stdout).toContain('Second: []');
-      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared');
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: ghp_...)');
     }, 120000);
 
     test('should not interfere with non-sensitive variables in chroot mode', async () => {
@@ -492,8 +492,8 @@ print(f"Second: [{second}]")
       expect(result.stdout).toContain('Third read: [ghp_skip_unset_test]');
       // Should log that skip_unset is enabled
       expect(result.stderr).toContain('[one-shot-token] WARNING: AWF_ONE_SHOT_SKIP_UNSET=1 - tokens will NOT be unset after access');
-      // Should log first access with skip_unset flag
-      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed (skip_unset=1, not cleared)');
+      // Should log first access with skip_unset flag and value preview
+      expect(result.stderr).toContain('[one-shot-token] Token GITHUB_TOKEN accessed (value: ghp_..., skip_unset=1, not cleared)');
     }, 120000);
 
     test('should work with multiple tokens in skip-unset mode', async () => {

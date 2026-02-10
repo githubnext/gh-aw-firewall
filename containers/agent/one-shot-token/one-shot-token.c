@@ -211,6 +211,34 @@ static int get_token_index(const char *name) {
 }
 
 /**
+ * Format token value for logging: show first 4 characters + "..."
+ * Returns a static buffer (not thread-safe for the buffer, but safe for our use case
+ * since we hold token_mutex when calling this)
+ */
+static const char *format_token_value(const char *value) {
+    static char formatted[8]; /* "abcd..." + null terminator */
+    
+    if (value == NULL) {
+        return "NULL";
+    }
+    
+    size_t len = strlen(value);
+    if (len == 0) {
+        return "(empty)";
+    }
+    
+    if (len <= 4) {
+        /* If 4 chars or less, just show it all with ... */
+        snprintf(formatted, sizeof(formatted), "%s...", value);
+    } else {
+        /* Show first 4 chars + ... */
+        snprintf(formatted, sizeof(formatted), "%.4s...", value);
+    }
+    
+    return formatted;
+}
+
+/**
  * Intercepted getenv function
  *
  * For sensitive tokens:
@@ -253,12 +281,14 @@ char *getenv(const char *name) {
 
             if (skip_unset) {
                 /* Skip unset mode - just log the access, don't clear */
-                fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared)\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed (value: %s, skip_unset=1, not cleared)\n", 
+                        name, format_token_value(result));
             } else {
                 /* Unset the variable so it can't be accessed again */
                 unsetenv(name);
 
-                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (value: %s)\n", 
+                        name, format_token_value(result));
             }
         }
 
@@ -329,12 +359,14 @@ char *secure_getenv(const char *name) {
 
             if (skip_unset) {
                 /* Skip unset mode - just log the access, don't clear */
-                fprintf(stderr, "[one-shot-token] Token %s accessed (skip_unset=1, not cleared) (via secure_getenv)\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed (value: %s, skip_unset=1, not cleared) (via secure_getenv)\n", 
+                        name, format_token_value(result));
             } else {
                 /* Unset the variable so it can't be accessed again */
                 unsetenv(name);
 
-                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (via secure_getenv)\n", name);
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cleared (value: %s) (via secure_getenv)\n", 
+                        name, format_token_value(result));
             }
         }
 

@@ -64,7 +64,7 @@ LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
 ```
 
 **Behavior in skip-unset mode:**
-- Token accesses are logged with `(skip_unset=1, not cleared)` message
+- Token accesses are logged with `(value: xxxx..., skip_unset=1, not cleared)` message (shows first 4 chars)
 - Tokens remain in the environment after first access
 - Subsequent `getenv()` calls return the token value (not NULL)
 - **WARNING:** This mode disables the security protection and should only be used for debugging/testing
@@ -232,7 +232,7 @@ LD_PRELOAD=./one-shot-token.so ./test_getenv
 Expected output:
 ```
 [one-shot-token] Initialized with 11 default token(s)
-[one-shot-token] Token GITHUB_TOKEN accessed and cleared
+[one-shot-token] Token GITHUB_TOKEN accessed and cleared (value: test...)
 First read: test-token-12345
 Second read:
 ```
@@ -259,10 +259,10 @@ LD_PRELOAD=./one-shot-token.so bash -c '
 Expected output:
 ```
 [one-shot-token] Initialized with 2 custom token(s) from AWF_ONE_SHOT_TOKENS
-[one-shot-token] Token MY_API_KEY accessed and cleared
+[one-shot-token] Token MY_API_KEY accessed and cleared (value: secr...)
 First MY_API_KEY: secret-value-123
 Second MY_API_KEY:
-[one-shot-token] Token SECRET_TOKEN accessed and cleared
+[one-shot-token] Token SECRET_TOKEN accessed and cleared (value: anot...)
 First SECRET_TOKEN: another-secret
 Second SECRET_TOKEN:
 ```
