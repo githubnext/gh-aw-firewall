@@ -19,6 +19,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <ctype.h>
 
 /* Default sensitive token environment variable names */
 static const char *DEFAULT_SENSITIVE_TOKENS[] = {
@@ -74,6 +75,7 @@ static void init_real_getenv(void) {
 /**
  * Initialize the token list from AWF_ONE_SHOT_TOKENS environment variable
  * or use defaults if not set. This is called once at first getenv() call.
+ * Note: This function must be called with token_mutex held.
  */
 static void init_token_list(void) {
     if (tokens_initialized) {
@@ -93,10 +95,12 @@ static void init_token_list(void) {
 
         char *token = strtok(config_copy, ",");
         while (token != NULL && num_tokens < MAX_TOKENS) {
-            /* Trim leading/trailing whitespace */
-            while (*token == ' ' || *token == '\t') token++;
+            /* Trim leading whitespace */
+            while (*token && isspace((unsigned char)*token)) token++;
+            
+            /* Trim trailing whitespace */
             char *end = token + strlen(token) - 1;
-            while (end > token && (*end == ' ' || *end == '\t')) {
+            while (end > token && isspace((unsigned char)*end)) {
                 *end = '\0';
                 end--;
             }
@@ -105,6 +109,11 @@ static void init_token_list(void) {
                 sensitive_tokens[num_tokens] = strdup(token);
                 if (sensitive_tokens[num_tokens] == NULL) {
                     fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for token name\n");
+                    /* Clean up previously allocated tokens */
+                    for (int i = 0; i < num_tokens; i++) {
+                        free(sensitive_tokens[i]);
+                    }
+                    free(config_copy);
                     abort();
                 }
                 num_tokens++;
@@ -122,6 +131,10 @@ static void init_token_list(void) {
             sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
             if (sensitive_tokens[num_tokens] == NULL) {
                 fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
+                /* Clean up previously allocated tokens */
+                for (int j = 0; j < num_tokens; j++) {
+                    free(sensitive_tokens[j]);
+                }
                 abort();
             }
             num_tokens++;
@@ -157,13 +170,12 @@ static int get_token_index(const char *name) {
 char *getenv(const char *name) {
     init_real_getenv();
 
-    /* Initialize token list on first call (but skip if we're initializing) */
-    static int initializing = 0;
-    if (!tokens_initialized && !initializing) {
-        initializing = 1;
+    /* Initialize token list on first call (thread-safe) */
+    pthread_mutex_lock(&token_mutex);
+    if (!tokens_initialized) {
         init_token_list();
-        initializing = 0;
     }
+    pthread_mutex_unlock(&token_mutex);
 
     int token_idx = get_token_index(name);
 
