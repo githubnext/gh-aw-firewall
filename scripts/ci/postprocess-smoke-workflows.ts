@@ -18,6 +18,7 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/build-test-cpp.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-deno.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-bun.lock.yml'),
+  path.join(repoRoot, '.github/workflows/build-test-dotnet.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:
