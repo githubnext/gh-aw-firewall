@@ -135,7 +135,7 @@ static void init_token_list(void) {
         if (num_tokens == 0) {
             fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens\n");
             fprintf(stderr, "[one-shot-token] WARNING: Falling back to default token list to maintain protection\n");
-            /* Explicitly reset num_tokens before falling through to default initialization */
+            /* num_tokens is already 0 here; assignment is defensive programming for future refactoring */
             num_tokens = 0;
         } else {
             fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
