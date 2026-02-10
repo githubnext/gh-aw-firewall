@@ -500,18 +500,19 @@ export function generateDockerCompose(
     // 1. Pre-resolve allowed domains using the host's DNS stack (supports Tailscale MagicDNS,
     //    split DNS, and other custom resolvers not available inside the container)
     // 2. Inject host.docker.internal when --enable-host-access is set
-    const chrootHostsPath = path.join(config.workDir, 'chroot-hosts');
+    // Build complete chroot hosts file content in memory, then write atomically
+    // to a securely-created temp directory (mkdtempSync) to satisfy CWE-377.
+    let hostsContent = '127.0.0.1 localhost\n';
     try {
-      fs.copyFileSync('/etc/hosts', chrootHostsPath);
+      hostsContent = fs.readFileSync('/etc/hosts', 'utf-8');
     } catch {
-      fs.writeFileSync(chrootHostsPath, '127.0.0.1 localhost\n');
+      // /etc/hosts not readable, use minimal fallback
     }
 
-    // Pre-resolve allowed domains on the host and inject into /etc/hosts
+    // Pre-resolve allowed domains on the host and append to hosts content.
     // This is critical for domains that rely on custom DNS (e.g., Tailscale MagicDNS
     // at 100.100.100.100) which is unreachable from inside the Docker container's
     // network namespace. Resolution runs on the host where all DNS resolvers are available.
-    const hostsContent = fs.readFileSync(chrootHostsPath, 'utf-8');
     for (const domain of config.allowedDomains) {
       // Skip patterns that aren't resolvable hostnames
       if (domain.startsWith('*.') || domain.startsWith('.') || domain.includes('*')) continue;
@@ -523,7 +524,7 @@ export function generateDockerCompose(
         const parts = stdout.trim().split(/\s+/);
         const ip = parts[0];
         if (ip) {
-          fs.appendFileSync(chrootHostsPath, `${ip}\t${domain}\n`);
+          hostsContent += `${ip}\t${domain}\n`;
           logger.debug(`Pre-resolved ${domain} -> ${ip} for chroot /etc/hosts`);
         }
       } catch {
@@ -532,7 +533,7 @@ export function generateDockerCompose(
       }
     }
 
-    // Add host.docker.internal when host access is enabled
+    // Add host.docker.internal when host access is enabled.
     // Docker only adds this to the container's /etc/hosts via extra_hosts, but the
     // chroot uses the host's /etc/hosts which lacks this entry. MCP servers need it
     // to connect to the MCP gateway running on the host.
@@ -544,7 +545,7 @@ export function generateDockerCompose(
         ]);
         const hostGatewayIp = stdout.trim();
         if (hostGatewayIp) {
-          fs.appendFileSync(chrootHostsPath, `${hostGatewayIp}\thost.docker.internal\n`);
+          hostsContent += `${hostGatewayIp}\thost.docker.internal\n`;
           logger.debug(`Added host.docker.internal (${hostGatewayIp}) to chroot-hosts`);
         }
       } catch (err) {
@@ -552,7 +553,10 @@ export function generateDockerCompose(
       }
     }
 
-    fs.chmodSync(chrootHostsPath, 0o644);
+    // Write to a securely-created directory (mkdtempSync satisfies CWE-377)
+    const chrootHostsDir = fs.mkdtempSync(path.join(config.workDir, 'chroot-'));
+    const chrootHostsPath = path.join(chrootHostsDir, 'hosts');
+    fs.writeFileSync(chrootHostsPath, hostsContent, { mode: 0o644 });
     agentVolumes.push(`${chrootHostsPath}:/host/etc/hosts:ro`);
 
     // SECURITY: Hide Docker socket to prevent firewall bypass via 'docker run'

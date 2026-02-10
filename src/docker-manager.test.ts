@@ -568,10 +568,10 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/ca-certificates:/host/etc/ca-certificates:ro');
       expect(volumes).toContain('/etc/alternatives:/host/etc/alternatives:ro');
       expect(volumes).toContain('/etc/ld.so.cache:/host/etc/ld.so.cache:ro');
-      // /etc/hosts is now always a custom chroot-hosts file in chroot mode (for pre-resolved domains)
+      // /etc/hosts is always a custom hosts file in a secure chroot temp dir (for pre-resolved domains)
       const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
       expect(hostsVolume).toBeDefined();
-      expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts:ro');
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
 
       // Should still include essential mounts
       expect(volumes).toContain('/tmp:/tmp:rw');
@@ -799,7 +799,7 @@ describe('docker-manager', () => {
       // Should mount a read-only copy of /etc/hosts with host.docker.internal pre-injected
       const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
       expect(hostsVolume).toBeDefined();
-      expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts:ro');
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
     });
 
     it('should inject host.docker.internal into chroot-hosts file', () => {
@@ -810,8 +810,10 @@ describe('docker-manager', () => {
       };
       generateDockerCompose(config, mockNetworkConfig);
 
-      // The chroot-hosts file should exist and contain host.docker.internal
-      const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
       expect(fs.existsSync(chrootHostsPath)).toBe(true);
       const content = fs.readFileSync(chrootHostsPath, 'utf8');
       // Docker bridge gateway resolution may succeed or fail in test env,
@@ -829,10 +831,10 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should mount a custom chroot-hosts file (for pre-resolved domains)
+      // Should mount a custom hosts file in a secure chroot temp dir (for pre-resolved domains)
       const hostsVolume = volumes.find((v: string) => v.includes('/host/etc/hosts'));
       expect(hostsVolume).toBeDefined();
-      expect(hostsVolume).toContain('chroot-hosts:/host/etc/hosts:ro');
+      expect(hostsVolume).toMatch(/chroot-.*\/hosts:\/host\/etc\/hosts:ro/);
     });
 
     it('should pre-resolve allowed domains into chroot-hosts file', () => {
@@ -859,7 +861,10 @@ describe('docker-manager', () => {
       };
       generateDockerCompose(config, mockNetworkConfig);
 
-      const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
       expect(fs.existsSync(chrootHostsPath)).toBe(true);
       const content = fs.readFileSync(chrootHostsPath, 'utf8');
 
@@ -887,7 +892,10 @@ describe('docker-manager', () => {
       // Should not throw even if resolution fails
       generateDockerCompose(config, mockNetworkConfig);
 
-      const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
       expect(fs.existsSync(chrootHostsPath)).toBe(true);
       const content = fs.readFileSync(chrootHostsPath, 'utf8');
 
@@ -916,7 +924,10 @@ describe('docker-manager', () => {
       };
       generateDockerCompose(config, mockNetworkConfig);
 
-      const chrootHostsPath = `${mockConfig.workDir}/chroot-hosts`;
+      // Find the chroot hosts file (mkdtempSync creates chroot-XXXXXX directory)
+      const chrootDir = fs.readdirSync(mockConfig.workDir).find(d => d.startsWith('chroot-'));
+      expect(chrootDir).toBeDefined();
+      const chrootHostsPath = `${mockConfig.workDir}/${chrootDir}/hosts`;
       const content = fs.readFileSync(chrootHostsPath, 'utf8');
 
       // Count occurrences of 'localhost' - should only be the original entries, not duplicated
