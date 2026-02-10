@@ -1111,6 +1111,20 @@ export async function startContainers(workDir: string, allowedDomains: string[],
       stdio: 'inherit',
     });
     logger.success('Containers started successfully');
+
+    // SECURITY: Immediately delete docker-compose.yml after containers start
+    // This file contains sensitive environment variables (tokens, secrets) that
+    // would otherwise be readable by the agent via the /tmp mount until cleanup.
+    // Docker Compose only needs the file at startup, not during execution.
+    const composeFile = path.join(workDir, 'docker-compose.yml');
+    try {
+      if (fs.existsSync(composeFile)) {
+        fs.unlinkSync(composeFile);
+        logger.debug('Deleted docker-compose.yml (contained sensitive environment variables)');
+      }
+    } catch (err) {
+      logger.debug('Could not delete docker-compose.yml:', err);
+    }
   } catch (error) {
     // Check if this is a healthcheck failure
     const errorMsg = error instanceof Error ? error.message : String(error);
