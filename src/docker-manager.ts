@@ -478,8 +478,9 @@ export function generateDockerCompose(
     const userHome = getRealUserHome();
     agentVolumes.push(`${userHome}:/host${userHome}:rw`);
 
-    // /tmp is needed for chroot mode to write temporary command scripts
-    // The entrypoint.sh writes to /host/tmp/awf-cmd-$$.sh
+    // /tmp is needed for chroot mode to write:
+    // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
+    // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
 
     // Minimal /etc - only what's needed for runtime

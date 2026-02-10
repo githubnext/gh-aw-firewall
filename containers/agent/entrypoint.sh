@@ -169,14 +169,24 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
 
   # Copy one-shot-token library to host filesystem for LD_PRELOAD in chroot
   # This prevents tokens from being read multiple times by malicious code
+  # Note: /tmp is always writable in chroot mode (mounted from host /tmp as rw)
   ONE_SHOT_TOKEN_LIB=""
   if [ -f /usr/local/lib/one-shot-token.so ]; then
-    mkdir -p /host/tmp/awf-lib
-    if cp /usr/local/lib/one-shot-token.so /host/tmp/awf-lib/one-shot-token.so 2>/dev/null; then
-      ONE_SHOT_TOKEN_LIB="/tmp/awf-lib/one-shot-token.so"
-      echo "[entrypoint] One-shot token library copied to chroot at ${ONE_SHOT_TOKEN_LIB}"
+    # Create the library directory in /tmp (always writable)
+    if mkdir -p /host/tmp/awf-lib 2>/dev/null; then
+      # Copy the library and verify it exists after copying
+      if cp /usr/local/lib/one-shot-token.so /host/tmp/awf-lib/one-shot-token.so 2>/dev/null && \
+         [ -f /host/tmp/awf-lib/one-shot-token.so ]; then
+        ONE_SHOT_TOKEN_LIB="/tmp/awf-lib/one-shot-token.so"
+        echo "[entrypoint] One-shot token library copied to chroot at ${ONE_SHOT_TOKEN_LIB}"
+      else
+        echo "[entrypoint][WARN] Could not copy one-shot-token library to /tmp/awf-lib"
+        echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
+      fi
     else
-      echo "[entrypoint][WARN] Could not copy one-shot-token library to chroot"
+      echo "[entrypoint][ERROR] Could not create /tmp/awf-lib directory"
+      echo "[entrypoint][ERROR] This should not happen - /tmp is mounted read-write in chroot mode"
+      echo "[entrypoint][WARN] Token protection will be disabled (tokens may be readable multiple times)"
     fi
   fi
 
