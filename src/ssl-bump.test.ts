@@ -1,23 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import execa from 'execa';
 import { parseUrlPatterns, generateSessionCa, initSslDb, isOpenSslAvailable } from './ssl-bump';
 
 // Pattern constant for the safer URL character class (matches the implementation)
 const URL_CHAR_PATTERN = '[^\\s]*';
 
 // Mock execa for testing OpenSSL operations
-jest.mock('execa', () => {
-  const mockFn = jest.fn();
-  return {
-    __esModule: true,
-    default: mockFn,
-  };
-});
+jest.mock('execa');
 
 // Get the mocked execa after jest.mock hoisting
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const mockExeca = require('execa').default as jest.Mock;
+const mockExeca = execa as unknown as jest.Mock;
 
 // Default mock implementation for execa
 beforeEach(() => {
