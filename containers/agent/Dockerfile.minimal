@@ -8,11 +8,13 @@ FROM ${BASE_IMAGE}
 
 # Install only the minimal required packages:
 # - iptables: for NAT rules to redirect traffic to Squid
+# - iproute2: for 'ip route' in setup-iptables.sh (network gateway detection)
 # - git: for git config safe.directory in entrypoint
 # All other tools (capsh, node, python, etc.) come from the host via chroot
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     iptables \
+    iproute2 \
     git && \
     rm -rf /var/lib/apt/lists/*
 

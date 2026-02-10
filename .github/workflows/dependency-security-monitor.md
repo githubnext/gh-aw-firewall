@@ -20,7 +20,7 @@ imports:
 tools:
   github:
     toolsets: [default, code_security, dependabot]
-  bash:
+  bash: true
 
 network:
   allowed:

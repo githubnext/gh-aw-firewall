@@ -56,13 +56,14 @@ iptables rules applied (redirect HTTP/HTTPS to Squid)
 If AWF_CHROOT_ENABLED=true:
     ↓
     1. Verify capsh exists on host
-    2. Copy DNS configuration to /host/etc/resolv.conf
-    3. Map host user by UID
-    4. Write command to temp script with PATH setup
-    5. chroot /host
-    6. Drop capabilities (CAP_NET_ADMIN, CAP_SYS_CHROOT)
-    7. Switch to host user
-    8. Execute command
+    2. Mount container-scoped procfs at /host/proc (for Java/dotnet)
+    3. Copy DNS configuration to /host/etc/resolv.conf
+    4. Map host user by UID
+    5. Write command to temp script with PATH setup
+    6. chroot /host
+    7. Drop capabilities (CAP_NET_ADMIN, CAP_SYS_CHROOT, CAP_SYS_ADMIN)
+    8. Switch to host user
+    9. Execute command
     ↓
 All child processes inherit chroot environment
 All HTTP/HTTPS traffic → Squid proxy → Domain filtering
@@ -78,6 +79,32 @@ All HTTP/HTTPS traffic → Squid proxy → Domain filtering
 | User context | awfuser (container) | Host user (by UID) |
 | PATH | Container PATH | Reconstructed for host binaries |
 | Network isolation | iptables → Squid | iptables → Squid (unchanged) |
+
+### Procfs Mounting for Java and .NET
+
+As of v0.13.13, chroot mode mounts a fresh container-scoped procfs at `/host/proc` to support Java and .NET runtimes:
+
+**Why this is needed:**
+- Java's JVM requires access to `/proc/cpuinfo` for CPU detection
+- .NET's CLR requires `/proc/self/exe` to resolve the runtime binary path
+- Static bind mounts of `/proc/self` always resolve to the parent shell, not the current process
+
+**How it works:**
+1. Before chroot, the entrypoint mounts a fresh procfs: `mount -t proc -o nosuid,nodev,noexec proc /host/proc`
+2. This requires `CAP_SYS_ADMIN` capability, which is granted during container startup
+3. The procfs is container-scoped, showing only container processes (not host processes)
+4. `CAP_SYS_ADMIN` is dropped via capsh before executing user commands
+
+**Security implications:**
+- The mounted procfs only exposes container processes, not host processes
+- Mount operation completes before user code runs (capability dropped)
+- procfs is mounted with security restrictions: `nosuid,nodev,noexec`
+- User code cannot unmount or remount (no `CAP_SYS_ADMIN`, umount blocked in seccomp)
+
+**Backwards compatibility:**
+- Existing code continues to work without changes
+- Java and .NET commands now succeed in chroot mode (previously failed with cryptic errors)
+- No impact on non-chroot mode
 
 ## Usage
 
@@ -164,7 +191,8 @@ In chroot mode, selective paths are mounted for security instead of the entire f
 | `/etc/ca-certificates` | `/host/etc/ca-certificates:ro` | CA certificates |
 | `/etc/passwd` | `/host/etc/passwd:ro` | User lookup |
 | `/etc/group` | `/host/etc/group:ro` | Group lookup |
-| `/proc/self` | `/host/proc/self:ro` | Process self-info (needed by Go) |
+
+**Note:** As of v0.13.13, `/proc` is no longer bind-mounted. Instead, a fresh container-scoped procfs is mounted at `/host/proc` during entrypoint initialization. This provides dynamic `/proc/self/exe` resolution required by Java and .NET runtimes.
 
 ### Read-Write Mounts
 
@@ -190,9 +218,12 @@ The container starts with capabilities needed for setup, then drops them before 
 |------------|--------------|---------------------|---------|
 | `CAP_NET_ADMIN` | Granted | **Dropped** | iptables setup, then prevented |
 | `CAP_SYS_CHROOT` | Granted | **Dropped** | Entrypoint chroot, then prevented |
+| `CAP_SYS_ADMIN` | Granted (chroot mode) | **Dropped** | procfs mount for Java/dotnet, then prevented |
 | `CAP_NET_RAW` | Denied | Denied | Prevents raw socket bypass |
 | `CAP_SYS_PTRACE` | Denied | Denied | Prevents process debugging |
 | `CAP_SYS_MODULE` | Denied | Denied | Prevents kernel module loading |
+
+**Note:** `CAP_SYS_ADMIN` is only granted in chroot mode (v0.13.13+) for mounting procfs. It's dropped immediately after mount completes, before user commands run.
 
 After capability drop, the process has:
 ```

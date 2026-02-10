@@ -182,6 +182,7 @@ export class AwfRunner {
       'GOROOT',
       'CARGO_HOME',
       'JAVA_HOME',
+      'DOTNET_ROOT',
     ].filter(v => process.env[v]);
 
     if (criticalEnvVars.length > 0) {

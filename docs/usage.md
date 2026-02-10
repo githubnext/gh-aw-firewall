@@ -322,12 +322,11 @@ sudo awf \
 
 ### Security Considerations
 
-> ⚠️ **Security Warning**: When `--enable-host-access` is combined with `host.docker.internal` in `--allow-domains`, containers can access **ANY service** running on the host machine, including:
-> - Local databases (PostgreSQL, MySQL, Redis)
-> - Development servers
-> - Other sensitive services
+> ⚠️ **Security Warning**: When `--enable-host-access` is enabled, containers can currently access ANY port on services running on the host machine via `host.docker.internal`. This includes databases, admin panels, and other sensitive services.
 >
-> Only enable this for trusted workloads like MCP gateways.
+> **Port restrictions:** Use `--allow-host-ports` to explicitly restrict which ports can be accessed (e.g., `--allow-host-ports 80,443,8080`). A future update will make port restrictions the default behavior.
+>
+> Only enable this for trusted workloads like MCP gateways or local testing with Playwright.
 
 **Why opt-in?** By default, `host.docker.internal` hostname resolution is disabled to prevent containers from accessing host services. This is a defense-in-depth measure against malicious code attempting to access local resources.
 
@@ -337,12 +336,17 @@ sudo awf \
 # Start your MCP gateway on the host (port 8080)
 ./my-mcp-gateway --port 8080 &
 
-# Run awf with host access enabled
+# Run awf with host access enabled and custom port
 sudo awf \
   --enable-host-access \
+  --allow-host-ports 8080 \
   --allow-domains host.docker.internal,api.github.com \
   -- 'copilot --mcp-gateway http://host.docker.internal:8080 --prompt "test"'
 ```
+
+**Note:** When `--enable-host-access` is enabled without `--allow-host-ports`, all ports on `host.docker.internal` are currently allowed. Use `--allow-host-ports` to explicitly restrict which ports can be accessed (e.g., `--allow-host-ports 80,443,8080` for web services and an MCP gateway).
+
+> **Security Note:** A future update will change the default behavior to only allow ports 80 and 443 unless `--allow-host-ports` is specified. Explicitly set `--allow-host-ports` now to ensure consistent behavior across versions.
 
 ### CONNECT Method on Port 80
 
