@@ -62,8 +62,12 @@ static int tokens_initialized = 0;
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
+/* Pointer to the real secure_getenv function */
+static char *(*real_secure_getenv)(const char *name) = NULL;
+
 /* pthread_once control for thread-safe initialization */
 static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
+static pthread_once_t secure_getenv_init_once = PTHREAD_ONCE_INIT;
 
 /* Initialize the real getenv pointer (called exactly once via pthread_once) */
 static void init_real_getenv_once(void) {
@@ -72,6 +76,15 @@ static void init_real_getenv_once(void) {
         fprintf(stderr, "[one-shot-token] FATAL: Could not find real getenv: %s\n", dlerror());
         /* Cannot recover - abort to prevent undefined behavior */
         abort();
+    }
+}
+
+/* Initialize the real secure_getenv pointer (called exactly once via pthread_once) */
+static void init_real_secure_getenv_once(void) {
+    real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
+    /* Note: secure_getenv may not be available on all systems, so we don't abort if NULL */
+    if (real_secure_getenv == NULL) {
+        fprintf(stderr, "[one-shot-token] WARNING: secure_getenv not available, falling back to getenv\n");
     }
 }
 
@@ -167,6 +180,11 @@ static void init_token_list(void) {
 /* Ensure real_getenv is initialized (thread-safe) */
 static void init_real_getenv(void) {
     pthread_once(&getenv_init_once, init_real_getenv_once);
+}
+
+/* Ensure real_secure_getenv is initialized (thread-safe) */
+static void init_real_secure_getenv(void) {
+    pthread_once(&secure_getenv_init_once, init_real_secure_getenv_once);
 }
 
 /* Check if a variable name is a sensitive token */
