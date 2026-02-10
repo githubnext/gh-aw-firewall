@@ -44,10 +44,12 @@ LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
 ```
 
 **Important notes:**
-- When `AWF_ONE_SHOT_TOKENS` is set, **only** the tokens in this list are protected (defaults are not included)
+- When `AWF_ONE_SHOT_TOKENS` is set with valid tokens, **only** those tokens are protected (defaults are not included)
+- If `AWF_ONE_SHOT_TOKENS` is set but contains only whitespace or commas (e.g., `"   "` or `",,,"`), the library falls back to the default token list to maintain protection
 - Use comma-separated token names (whitespace is automatically trimmed)
 - Maximum of 100 tokens can be protected
 - The configuration is read once at library initialization (first `getenv()` call)
+- Uses `strtok_r()` internally, which is thread-safe and won't interfere with application code using `strtok()`
 
 ## How It Works
 
