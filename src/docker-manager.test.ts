@@ -628,7 +628,7 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/dev/null:/host/run/docker.sock:ro');
     });
 
-    it('should mount user home directory under /host when enableChroot is true', () => {
+    it('should mount workspace directory under /host when enableChroot is true', () => {
       const configWithChroot = {
         ...mockConfig,
         enableChroot: true
@@ -637,9 +637,9 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should mount home directory under /host for chroot access (read-write)
-      const homeDir = process.env.HOME || '/root';
-      expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
+      // SECURITY FIX: Should mount only workspace directory under /host for chroot access (not entire HOME)
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      expect(volumes).toContain(`${workspaceDir}:/host${workspaceDir}:rw`);
     });
 
     it('should add SYS_CHROOT and SYS_ADMIN capabilities when enableChroot is true', () => {
