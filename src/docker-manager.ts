@@ -489,6 +489,10 @@ export function generateDockerCompose(
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
 
+    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs)
+    // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
+    agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
+
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
     agentVolumes.push(
