@@ -178,10 +178,59 @@ describe('Credential Hiding Security', () => {
       // Check debug logs for chroot credential hiding messages
       expect(result.stderr).toMatch(/Chroot mode.*[Hh]iding credential|Hidden.*credential.*chroot/i);
     }, 120000);
+
+    test('Test 8: Chroot mode ALSO hides credentials at direct home path (bypass prevention)', async () => {
+      const homeDir = os.homedir();
+
+      // SECURITY FIX TEST: Previously, credentials were only hidden at /host paths in chroot mode,
+      // but the home directory was ALSO mounted directly at $HOME. An attacker could bypass
+      // protection by reading from the direct mount instead of /host.
+      //
+      // This test verifies that credentials are hidden at BOTH locations:
+      // 1. At /host${HOME} (chroot path)
+      // 2. At ${HOME} (direct mount)
+
+      const result = await runner.runWithSudo(
+        `cat ${homeDir}/.docker/config.json 2>&1 | grep -v "^\\[" | head -1`,
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          enableChroot: true,
+        }
+      );
+
+      // Command should succeed (file is "readable" but empty)
+      expect(result).toSucceed();
+      // Output should be empty (no credential data leaked via direct home mount)
+      const output = result.stdout.trim();
+      expect(output).toBe('');
+    }, 120000);
+
+    test('Test 9: Chroot mode hides GitHub CLI tokens at direct home path', async () => {
+      const homeDir = os.homedir();
+
+      // Verify another critical credential file is hidden at direct home mount
+      const result = await runner.runWithSudo(
+        `cat ${homeDir}/.config/gh/hosts.yml 2>&1 | grep -v "^\\[" | head -1`,
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          enableChroot: true,
+        }
+      );
+
+      expect(result).toSucceed();
+      const output = result.stdout.trim();
+      // Should be empty (no oauth_token visible via direct home mount)
+      expect(output).not.toContain('oauth_token');
+      expect(output).not.toContain('gho_');
+    }, 120000);
   });
 
   describe('Full Filesystem Access Flag (--allow-full-filesystem-access)', () => {
-    test('Test 8: Full filesystem access shows security warnings', async () => {
+    test('Test 10: Full filesystem access shows security warnings', async () => {
       const result = await runner.runWithSudo(
         'echo "test"',
         {
@@ -199,7 +248,7 @@ describe('Credential Hiding Security', () => {
       expect(result.stderr).toMatch(/entire host filesystem.*mounted|Full filesystem access/i);
     }, 120000);
 
-    test('Test 9: With full access, Docker config is NOT hidden', async () => {
+    test('Test 11: With full access, Docker config is NOT hidden', async () => {
       const homeDir = os.homedir();
       const dockerConfig = `${homeDir}/.docker/config.json`;
 
@@ -229,7 +278,7 @@ describe('Credential Hiding Security', () => {
   });
 
   describe('Security Verification', () => {
-    test('Test 10: Simulated exfiltration attack gets empty data', async () => {
+    test('Test 12: Simulated exfiltration attack gets empty data', async () => {
       const homeDir = os.homedir();
 
       // Simulate prompt injection attack: read credential file and encode it
@@ -251,7 +300,7 @@ describe('Credential Hiding Security', () => {
       expect(output).toBe('');
     }, 120000);
 
-    test('Test 11: Multiple encoding attempts still get empty data', async () => {
+    test('Test 13: Multiple encoding attempts still get empty data', async () => {
       const homeDir = os.homedir();
 
       // Simulate sophisticated attack: multiple encoding layers
@@ -272,7 +321,7 @@ describe('Credential Hiding Security', () => {
       expect(output).toBe('');
     }, 120000);
 
-    test('Test 12: grep for tokens in hidden files finds nothing', async () => {
+    test('Test 14: grep for tokens in hidden files finds nothing', async () => {
       const homeDir = os.homedir();
 
       // Try to grep for common credential patterns

@@ -641,14 +641,19 @@ export function generateDockerCompose(
 
     // Add blanket mount for full filesystem access in both modes
     agentVolumes.unshift('/:/host:rw');
-  } else if (!config.enableChroot) {
-    // Default: Selective mounting for normal mode (chroot already uses selective mounting)
-    // This provides security against credential exfiltration via prompt injection
+  } else {
+    // Default: Selective mounting for security against credential exfiltration
+    // This provides protection against prompt injection attacks in both normal and chroot modes
     logger.debug('Using selective mounting for security (credential files hidden)');
 
     // SECURITY: Hide credential files by mounting /dev/null over them
     // This prevents prompt-injected commands from reading sensitive tokens
     // even if the attacker knows the file paths
+    //
+    // IMPORTANT: In chroot mode, the home directory is mounted at BOTH locations:
+    // - At ${effectiveHome} (direct mount for container environment)
+    // - At /host${userHome} (for chroot operations)
+    // We must hide credentials at BOTH paths to prevent bypass attacks
     const credentialFiles = [
       `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
       `${effectiveHome}/.npmrc`,                    // NPM registry tokens
@@ -675,9 +680,13 @@ export function generateDockerCompose(
     logger.debug(`Hidden ${credentialFiles.length} credential file(s) via /dev/null mounts`);
   }
 
-  // Chroot mode: Hide credentials at /host paths
+  // Chroot mode: Also hide credentials at /host paths
+  // SECURITY FIX: Previously only /host paths were protected in chroot mode, but the home
+  // directory is mounted at BOTH ${effectiveHome} AND /host${userHome}. An attacker could
+  // bypass protection by accessing credentials via the direct home mount instead of /host.
+  // This fix ensures credentials are hidden at both mount locations.
   if (config.enableChroot && !config.allowFullFilesystemAccess) {
-    logger.debug('Chroot mode: Hiding credential files at /host paths');
+    logger.debug('Chroot mode: Also hiding credential files at /host paths');
 
     const userHome = getRealUserHome();
     const chrootCredentialFiles = [
@@ -703,7 +712,7 @@ export function generateDockerCompose(
       agentVolumes.push(mount);
     });
 
-    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) in chroot mode`);
+    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) at /host paths`);
   }
 
   // Agent service configuration
