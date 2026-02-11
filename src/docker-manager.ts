@@ -431,10 +431,17 @@ export function generateDockerCompose(
   // Build volumes list for agent execution container
   // For chroot mode, use the real user's home (not /root when running with sudo)
   const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
+
+  // SECURITY FIX: Use granular mounting instead of blanket HOME directory mount
+  // Only mount the workspace directory ($GITHUB_WORKSPACE or current working directory)
+  // to prevent access to credential files in $HOME
+  const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${effectiveHome}:${effectiveHome}:rw`,
+    // Mount only the workspace directory (not entire HOME)
+    // This prevents access to ~/.docker/, ~/.config/gh/, ~/.npmrc, etc.
+    `${workspaceDir}:${workspaceDir}:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
@@ -472,11 +479,10 @@ export function generateDockerCompose(
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
 
-    // User home directory for project files and Rust/Cargo (read-write)
-    // Note: $HOME is already mounted at the container level, this adds it under /host
-    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
-    const userHome = getRealUserHome();
-    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+    // SECURITY FIX: Mount only workspace directory instead of entire user home
+    // This prevents access to credential files in $HOME
+    // Mount workspace directory at /host path for chroot
+    agentVolumes.push(`${workspaceDir}:/host${workspaceDir}:rw`);
 
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
@@ -601,25 +607,40 @@ export function generateDockerCompose(
   //    - Encode data (base64, hex)
   //    - Exfiltrate via allowed HTTP domains (if attacker controls one)
   //
-  // **Mitigation: Selective Mounting**
+  // **Mitigation: Granular Selective Mounting (FIXED)**
   //
-  // Instead of mounting the entire filesystem (/:/host:rw), we:
-  // 1. Mount ONLY directories needed for legitimate operation
-  // 2. Hide credential files by mounting /dev/null over them
-  // 3. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // Instead of mounting the entire $HOME directory (which contained credentials), we now:
+  // 1. Mount ONLY the workspace directory ($GITHUB_WORKSPACE or cwd)
+  // 2. Mount ~/.copilot/logs separately for Copilot CLI logging
+  // 3. Hide credential files by mounting /dev/null over them (defense-in-depth)
+  // 4. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // 5. Allow users to add specific mounts via --mount flag
   //
-  // This defense-in-depth approach ensures that even if prompt injection succeeds,
-  // the attacker cannot access credentials because they're simply not mounted.
+  // This ensures that credential files in $HOME are never mounted, making them
+  // inaccessible even if prompt injection succeeds.
   //
   // **Implementation Details**
   //
   // Normal mode (without --enable-chroot):
-  // - Mount: $HOME (for workspace, including $GITHUB_WORKSPACE when it resides under $HOME), /tmp, ~/.copilot/logs
-  // - Hide: credential files (Docker, NPM, Cargo, Composer, GitHub CLI, SSH keys, AWS, Azure, GCP, k8s)
+  // - Mount: $GITHUB_WORKSPACE (or cwd), /tmp, ~/.copilot/logs
+  // - Hide: credential files via /dev/null overlays (defense-in-depth)
+  // - Does NOT mount: entire $HOME directory
   //
   // Chroot mode (with --enable-chroot):
-  // - Mount: $HOME at /host$HOME (for chroot environment), system paths at /host
-  // - Hide: Same credentials at /host paths
+  // - Mount: $GITHUB_WORKSPACE at /host path, system paths at /host
+  // - Hide: Same credentials at /host paths (defense-in-depth)
+  // - Does NOT mount: entire /host$HOME directory
+  //
+  // **Previous Vulnerability (FIXED)**
+  //
+  // The previous implementation mounted the entire $HOME directory and relied solely
+  // on /dev/null overlays to hide credentials. This had several problems:
+  // - Overlays only work if the credential file exists on the host
+  // - Non-standard credential locations were not protected
+  // - Any new credential files would be accessible by default
+  // - Subdirectories with credentials were fully accessible
+  //
+  // The fix eliminates the root cause by never mounting $HOME at all.
   //
   // ================================================================
 
