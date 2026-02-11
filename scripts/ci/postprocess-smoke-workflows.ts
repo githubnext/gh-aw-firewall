@@ -74,6 +74,12 @@ const shallowDepthRegex = /^(\s+)depth: 1\n/gm;
 // instead of pre-built GHCR images that may be stale.
 const imageTagRegex = /--image-tag\s+[0-9.]+\s+--skip-pull/g;
 
+// Add if: always() to "Ingest agent output" step so it runs even if the agent execution fails.
+// This ensures agent output is collected and uploaded as an artifact, allowing the conclusion
+// job to download it for failure analysis.
+// Pattern: match "- name: Ingest agent output" followed by "id: collect_output" on the next line
+const ingestOutputRegex = /^(\s*)- name: Ingest agent output\n(\1\s+)id: collect_output\n/gm;
+
 for (const workflowPath of workflowPaths) {
   let content = fs.readFileSync(workflowPath, 'utf-8');
   let modified = false;
@@ -117,6 +123,16 @@ for (const workflowPath of workflowPaths) {
     content = content.replace(imageTagRegex, '--build-local');
     modified = true;
     console.log(`  Replaced ${imageTagMatches.length} --image-tag/--skip-pull with --build-local`);
+  }
+
+  // Add if: always() to "Ingest agent output" step
+  const ingestMatches = content.match(ingestOutputRegex);
+  if (ingestMatches) {
+    content = content.replace(ingestOutputRegex, (_match, indent: string, idIndent: string) => {
+      return `${indent}- name: Ingest agent output\n${idIndent}if: always()\n${idIndent}id: collect_output\n`;
+    });
+    modified = true;
+    console.log(`  Added if: always() to ${ingestMatches.length} "Ingest agent output" step(s)`);
   }
 
   if (modified) {
