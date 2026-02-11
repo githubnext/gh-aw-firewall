@@ -35,7 +35,8 @@ static const char *DEFAULT_SENSITIVE_TOKENS[] = {
     "OPENAI_API_KEY",
     "OPENAI_KEY",
     /* Anthropic/Claude tokens */
-    "ANTHROPIC_API_KEY",
+    /* Temporarily disabled - see PR comment 3887820687 */
+    /* "ANTHROPIC_API_KEY", */
     "CLAUDE_API_KEY",
     /* Codex tokens */
     "CODEX_API_KEY",
