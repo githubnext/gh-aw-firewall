@@ -614,8 +614,8 @@ export function generateDockerCompose(
   // **Implementation Details**
   //
   // Normal mode (without --enable-chroot):
-  // - Mount: $HOME (for workspace), $GITHUB_WORKSPACE, /tmp, ~/.copilot/logs
-  // - Hide: ~/.docker/config.json, ~/.npmrc, ~/.cargo/credentials, ~/.composer/auth.json, ~/.config/gh/hosts.yml
+  // - Mount: $HOME (for workspace, including $GITHUB_WORKSPACE when it resides under $HOME), /tmp, ~/.copilot/logs
+  // - Hide: credential files (Docker, NPM, Cargo, Composer, GitHub CLI, SSH keys, AWS, Azure, GCP, k8s)
   //
   // Chroot mode (with --enable-chroot):
   // - Mount: $HOME at /host$HOME (for chroot environment), system paths at /host
@@ -639,10 +639,8 @@ export function generateDockerCompose(
     logger.warn('   This exposes sensitive credential files to potential prompt injection attacks');
     logger.warn('   Consider using selective mounting (default) or --volume-mount for specific directories');
 
-    if (!config.enableChroot) {
-      // Only add blanket mount in normal mode (chroot already has selective mounts)
-      agentVolumes.unshift('/:/host:rw');
-    }
+    // Add blanket mount for full filesystem access in both modes
+    agentVolumes.unshift('/:/host:rw');
   } else if (!config.enableChroot) {
     // Default: Selective mounting for normal mode (chroot already uses selective mounting)
     // This provides security against credential exfiltration via prompt injection
@@ -657,6 +655,17 @@ export function generateDockerCompose(
       `${effectiveHome}/.cargo/credentials`,        // Rust crates.io tokens
       `${effectiveHome}/.composer/auth.json`,       // PHP Composer tokens
       `${effectiveHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
+      // SSH private keys (CRITICAL - server access, git operations)
+      `${effectiveHome}/.ssh/id_rsa`,
+      `${effectiveHome}/.ssh/id_ed25519`,
+      `${effectiveHome}/.ssh/id_ecdsa`,
+      `${effectiveHome}/.ssh/id_dsa`,
+      // Cloud provider credentials (CRITICAL - infrastructure access)
+      `${effectiveHome}/.aws/credentials`,
+      `${effectiveHome}/.aws/config`,
+      `${effectiveHome}/.kube/config`,
+      `${effectiveHome}/.azure/credentials`,
+      `${effectiveHome}/.config/gcloud/credentials.db`,
     ];
 
     credentialFiles.forEach(credFile => {
@@ -677,6 +686,17 @@ export function generateDockerCompose(
       `/dev/null:/host${userHome}/.cargo/credentials:ro`,
       `/dev/null:/host${userHome}/.composer/auth.json:ro`,
       `/dev/null:/host${userHome}/.config/gh/hosts.yml:ro`,
+      // SSH private keys (CRITICAL - server access, git operations)
+      `/dev/null:/host${userHome}/.ssh/id_rsa:ro`,
+      `/dev/null:/host${userHome}/.ssh/id_ed25519:ro`,
+      `/dev/null:/host${userHome}/.ssh/id_ecdsa:ro`,
+      `/dev/null:/host${userHome}/.ssh/id_dsa:ro`,
+      // Cloud provider credentials (CRITICAL - infrastructure access)
+      `/dev/null:/host${userHome}/.aws/credentials:ro`,
+      `/dev/null:/host${userHome}/.aws/config:ro`,
+      `/dev/null:/host${userHome}/.kube/config:ro`,
+      `/dev/null:/host${userHome}/.azure/credentials:ro`,
+      `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {

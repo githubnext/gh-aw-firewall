@@ -21,7 +21,7 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
 import * as fs from 'fs';
-import * as path from 'os';
+import * as os from 'os';
 
 describe('Credential Hiding Security', () => {
   let runner: AwfRunner;
@@ -40,7 +40,7 @@ describe('Credential Hiding Security', () => {
   describe('Normal Mode (without --enable-chroot)', () => {
     test('Test 1: Docker config.json is hidden (empty file)', async () => {
       // Use the real home directory - if the file exists, it should be hidden
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
       const dockerConfig = `${homeDir}/.docker/config.json`;
 
       const result = await runner.runWithSudo(
@@ -60,7 +60,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 2: GitHub CLI hosts.yml is hidden (empty file)', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
       const hostsFile = `${homeDir}/.config/gh/hosts.yml`;
 
       const result = await runner.runWithSudo(
@@ -80,7 +80,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 3: NPM .npmrc is hidden (empty file)', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
       const npmrc = `${homeDir}/.npmrc`;
 
       const result = await runner.runWithSudo(
@@ -100,7 +100,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 4: Credential files are mounted from /dev/null', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
 
       // Check multiple credential files in one command
       const result = await runner.runWithSudo(
@@ -139,7 +139,7 @@ describe('Credential Hiding Security', () => {
 
   describe('Chroot Mode (with --enable-chroot)', () => {
     test('Test 6: Chroot mode hides credentials at /host paths', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
 
       // Try to read Docker config at /host path
       const result = await runner.runWithSudo(
@@ -200,7 +200,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 9: With full access, Docker config is NOT hidden', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
       const dockerConfig = `${homeDir}/.docker/config.json`;
 
       // First check if file exists on host
@@ -230,7 +230,7 @@ describe('Credential Hiding Security', () => {
 
   describe('Security Verification', () => {
     test('Test 10: Simulated exfiltration attack gets empty data', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
 
       // Simulate prompt injection attack: read credential file and encode it
       const attackCommand = `cat ${homeDir}/.docker/config.json 2>&1 | base64 | grep -v "^\\[" | head -1`;
@@ -252,7 +252,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 11: Multiple encoding attempts still get empty data', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
 
       // Simulate sophisticated attack: multiple encoding layers
       const attackCommand = `cat ${homeDir}/.config/gh/hosts.yml 2>&1 | base64 | xxd -p 2>&1 | tr -d '\\n' | grep -v "^\\[" | head -1`;
@@ -273,7 +273,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
 
     test('Test 12: grep for tokens in hidden files finds nothing', async () => {
-      const homeDir = path.homedir();
+      const homeDir = os.homedir();
 
       // Try to grep for common credential patterns
       const result = await runner.runWithSudo(

@@ -65,10 +65,11 @@ The agent's legitimate tools (Read, Bash) become attack vectors when credentials
 // Essential directories only
 const agentVolumes = [
   '/tmp:/tmp:rw',                                    // Temporary files
-  `${HOME}:${HOME}:rw`,                             // User home (for workspace access)
-  `${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw`,     // GitHub Actions workspace
+  `${HOME}:${HOME}:rw`,                             // User home (includes workspace)
   `${workDir}/agent-logs:${HOME}/.copilot/logs:rw`, // Copilot CLI logs
 ];
+// Note: $GITHUB_WORKSPACE is typically a subdirectory of $HOME
+// (e.g., /home/runner/work/repo/repo), so it's accessible via the HOME mount.
 ```
 
 **What gets hidden:**
@@ -76,11 +77,20 @@ const agentVolumes = [
 ```typescript
 // Credential files are mounted as /dev/null (empty file)
 const hiddenCredentials = [
-  '/dev/null:~/.docker/config.json:ro',       // Docker Hub tokens
-  '/dev/null:~/.npmrc:ro',                    // NPM tokens
-  '/dev/null:~/.cargo/credentials:ro',        // Rust tokens
-  '/dev/null:~/.composer/auth.json:ro',       // PHP tokens
-  '/dev/null:~/.config/gh/hosts.yml:ro',      // GitHub CLI tokens
+  '/dev/null:~/.docker/config.json:ro',           // Docker Hub tokens
+  '/dev/null:~/.npmrc:ro',                        // NPM tokens
+  '/dev/null:~/.cargo/credentials:ro',            // Rust tokens
+  '/dev/null:~/.composer/auth.json:ro',           // PHP tokens
+  '/dev/null:~/.config/gh/hosts.yml:ro',          // GitHub CLI tokens
+  '/dev/null:~/.ssh/id_rsa:ro',                   // SSH private keys
+  '/dev/null:~/.ssh/id_ed25519:ro',
+  '/dev/null:~/.ssh/id_ecdsa:ro',
+  '/dev/null:~/.ssh/id_dsa:ro',
+  '/dev/null:~/.aws/credentials:ro',              // AWS credentials
+  '/dev/null:~/.aws/config:ro',
+  '/dev/null:~/.kube/config:ro',                  // Kubernetes credentials
+  '/dev/null:~/.azure/credentials:ro',            // Azure credentials
+  '/dev/null:~/.config/gcloud/credentials.db:ro', // GCP credentials
 ];
 ```
 
@@ -123,6 +133,15 @@ const chrootHiddenCredentials = [
   '/dev/null:/host/home/runner/.cargo/credentials:ro',
   '/dev/null:/host/home/runner/.composer/auth.json:ro',
   '/dev/null:/host/home/runner/.config/gh/hosts.yml:ro',
+  '/dev/null:/host/home/runner/.ssh/id_rsa:ro',
+  '/dev/null:/host/home/runner/.ssh/id_ed25519:ro',
+  '/dev/null:/host/home/runner/.ssh/id_ecdsa:ro',
+  '/dev/null:/host/home/runner/.ssh/id_dsa:ro',
+  '/dev/null:/host/home/runner/.aws/credentials:ro',
+  '/dev/null:/host/home/runner/.aws/config:ro',
+  '/dev/null:/host/home/runner/.kube/config:ro',
+  '/dev/null:/host/home/runner/.azure/credentials:ro',
+  '/dev/null:/host/home/runner/.config/gcloud/credentials.db:ro',
 ];
 ```
 

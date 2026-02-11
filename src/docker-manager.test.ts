@@ -499,9 +499,14 @@ describe('docker-manager', () => {
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      expect(volumes).toContain('/:/host:rw');
+      // Default: selective mounting (no blanket /:/host:rw)
+      expect(volumes).not.toContain('/:/host:rw');
       expect(volumes).toContain('/tmp:/tmp:rw');
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
+      // Should include home directory mount
+      expect(volumes.some((v: string) => v.includes(process.env.HOME || '/root'))).toBe(true);
+      // Should include credential hiding mounts
+      expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(true);
     });
 
     it('should use custom volume mounts when specified', () => {
@@ -525,12 +530,43 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
-    it('should use blanket mount when no custom mounts specified', () => {
+    it('should use selective mounts when no custom mounts specified', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
+      // Default: selective mounting (no blanket /:/host:rw)
+      expect(volumes).not.toContain('/:/host:rw');
+      // Should include selective mounts with credential hiding
+      expect(volumes.some((v: string) => v.includes('/dev/null'))).toBe(true);
+    });
+
+    it('should use blanket mount when allowFullFilesystemAccess is true', () => {
+      const configWithFullAccess = {
+        ...mockConfig,
+        allowFullFilesystemAccess: true,
+      };
+      const result = generateDockerCompose(configWithFullAccess, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
       // Should include blanket /:/host:rw mount
+      expect(volumes).toContain('/:/host:rw');
+      // Should NOT include /dev/null credential hiding
+      expect(volumes.some((v: string) => v.startsWith('/dev/null'))).toBe(false);
+    });
+
+    it('should use blanket mount when allowFullFilesystemAccess is true in chroot mode', () => {
+      const configWithFullAccessChroot = {
+        ...mockConfig,
+        allowFullFilesystemAccess: true,
+        enableChroot: true,
+      };
+      const result = generateDockerCompose(configWithFullAccessChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should include blanket /:/host:rw mount even in chroot mode
       expect(volumes).toContain('/:/host:rw');
     });
 

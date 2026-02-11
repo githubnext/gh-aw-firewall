@@ -233,7 +233,8 @@ export interface WrapperConfig {
    *
    * **Default behavior (false)**: Selective mounting is used, which only mounts:
    * - User home directory (for workspace access)
-   * - Workspace directory (GitHub Actions: $GITHUB_WORKSPACE)
+   *   - In GitHub Actions, the workspace directory ($GITHUB_WORKSPACE) is typically a
+   *     subdirectory of $HOME and is therefore accessible via this home directory mount
    * - Essential directories (/tmp, ~/.copilot/logs)
    * - Credential files are hidden by mounting /dev/null over them
    *
