@@ -290,6 +290,8 @@ char *getenv(const char *name) {
     } else {
         /* Already accessed - return cached value */
         result = token_cache[token_idx];
+        fprintf(stderr, "[one-shot-token] Token %s accessed (cached value: %s)\n", 
+                name, format_token_value(result));
     }
 
     pthread_mutex_unlock(&token_mutex);
@@ -354,6 +356,8 @@ char *secure_getenv(const char *name) {
     } else {
         /* Already accessed - return cached value */
         result = token_cache[token_idx];
+        fprintf(stderr, "[one-shot-token] Token %s accessed (cached value: %s) (via secure_getenv)\n", 
+                name, format_token_value(result));
     }
 
     pthread_mutex_unlock(&token_mutex);
