@@ -624,6 +624,16 @@ program
     []
   )
   .option(
+    '--allow-full-filesystem-access',
+    '⚠️  SECURITY WARNING: Mount entire host filesystem with read-write access.\n' +
+    '                                   This DISABLES selective mounting security and exposes ALL files including:\n' +
+    '                                   - Docker Hub tokens (~/.docker/config.json)\n' +
+    '                                   - GitHub CLI tokens (~/.config/gh/hosts.yml)\n' +
+    '                                   - NPM, Cargo, Composer credentials\n' +
+    '                                   Only use if you cannot use --mount for specific directories.',
+    false
+  )
+  .option(
     '--container-workdir <dir>',
     'Working directory inside the container (should match GITHUB_WORKSPACE for path consistency)'
   )
@@ -919,6 +929,7 @@ program
       additionalEnv: Object.keys(additionalEnv).length > 0 ? additionalEnv : undefined,
       envAll: options.envAll,
       volumeMounts,
+      allowFullFilesystemAccess: options.allowFullFilesystemAccess,
       containerWorkDir: options.containerWorkdir,
       dnsServers,
       proxyLogsDir: options.proxyLogsDir,
