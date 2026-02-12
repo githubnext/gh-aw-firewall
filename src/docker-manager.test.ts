@@ -1495,7 +1495,7 @@ describe('docker-manager', () => {
       expect(fs.existsSync(path.join(testDir, 'squid-logs'))).toBe(true);
     });
 
-    it('should create /tmp/gh-aw/mcp-logs file', async () => {
+    it('should create /tmp/gh-aw/mcp-logs directory', async () => {
       const config: WrapperConfig = {
         allowedDomains: ['github.com'],
         agentCommand: 'echo test',
@@ -1507,14 +1507,13 @@ describe('docker-manager', () => {
       try {
         await writeConfigs(config);
       } catch {
-        // May fail, but file should still be created
+        // May fail, but directory should still be created
       }
 
-      // Verify /tmp/gh-aw/mcp-logs file was created (not directory)
+      // Verify /tmp/gh-aw/mcp-logs directory was created
       expect(fs.existsSync('/tmp/gh-aw/mcp-logs')).toBe(true);
       const stats = fs.statSync('/tmp/gh-aw/mcp-logs');
-      expect(stats.isFile()).toBe(true);
-      expect(stats.isDirectory()).toBe(false);
+      expect(stats.isDirectory()).toBe(true);
     });
 
     it('should write squid.conf file', async () => {

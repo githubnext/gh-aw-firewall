@@ -666,8 +666,6 @@ export function generateDockerCompose(
       `${effectiveHome}/.kube/config`,
       `${effectiveHome}/.azure/credentials`,
       `${effectiveHome}/.config/gcloud/credentials.db`,
-      // MCP server logs (may contain sensitive data)
-      '/tmp/gh-aw/mcp-logs',
     ];
 
     credentialFiles.forEach(credFile => {
@@ -699,8 +697,6 @@ export function generateDockerCompose(
       `/dev/null:/host${userHome}/.kube/config:ro`,
       `/dev/null:/host${userHome}/.azure/credentials:ro`,
       `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
-      // MCP server logs (may contain sensitive data)
-      `/dev/null:/host/tmp/gh-aw/mcp-logs:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {
@@ -722,6 +718,17 @@ export function generateDockerCompose(
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
     volumes: agentVolumes,
     environment,
+    // Hide /tmp/gh-aw/mcp-logs directory using tmpfs (empty in-memory filesystem)
+    // This prevents the agent from accessing MCP server logs while still allowing
+    // the host to write logs to /tmp/gh-aw/mcp-logs/ (e.g., /tmp/gh-aw/mcp-logs/safeoutputs/)
+    // For normal mode: hide /tmp/gh-aw/mcp-logs
+    // For chroot mode: hide both /tmp/gh-aw/mcp-logs and /host/tmp/gh-aw/mcp-logs
+    tmpfs: config.enableChroot
+      ? [
+          '/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
+          '/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
+        ]
+      : ['/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m'],
     depends_on: {
       'squid-proxy': {
         condition: 'service_healthy',
@@ -868,17 +875,13 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   }
   logger.debug(`Squid logs directory created at: ${squidLogsDir}`);
 
-  // Create /tmp/gh-aw/mcp-logs as a file for hiding via /dev/null mount
-  // This must be a FILE (not directory) so Docker can bind-mount /dev/null over it
-  // (selective mounting mode hides this path to prevent MCP log exfiltration)
-  const mcpLogsPath = '/tmp/gh-aw/mcp-logs';
-  const mcpLogsParentDir = path.dirname(mcpLogsPath);
-  if (!fs.existsSync(mcpLogsParentDir)) {
-    fs.mkdirSync(mcpLogsParentDir, { recursive: true, mode: 0o755 });
-  }
-  if (!fs.existsSync(mcpLogsPath)) {
-    fs.writeFileSync(mcpLogsPath, '', { mode: 0o644 });
-    logger.debug(`MCP logs file created at: ${mcpLogsPath}`);
+  // Create /tmp/gh-aw/mcp-logs directory
+  // This directory exists on the HOST for MCP gateway to write logs
+  // Inside the AWF container, it's hidden via tmpfs mount (see generateDockerCompose)
+  const mcpLogsDir = '/tmp/gh-aw/mcp-logs';
+  if (!fs.existsSync(mcpLogsDir)) {
+    fs.mkdirSync(mcpLogsDir, { recursive: true, mode: 0o755 });
+    logger.debug(`MCP logs directory created at: ${mcpLogsDir}`);
   }
 
   // Use fixed network configuration (network is created by host-iptables.ts)
