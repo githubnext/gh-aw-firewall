@@ -1057,7 +1057,7 @@ program
  * @param validFormats - Array of valid format options
  * @throws Exits process with error if format is invalid
  */
-function validateFormat(format: string, validFormats: string[]): void {
+export function validateFormat(format: string, validFormats: string[]): void {
   if (!validFormats.includes(format)) {
     logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
     process.exit(1);
