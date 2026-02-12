@@ -61,7 +61,7 @@ describe('generateSquidConfig', () => {
       };
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_domains dstdomain .github.com');
-      expect(result).not.toMatch(/github\.com\//);
+      expect(result).not.toContain('github.com/');
     });
 
     it('should remove trailing slash with protocol prefix', () => {
@@ -72,7 +72,7 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_https_only dstdomain .example.com');
       expect(result).not.toContain('https://');
-      expect(result).not.toMatch(/example\.com\//);
+      expect(result).not.toContain('example.com/');
     });
 
     it('should handle domain with port number', () => {
