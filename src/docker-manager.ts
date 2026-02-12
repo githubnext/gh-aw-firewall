@@ -318,6 +318,7 @@ export function generateDockerCompose(
     'SUDO_USER',      // Sudo metadata
     'SUDO_UID',       // Sudo metadata
     'SUDO_GID',       // Sudo metadata
+    'GH_AW_MCP_CONFIG', // Points to MCP config path containing auth tokens
   ]);
 
   // Start with required/overridden environment variables
@@ -666,6 +667,13 @@ export function generateDockerCompose(
       `${effectiveHome}/.kube/config`,
       `${effectiveHome}/.azure/credentials`,
       `${effectiveHome}/.config/gcloud/credentials.db`,
+      // GitHub Actions runner credentials (JWT tokens, RSA keys)
+      `${effectiveHome}/actions-runner/.credentials`,
+      `${effectiveHome}/actions-runner/.credentials_rsaparams`,
+      `${effectiveHome}/actions-runner/cached/.credentials`,
+      `${effectiveHome}/actions-runner/cached/.credentials_rsaparams`,
+      // MCP configuration (contains authorization tokens)
+      `${effectiveHome}/.copilot/mcp-config.json`,
     ];
 
     credentialFiles.forEach(credFile => {
@@ -697,6 +705,13 @@ export function generateDockerCompose(
       `/dev/null:/host${userHome}/.kube/config:ro`,
       `/dev/null:/host${userHome}/.azure/credentials:ro`,
       `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      // GitHub Actions runner credentials (JWT tokens, RSA keys)
+      `/dev/null:/host${userHome}/actions-runner/.credentials:ro`,
+      `/dev/null:/host${userHome}/actions-runner/.credentials_rsaparams:ro`,
+      `/dev/null:/host${userHome}/actions-runner/cached/.credentials:ro`,
+      `/dev/null:/host${userHome}/actions-runner/cached/.credentials_rsaparams:ro`,
+      // MCP configuration (contains authorization tokens)
+      `/dev/null:/host${userHome}/.copilot/mcp-config.json:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {

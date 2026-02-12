@@ -509,6 +509,76 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(true);
     });
 
+    it('should hide GitHub Actions runner credentials in normal mode', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const home = process.env.HOME || '/root';
+
+      // Runner credential files
+      expect(volumes).toContain(`/dev/null:${home}/actions-runner/.credentials:ro`);
+      expect(volumes).toContain(`/dev/null:${home}/actions-runner/.credentials_rsaparams:ro`);
+      expect(volumes).toContain(`/dev/null:${home}/actions-runner/cached/.credentials:ro`);
+      expect(volumes).toContain(`/dev/null:${home}/actions-runner/cached/.credentials_rsaparams:ro`);
+    });
+
+    it('should hide MCP config in normal mode', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const home = process.env.HOME || '/root';
+
+      expect(volumes).toContain(`/dev/null:${home}/.copilot/mcp-config.json:ro`);
+    });
+
+    it('should hide GitHub Actions runner credentials in chroot mode', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const home = process.env.HOME || '/root';
+
+      expect(volumes).toContain(`/dev/null:/host${home}/actions-runner/.credentials:ro`);
+      expect(volumes).toContain(`/dev/null:/host${home}/actions-runner/.credentials_rsaparams:ro`);
+      expect(volumes).toContain(`/dev/null:/host${home}/actions-runner/cached/.credentials:ro`);
+      expect(volumes).toContain(`/dev/null:/host${home}/actions-runner/cached/.credentials_rsaparams:ro`);
+    });
+
+    it('should hide MCP config in chroot mode', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const home = process.env.HOME || '/root';
+
+      expect(volumes).toContain(`/dev/null:/host${home}/.copilot/mcp-config.json:ro`);
+    });
+
+    it('should exclude GH_AW_MCP_CONFIG from env-all passthrough', () => {
+      const originalVal = process.env.GH_AW_MCP_CONFIG;
+      process.env.GH_AW_MCP_CONFIG = '/home/runner/.copilot/mcp-config.json';
+
+      try {
+        const configWithEnvAll = { ...mockConfig, envAll: true };
+        const result = generateDockerCompose(configWithEnvAll, mockNetworkConfig);
+        const env = result.services.agent.environment as Record<string, string>;
+
+        expect(env.GH_AW_MCP_CONFIG).toBeUndefined();
+      } finally {
+        if (originalVal !== undefined) {
+          process.env.GH_AW_MCP_CONFIG = originalVal;
+        } else {
+          delete process.env.GH_AW_MCP_CONFIG;
+        }
+      }
+    });
+
     it('should use custom volume mounts when specified', () => {
       const configWithMounts = {
         ...mockConfig,
