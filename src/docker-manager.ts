@@ -491,7 +491,9 @@ export function generateDockerCompose(
     // Without this, $HOME inside the chroot is an empty root-owned directory
     // created by Docker as a side effect of subdirectory mounts, which causes
     // tools like rustc and Claude Code to hang or fail.
-    const emptyHomeDir = path.join(config.workDir, 'chroot-home');
+    // NOTE: This directory must be OUTSIDE workDir because workDir has a tmpfs
+    // overlay inside the container to hide docker-compose.yml secrets.
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
     agentVolumes.push(`${emptyHomeDir}:/host${effectiveHome}:rw`);
 
     // /tmp is needed for chroot mode to write:
@@ -990,7 +992,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
     // Create empty writable home directory for the chroot
     // This is mounted as $HOME inside the container so tools can write to it
-    const emptyHomeDir = path.join(config.workDir, 'chroot-home');
+    // NOTE: Must be outside workDir to avoid being hidden by the tmpfs overlay
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
     if (!fs.existsSync(emptyHomeDir)) {
       fs.mkdirSync(emptyHomeDir, { recursive: true });
     }
@@ -1417,6 +1420,13 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
 
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });
+
+      // Clean up chroot home directory (created outside workDir to avoid tmpfs overlay)
+      const chrootHomeDir = `${workDir}-chroot-home`;
+      if (fs.existsSync(chrootHomeDir)) {
+        fs.rmSync(chrootHomeDir, { recursive: true, force: true });
+      }
+
       logger.debug('Temporary files cleaned up');
     }
   } catch (error) {
