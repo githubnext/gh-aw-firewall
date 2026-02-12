@@ -221,25 +221,28 @@ fn check_task_environ_exposure(token_name: &str) {
     // Check each task's environ file
     for entry in entries.flatten() {
         if let Ok(file_name) = entry.file_name().into_string() {
-            task_count += 1;
-            let environ_path = format!("{}/{}/environ", task_dir, file_name);
-            
-            // Try to read the environ file
-            if let Ok(mut file) = fs::File::open(&environ_path) {
-                let mut contents = Vec::new();
-                if file.read_to_end(&mut contents).is_ok() {
-                    // Parse null-separated KEY=VALUE pairs
-                    let environ_str = String::from_utf8_lossy(&contents);
-                    for entry in environ_str.split('\0') {
-                        if let Some(eq_pos) = entry.find('=') {
-                            let key = &entry[..eq_pos];
-                            if key == token_name {
-                                exposed_count += 1;
-                                eprintln!(
-                                    "[one-shot-token] WARNING: Token {} still exposed in {}",
-                                    token_name, environ_path
-                                );
-                                break;
+            // Only count numeric directory names (actual task IDs)
+            if file_name.parse::<u32>().is_ok() {
+                task_count += 1;
+                let environ_path = format!("{}/{}/environ", task_dir, file_name);
+                
+                // Try to read the environ file
+                if let Ok(mut file) = fs::File::open(&environ_path) {
+                    let mut contents = Vec::new();
+                    if file.read_to_end(&mut contents).is_ok() {
+                        // Parse null-separated KEY=VALUE pairs
+                        let environ_str = String::from_utf8_lossy(&contents);
+                        for entry in environ_str.split('\0') {
+                            if let Some(eq_pos) = entry.find('=') {
+                                let key = &entry[..eq_pos];
+                                if key == token_name {
+                                    exposed_count += 1;
+                                    eprintln!(
+                                        "[one-shot-token] WARNING: Token {} still exposed in {}",
+                                        token_name, environ_path
+                                    );
+                                    break;
+                                }
                             }
                         }
                     }
