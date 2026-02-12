@@ -31,6 +31,10 @@ Options:
   -e, --env <KEY=VALUE>        Additional environment variables (can repeat)
   --env-all                    Pass all host environment variables to container
   -v, --mount <path:path>      Volume mount (host_path:container_path[:ro|rw])
+  --allow-full-filesystem-access  ⚠️  SECURITY WARNING: Mount entire host filesystem with
+                               read-write access. By default, AWF uses selective mounting
+                               to hide credentials and sensitive files. This flag disables
+                               that protection. See docs/selective-mounting.md
   --tty                        Allocate a pseudo-TTY for interactive tools
   --build-local                Build containers locally instead of using GHCR images
   --agent-image <value>        Agent container image (default: "default")

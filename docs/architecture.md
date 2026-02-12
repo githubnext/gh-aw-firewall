@@ -2,7 +2,7 @@
 
 ## Overview
 
-The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTTPS) egress control. The system provides domain-based whitelisting while maintaining full filesystem access for the Copilot CLI and its MCP servers.
+The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTTPS) egress control. The system provides domain-based whitelisting with **selective filesystem mounting** to protect credentials from exfiltration attacks.
 
 ## High-Level Architecture
 
@@ -76,10 +76,16 @@ The firewall uses a containerized architecture with Squid proxy for L7 (HTTP/HTT
 
 ### Agent Execution Container (`containers/agent/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
-- Mounts entire host filesystem at `/host` and user home directory for full access
+- **Selective Mounting (Default):** 
+  - Mounts only user home directory and essential paths
+  - Hides credentials via `/dev/null` mounts (Docker config, GitHub CLI, npm, Cargo, cloud providers)
+  - See [Selective Mounting](./selective-mounting.md) for complete list and threat model
+- **Full Filesystem Access:** With `--allow-full-filesystem-access`, mounts entire host filesystem at `/host` (disables credential protection)
 - `NET_ADMIN` capability required for iptables setup during initialization
 - **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - **Chroot Mode:** With `--enable-chroot`, user commands run inside `chroot /host` for transparent host binary access. See [Chroot Mode](./chroot-mode.md) for details.
+- **Token Protection:** One-shot token library (LD_PRELOAD) caches environment variables on first access, then clears them from `/proc/self/environ` to prevent exfiltration
+- **MCP Logs Protection:** `/tmp/gh-aw/mcp-logs/` directory is hidden from container via tmpfs mount to prevent workflow data leakage
 - Two-stage entrypoint:
   1. `setup-iptables.sh`: Configures iptables NAT rules to redirect HTTP/HTTPS traffic to Squid (agent container only)
   2. `entrypoint.sh`: Drops NET_ADMIN capability, then executes user command as non-root user

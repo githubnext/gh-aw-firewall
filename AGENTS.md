@@ -217,7 +217,8 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 **Agent Execution Container** (`containers/agent/`)
 - Based on `ubuntu:22.04` with iptables, curl, git, nodejs, npm
-- Mounts entire host filesystem at `/host` and user home directory for full access
+- **Default (Selective Mounting):** Mounts only user home directory and essential directories. Credentials are explicitly hidden via `/dev/null` mounts (see `docs/selective-mounting.md`)
+- **With `--allow-full-filesystem-access`:** Mounts entire host filesystem at `/host` with read-write access (disables credential protection)
 - `NET_ADMIN` capability required for iptables setup during initialization
 - **Security:** `NET_ADMIN` is dropped via `capsh --drop=cap_net_admin` before executing user commands, preventing malicious code from modifying iptables rules
 - Two-stage entrypoint:
