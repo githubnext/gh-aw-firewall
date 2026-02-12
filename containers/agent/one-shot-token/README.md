@@ -158,22 +158,22 @@ In chroot mode, the library must be accessible from within the chroot (host file
 
 ### In Docker (automatic)
 
-The Dockerfile compiles the library during image build:
+The Dockerfile compiles the Rust library during image build:
 
 ```dockerfile
-RUN gcc -shared -fPIC -O2 -Wall \
-    -o /usr/local/lib/one-shot-token.so \
-    /tmp/one-shot-token.c \
-    -ldl -lpthread
+RUN cargo build --release && \
+    cp target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so
 ```
 
 ### Locally (for testing)
+
+Requires Rust toolchain (install via [rustup](https://rustup.rs/)):
 
 ```bash
 ./build.sh
 ```
 
-This produces `one-shot-token.so` in the current directory.
+This builds `target/release/libone_shot_token.so` and creates a symlink `one-shot-token.so` for backwards compatibility.
 
 ## Testing
 
@@ -285,12 +285,14 @@ This library is one layer in AWF's security model:
 
 ## Limitations
 
-- **x86_64 Linux only**: The library is compiled for x86_64 Ubuntu
+- **Linux only**: The library is compiled for Linux (x86_64 and potentially other architectures via Rust cross-compilation)
 - **glibc programs only**: Programs using musl libc or statically linked programs are not affected
 - **Single process**: Child processes inherit the LD_PRELOAD but have their own token state and cache (each starts fresh)
 
 ## Files
 
-- `one-shot-token.c` - Library source code
+- `src/lib.rs` - Library source code (Rust)
+- `Cargo.toml` - Rust package configuration
 - `build.sh` - Local build script
+- `one-shot-token.c` - Legacy C implementation (for reference)
 - `README.md` - This documentation
