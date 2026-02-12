@@ -107,7 +107,8 @@ These are standard environment variables recognized by:
 API keys are held in the sidecar container, not the agent:
 - Agent code cannot read API keys from environment
 - Compromised agent cannot exfiltrate credentials
-- Keys never written to disk or logs
+- Keys are not exposed to the agent container’s stdout/stderr logs
+- Keys are stored in sidecar and deployment configuration on disk; protect host filesystem and config accordingly (only non-sensitive key prefixes may be logged for debugging)
 
 ### Network Isolation
 
