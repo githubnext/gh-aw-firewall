@@ -669,13 +669,6 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/myorg/*'
   )
-  .option(
-    '--enable-chroot',
-    'Enable chroot to /host for running host binaries (Python, Node, Go, etc.)\n' +
-    '                                   Uses selective path mounts instead of full filesystem access.\n' +
-    '                                   Docker socket is hidden to prevent firewall bypass.',
-    false
-  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -937,7 +930,6 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
-      enableChroot: options.enableChroot,
     };
 
     // Warn if --env-all is used
@@ -1065,7 +1057,7 @@ program
  * @param validFormats - Array of valid format options
  * @throws Exits process with error if format is invalid
  */
-function validateFormat(format: string, validFormats: string[]): void {
+export function validateFormat(format: string, validFormats: string[]): void {
   if (!validFormats.includes(format)) {
     logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
     process.exit(1);

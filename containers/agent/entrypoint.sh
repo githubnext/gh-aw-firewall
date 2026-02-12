@@ -345,8 +345,22 @@ AWFEOF
     fi
   fi
   # Append the actual command arguments
-  printf '%q ' "$@" >> "/host${SCRIPT_FILE}"
-  echo "" >> "/host${SCRIPT_FILE}"
+  # Docker CMD passes commands as ['/bin/bash', '-c', 'command_string'].
+  # Instead of writing the full [bash, -c, cmd] via printf '%q' (which creates
+  # a nested bash -c layer), extract the command string and write it directly.
+  # This eliminates an extra bash process layer that causes /proc/self/exe to
+  # resolve as /bin/bash for runtimes like Java and .NET that check their own
+  # process identity via /proc/self/exe.
+  # Trust assumption: $3 comes from Docker CMD set by docker-manager.ts using
+  # the user's own --allow-domains command. No additional sanitization needed.
+  # We use $# -eq 3 (not -ge 3) intentionally: extra args beyond the command
+  # string indicate a non-standard invocation that should fall back to printf.
+  if [ "$1" = "/bin/bash" ] && [ "$2" = "-c" ] && [ $# -eq 3 ] && [ -n "$3" ]; then
+    printf '%s\n' "$3" >> "/host${SCRIPT_FILE}"
+  else
+    printf '%q ' "$@" >> "/host${SCRIPT_FILE}"
+    echo "" >> "/host${SCRIPT_FILE}"
+  fi
   chmod +x "/host${SCRIPT_FILE}"
 
   # Execute inside chroot:

@@ -73,47 +73,9 @@ The agent's legitimate tools (Read, Bash) become attack vectors when credentials
 
 ## Selective Mounting Solution
 
-### Normal Mode (without --enable-chroot)
+### Selective Mounting
 
-**What gets mounted:**
-
-```typescript
-// Essential directories only
-const agentVolumes = [
-  '/tmp:/tmp:rw',                                    // Temporary files
-  `${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:rw`,     // Workspace directory only (not entire HOME)
-  `${workDir}/agent-logs:${HOME}/.copilot/logs:rw`, // Copilot CLI logs
-];
-// Note: $HOME itself is NOT mounted, preventing access to ~/.docker/, ~/.npmrc, ~/.config/gh/, etc.
-```
-
-**What gets hidden (defense-in-depth):**
-
-```typescript
-// Credential files are mounted as /dev/null (empty file) as an additional security layer
-const hiddenCredentials = [
-  '/dev/null:~/.docker/config.json:ro',           // Docker Hub tokens
-  '/dev/null:~/.npmrc:ro',                        // NPM tokens
-  '/dev/null:~/.cargo/credentials:ro',            // Rust tokens
-  '/dev/null:~/.composer/auth.json:ro',           // PHP tokens
-  '/dev/null:~/.config/gh/hosts.yml:ro',          // GitHub CLI tokens
-  '/dev/null:~/.ssh/id_rsa:ro',                   // SSH private keys
-  '/dev/null:~/.ssh/id_ed25519:ro',
-  '/dev/null:~/.ssh/id_ecdsa:ro',
-  '/dev/null:~/.ssh/id_dsa:ro',
-  '/dev/null:~/.aws/credentials:ro',              // AWS credentials
-  '/dev/null:~/.aws/config:ro',
-  '/dev/null:~/.kube/config:ro',                  // Kubernetes credentials
-  '/dev/null:~/.azure/credentials:ro',            // Azure credentials
-  '/dev/null:~/.config/gcloud/credentials.db:ro', // GCP credentials
-];
-```
-
-**Primary security mechanism**: Credential files are never mounted because `$HOME` is not mounted. The `/dev/null` overlays provide defense-in-depth in case a credential file somehow exists in the workspace directory.
-
-**Result:** Commands like `cat ~/.docker/config.json` will fail with "No such file or directory" because the home directory is not mounted.
-
-### Chroot Mode (with --enable-chroot)
+AWF uses chroot mode with granular selective mounting. Instead of mounting the entire `$HOME`, an empty writable home directory is mounted with only specific subdirectories (`.cargo`, `.claude`, `.config`, etc.) overlaid on top. Credential files are hidden via `/dev/null` overlays as defense-in-depth:
 
 **What gets mounted:**
 

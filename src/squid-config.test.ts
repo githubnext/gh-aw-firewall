@@ -1081,6 +1081,39 @@ describe('generateSquidConfig', () => {
       expect(result).toContain('ssl_bump terminate all');
     });
 
+    it('should include ssl_bump rules for regex patterns only', () => {
+      const config: SquidConfig = {
+        domains: ['api-*.example.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump allowed_domains_regex');
+      expect(result).toContain('ssl_bump terminate all');
+    });
+
+    it('should include ssl_bump rules for both plain domains and regex patterns', () => {
+      const config: SquidConfig = {
+        domains: ['github.com', 'api-*.example.com'],
+        port: defaultPort,
+        sslBump: true,
+        caFiles: {
+          certPath: '/tmp/test/ssl/ca-cert.pem',
+          keyPath: '/tmp/test/ssl/ca-key.pem',
+        },
+        sslDbPath: '/tmp/test/ssl_db',
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('ssl_bump bump allowed_domains');
+      expect(result).toContain('ssl_bump bump allowed_domains_regex');
+      expect(result).toContain('ssl_bump terminate all');
+    });
+
     it('should include URL pattern ACLs when provided', () => {
       // URL patterns passed here are the output of parseUrlPatterns which now uses [^\s]*
       const config: SquidConfig = {
@@ -1097,6 +1130,48 @@ describe('generateSquidConfig', () => {
       const result = generateSquidConfig(config);
       expect(result).toContain('acl allowed_url_0 url_regex');
       expect(result).toContain('^https://github\\.com/myorg/[^\\s]*');
+    });
+
+    it('should handle HTTP-only protocol-restricted domains', () => {
+      const config: SquidConfig = {
+        domains: ['http://legacy-api.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('allowed_http_only');
+      expect(result).toContain('!CONNECT');
+    });
+
+    it('should handle HTTPS-only protocol-restricted domains', () => {
+      const config: SquidConfig = {
+        domains: ['https://secure.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('allowed_https_only');
+      expect(result).toContain('CONNECT');
+    });
+
+    it('should handle mix of HTTP-only plain domains and wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['http://legacy.example.com', 'http://api-*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both plain and regex ACLs should be generated for http-only
+      expect(result).toContain('allowed_http_only');
+      expect(result).toContain('allowed_http_only_regex');
+    });
+
+    it('should handle mix of HTTPS-only plain domains and wildcard patterns', () => {
+      const config: SquidConfig = {
+        domains: ['https://secure.example.com', 'https://api-*.example.com'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Both plain and regex ACLs should be generated for https-only
+      expect(result).toContain('allowed_https_only');
+      expect(result).toContain('allowed_https_only_regex');
     });
 
     it('should not include SSL Bump section when disabled', () => {
