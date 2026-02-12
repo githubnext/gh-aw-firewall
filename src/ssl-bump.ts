@@ -144,13 +144,20 @@ export async function initSslDb(workDir: string): Promise<string> {
   }
 
   // Create index.txt (empty file for certificate index)
-  if (!fs.existsSync(indexPath)) {
-    fs.writeFileSync(indexPath, '', { mode: 0o600 });
+  // Use 'wx' flag (O_WRONLY | O_CREAT | O_EXCL) for atomic create-if-not-exists,
+  // avoiding TOCTOU race between existsSync and writeFileSync
+  try {
+    fs.writeFileSync(indexPath, '', { flag: 'wx', mode: 0o600 });
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
   }
 
   // Create size file (tracks current DB size, starts at 0)
-  if (!fs.existsSync(sizePath)) {
-    fs.writeFileSync(sizePath, '0\n', { mode: 0o600 });
+  // Same atomic pattern to avoid TOCTOU race condition
+  try {
+    fs.writeFileSync(sizePath, '0\n', { flag: 'wx', mode: 0o600 });
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
   }
 
   logger.debug(`SSL certificate database initialized at: ${sslDbPath}`);
