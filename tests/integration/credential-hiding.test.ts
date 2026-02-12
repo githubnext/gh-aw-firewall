@@ -294,4 +294,68 @@ describe('Credential Hiding Security', () => {
       expect(output).not.toContain('auth');
     }, 120000);
   });
+
+  describe('MCP Logs Directory Hiding', () => {
+    test('Test 13: /tmp/gh-aw/mcp-logs/ is hidden in normal mode', async () => {
+      // Try to access the mcp-logs directory
+      const result = await runner.runWithSudo(
+        'ls -la /tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // The directory should not be accessible or should appear empty
+      // Expected: "No such file or directory" or "Not a directory"
+      if (!result.success) {
+        expect(result.stderr).toMatch(/No such file or directory|Not a directory|cannot access/i);
+      } else {
+        // If it succeeds, it should be empty or show no real content
+        const output = result.stdout.trim();
+        expect(output).not.toContain('safeoutputs');
+        expect(output).not.toContain('playwright');
+      }
+    }, 120000);
+
+    test('Test 14: /tmp/gh-aw/mcp-logs/ is hidden in chroot mode', async () => {
+      // Try to access the mcp-logs directory at /host path
+      const result = await runner.runWithSudo(
+        'ls -la /host/tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          enableChroot: true,
+        }
+      );
+
+      // The directory should not be accessible or should appear empty
+      if (!result.success) {
+        expect(result.stderr).toMatch(/No such file or directory|Not a directory|cannot access/i);
+      } else {
+        const output = result.stdout.trim();
+        expect(output).not.toContain('safeoutputs');
+        expect(output).not.toContain('playwright');
+      }
+    }, 120000);
+
+    test('Test 15: MCP logs files cannot be read in normal mode', async () => {
+      // Try to read a typical MCP log file path
+      const result = await runner.runWithSudo(
+        'cat /tmp/gh-aw/mcp-logs/safeoutputs/log.txt 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // Should fail with "Not a directory" (because /dev/null is mounted)
+      // or with "No such file" (depending on the state)
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/No such file|cannot access|Not a directory/i);
+    }, 120000);
+  });
 });

@@ -666,6 +666,8 @@ export function generateDockerCompose(
       `${effectiveHome}/.kube/config`,
       `${effectiveHome}/.azure/credentials`,
       `${effectiveHome}/.config/gcloud/credentials.db`,
+      // MCP server logs (may contain sensitive data)
+      '/tmp/gh-aw/mcp-logs',
     ];
 
     credentialFiles.forEach(credFile => {
@@ -697,6 +699,8 @@ export function generateDockerCompose(
       `/dev/null:/host${userHome}/.kube/config:ro`,
       `/dev/null:/host${userHome}/.azure/credentials:ro`,
       `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      // MCP server logs (may contain sensitive data)
+      `/dev/null:/host/tmp/gh-aw/mcp-logs:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {
