@@ -502,8 +502,9 @@ export function generateDockerCompose(
     }
 
     // Mount ~/.cargo for Rust binaries (read-only) if it exists
+    // SKIP if allowFullFilesystemAccess is false (credentials will be hidden via tmpfs)
     const hostCargoDir = path.join(userHome, '.cargo');
-    if (fs.existsSync(hostCargoDir)) {
+    if (fs.existsSync(hostCargoDir) && config.allowFullFilesystemAccess) {
       agentVolumes.push(`${hostCargoDir}:/host${hostCargoDir}:ro`);
     }
 
