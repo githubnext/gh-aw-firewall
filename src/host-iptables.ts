@@ -159,9 +159,8 @@ async function setupIpv6Chain(bridgeName: string): Promise<void> {
  * @param squidIp - IP address of the Squid proxy
  * @param squidPort - Port number of the Squid proxy
  * @param dnsServers - Array of trusted DNS server IP addresses (DNS traffic is ONLY allowed to these servers)
- * @param apiProxyIp - Optional IP address of the API proxy sidecar (if enabled, gets unrestricted egress like Squid)
  */
-export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[], apiProxyIp?: string): Promise<void> {
+export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[]): Promise<void> {
   logger.info('Setting up host-level iptables rules...');
 
   // Get the bridge interface name
@@ -248,16 +247,9 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     '-j', 'ACCEPT',
   ]);
 
-  // 1b. Allow all traffic FROM the API proxy sidecar (if enabled)
-  // This allows the sidecar to reach LLM provider APIs directly
-  if (apiProxyIp) {
-    logger.debug(`Allowing unrestricted egress for API proxy sidecar at ${apiProxyIp}`);
-    await execa('iptables', [
-      '-t', 'filter', '-A', CHAIN_NAME,
-      '-s', apiProxyIp,
-      '-j', 'ACCEPT',
-    ]);
-  }
+  // Note: API proxy sidecar (when enabled) does NOT get a firewall exemption.
+  // It routes through Squid via HTTP_PROXY/HTTPS_PROXY environment variables,
+  // ensuring domain whitelisting is enforced by Squid ACLs.
 
   // 2. Allow established and related connections (return traffic)
   await execa('iptables', [
