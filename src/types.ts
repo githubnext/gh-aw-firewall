@@ -668,26 +668,46 @@ export interface DockerService {
 
   /**
    * Volume mount specifications
-   * 
+   *
    * Array of mount specifications in Docker format:
    * - Bind mounts: '/host/path:/container/path:options'
    * - Named volumes: 'volume-name:/container/path:options'
-   * 
+   *
    * Common mounts:
    * - Host filesystem: '/:/host:ro' (read-only host access)
    * - Home directory: '${HOME}:${HOME}' (user files)
    * - Configs: '${workDir}/squid.conf:/etc/squid/squid.conf:ro'
-   * 
+   *
    * @example ['./squid.conf:/etc/squid/squid.conf:ro']
    */
   volumes?: string[];
 
   /**
+   * Tmpfs mount specifications
+   *
+   * Array of tmpfs mount specifications in Docker format:
+   * - 'path:options' where path is the mount point in the container
+   *
+   * Tmpfs mounts create empty in-memory filesystems that overlay directories,
+   * effectively hiding their contents from the container. This is used to:
+   * - Hide credential directories (e.g., ~/.docker, ~/.ssh, ~/.aws)
+   * - Hide MCP server logs (e.g., /tmp/gh-aw/mcp-logs)
+   *
+   * Unlike volume mounts with /dev/null, tmpfs mounts don't require the
+   * target path to exist in the container filesystem, preventing Docker
+   * mount errors.
+   *
+   * @example ['/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m']
+   * @example ['/home/user/.docker:rw,noexec,nosuid,size=1m']
+   */
+  tmpfs?: string[];
+
+  /**
    * Environment variables for the container
-   * 
+   *
    * Key-value pairs of environment variables. Values can include variable
    * substitutions (e.g., ${HOME}) which are resolved by Docker Compose.
-   * 
+   *
    * @example { HTTP_PROXY: 'http://172.30.0.10:3128', GITHUB_TOKEN: '${GITHUB_TOKEN}' }
    */
   environment?: Record<string, string>;
