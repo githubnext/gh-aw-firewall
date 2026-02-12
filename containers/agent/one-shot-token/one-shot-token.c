@@ -193,6 +193,27 @@ static void init_real_secure_getenv(void) {
     pthread_once(&secure_getenv_init_once, init_real_secure_getenv_once);
 }
 
+/**
+ * Library constructor - runs when the shared library is loaded via LD_PRELOAD.
+ *
+ * Eagerly resolves the real getenv/secure_getenv pointers via dlsym() at load time,
+ * BEFORE any other library's constructors run. This prevents a deadlock where:
+ *   1. A library constructor (e.g., LLVM in rustc) calls getenv()
+ *   2. Our intercepted getenv() calls init_real_getenv() -> pthread_once -> dlsym()
+ *   3. dlsym() needs the dynamic linker's internal lock
+ *   4. The dynamic linker's lock is already held (we're inside constructor execution)
+ *   5. DEADLOCK
+ *
+ * By resolving dlsym() here in our own constructor (which runs first since we're
+ * LD_PRELOAD'd), pthread_once marks initialization as done. Later getenv() calls
+ * skip dlsym() entirely.
+ */
+__attribute__((constructor))
+static void one_shot_token_init(void) {
+    init_real_getenv();
+    init_real_secure_getenv();
+}
+
 /* Check if a variable name is a sensitive token */
 static int get_token_index(const char *name) {
     if (name == NULL) return -1;
