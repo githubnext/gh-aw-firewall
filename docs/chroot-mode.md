@@ -94,6 +94,7 @@ As of v0.13.13, chroot mode mounts a fresh container-scoped procfs at `/host/pro
 2. This requires `CAP_SYS_ADMIN` capability, which is granted during container startup
 3. The procfs is container-scoped, showing only container processes (not host processes)
 4. `CAP_SYS_ADMIN` is dropped via capsh before executing user commands
+5. The command script writes the user command directly (not wrapped in an extra `bash -c` layer), ensuring runtimes see their own binary via `/proc/self/exe` instead of `/bin/bash`
 
 **Security implications:**
 - The mounted procfs only exposes container processes, not host processes

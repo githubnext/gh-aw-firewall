@@ -690,6 +690,7 @@ export interface DockerService {
    *
    * Tmpfs mounts create empty in-memory filesystems that overlay directories,
    * effectively hiding their contents from the container. This is used to:
+   * - Hide workDir (e.g., /tmp/awf-<timestamp>) containing docker-compose.yml with tokens
    * - Hide credential directories (e.g., ~/.docker, ~/.ssh, ~/.aws)
    * - Hide MCP server logs (e.g., /tmp/gh-aw/mcp-logs)
    *
@@ -697,7 +698,11 @@ export interface DockerService {
    * target path to exist in the container filesystem, preventing Docker
    * mount errors.
    *
+   * Note: volume mounts of subdirectories that map to different container
+   * paths are unaffected by a tmpfs overlay on the parent directory.
+   *
    * @example ['/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m']
+   * @example ['/tmp/awf-123:rw,noexec,nosuid,size=1m']
    * @example ['/home/user/.docker:rw,noexec,nosuid,size=1m']
    */
   tmpfs?: string[];
@@ -876,6 +881,7 @@ export interface DockerService {
    * @example '/workspace'
    */
   working_dir?: string;
+
 }
 
 /**

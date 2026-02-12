@@ -766,19 +766,36 @@ export function generateDockerCompose(
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
     volumes: agentVolumes,
     environment,
-    // Hide sensitive directories using tmpfs (empty in-memory filesystem)
-    // This prevents the agent from accessing:
-    // 1. MCP server logs at /tmp/gh-aw/mcp-logs
-    // 2. Credential files/directories (when not using --allow-full-filesystem-access)
+    // SECURITY: Hide sensitive directories from agent using tmpfs overlays (empty in-memory filesystems)
+    //
+    // 1. MCP logs: tmpfs over /tmp/gh-aw/mcp-logs prevents the agent from reading
+    //    MCP server logs inside the container.
+    //
+    // 2. WorkDir: tmpfs over workDir (e.g., /tmp/awf-<timestamp>) prevents the agent
+    //    from reading docker-compose.yml which contains environment variables (tokens,
+    //    API keys) in plaintext. Without this overlay, code inside the container could
+    //    extract secrets via: cat /tmp/awf-*/docker-compose.yml
+    //    Note: volume mounts of workDir subdirectories (agent-logs, squid-logs, etc.)
+    //    are mapped to different container paths (e.g., ~/.copilot/logs, /var/log/squid)
+    //    so they are unaffected by the tmpfs overlay on workDir.
+    //
+    // 3. Credential directories: tmpfs over ~/.docker, ~/.ssh, ~/.aws, etc. prevents
+    //    the agent from accessing credential files (when not using --allow-full-filesystem-access)
+    //
+    // For chroot mode: hide both normal and /host-prefixed paths since /tmp is
+    // mounted at both /tmp and /host/tmp
     tmpfs: (() => {
-      const tmpfsMounts = [];
+      const tmpfsMounts: string[] = [];
 
-      // Always hide MCP logs directory
+      // Always hide MCP logs and workDir
       if (config.enableChroot) {
         tmpfsMounts.push('/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
         tmpfsMounts.push('/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
+        tmpfsMounts.push(`${config.workDir}:rw,noexec,nosuid,size=1m`);
+        tmpfsMounts.push(`/host${config.workDir}:rw,noexec,nosuid,size=1m`);
       } else {
         tmpfsMounts.push('/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
+        tmpfsMounts.push(`${config.workDir}:rw,noexec,nosuid,size=1m`);
       }
 
       // Add credential tmpfs mounts (if any were generated)
@@ -911,9 +928,13 @@ export function generateDockerCompose(
 export async function writeConfigs(config: WrapperConfig): Promise<void> {
   logger.debug('Writing configuration files...');
 
-  // Ensure work directory exists
+  // Ensure work directory exists with restricted permissions (owner-only access)
+  // Defense-in-depth: even if tmpfs overlay fails, non-root processes on the host
+  // cannot read the docker-compose.yml which contains sensitive tokens
   if (!fs.existsSync(config.workDir)) {
-    fs.mkdirSync(config.workDir, { recursive: true });
+    fs.mkdirSync(config.workDir, { recursive: true, mode: 0o700 });
+  } else {
+    fs.chmodSync(config.workDir, 0o700);
   }
 
   // Create agent logs directory for persistence
@@ -1029,13 +1050,15 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     allowHostPorts: config.allowHostPorts,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
-  fs.writeFileSync(squidConfigPath, squidConfig);
+  fs.writeFileSync(squidConfigPath, squidConfig, { mode: 0o600 });
   logger.debug(`Squid config written to: ${squidConfigPath}`);
 
   // Write Docker Compose config
+  // Uses mode 0o600 (owner-only read/write) because this file contains sensitive
+  // environment variables (tokens, API keys) in plaintext
   const dockerCompose = generateDockerCompose(config, networkConfig, sslConfig);
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
-  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose));
+  fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
 }
 
