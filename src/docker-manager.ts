@@ -905,6 +905,16 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   }
   logger.debug(`Agent logs directory created at: ${agentLogsDir}`);
 
+  // Create the mountpoint directory on the host for agent logs
+  // This is required because ~/.copilot is mounted read-only, so Docker cannot
+  // create the mountpoint for ~/.copilot/logs inside the read-only mount
+  const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
+  const copilotLogsDir = path.join(effectiveHome, '.copilot', 'logs');
+  if (!fs.existsSync(copilotLogsDir)) {
+    fs.mkdirSync(copilotLogsDir, { recursive: true });
+    logger.debug(`Copilot logs mountpoint created at: ${copilotLogsDir}`);
+  }
+
   // Create squid logs directory for persistence
   // If proxyLogsDir is specified, write directly there (timeout-safe)
   // Otherwise, use workDir/squid-logs (will be moved to /tmp after cleanup)
