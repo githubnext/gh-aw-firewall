@@ -503,9 +503,9 @@ export function generateDockerCompose(
     }
 
     // Mount ~/.cargo for Rust binaries (read-only) if it exists
-    // SKIP if allowFullFilesystemAccess is false (credentials will be hidden via tmpfs)
+    // Credentials in ~/.cargo/credentials are hidden separately via tmpfs
     const hostCargoDir = path.join(userHome, '.cargo');
-    if (fs.existsSync(hostCargoDir) && config.allowFullFilesystemAccess) {
+    if (fs.existsSync(hostCargoDir)) {
       agentVolumes.push(`${hostCargoDir}:/host${hostCargoDir}:ro`);
     }
 
@@ -705,7 +705,7 @@ export function generateDockerCompose(
       `${effectiveHome}/.azure`,        // Azure credentials
       `${effectiveHome}/.config/gcloud`, // Google Cloud credentials
       `${effectiveHome}/.config/gh`,    // GitHub CLI OAuth tokens
-      `${effectiveHome}/.cargo`,        // Rust crates.io tokens (credentials file)
+      `${effectiveHome}/.cargo/credentials`, // Rust crates.io tokens
       `${effectiveHome}/.composer`,     // PHP Composer tokens (auth.json)
     ];
 
@@ -739,7 +739,7 @@ export function generateDockerCompose(
       `${userHome}/.azure`,        // Azure credentials
       `${userHome}/.config/gcloud`, // Google Cloud credentials
       `${userHome}/.config/gh`,    // GitHub CLI OAuth tokens
-      `${userHome}/.cargo`,        // Rust crates.io tokens (credentials file)
+      `${userHome}/.cargo/credentials`, // Rust crates.io tokens
       `${userHome}/.composer`,     // PHP Composer tokens (auth.json)
     ];
 

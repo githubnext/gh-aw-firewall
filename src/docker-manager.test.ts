@@ -655,7 +655,7 @@ describe('docker-manager', () => {
       expect(volumes).not.toContain(`${homeDir}:/host${homeDir}:rw`);
     });
 
-    it('should not mount .cargo when enableChroot is true and allowFullFilesystemAccess is false', () => {
+    it('should mount .cargo read-only and hide only credentials when enableChroot is true and allowFullFilesystemAccess is false', () => {
       const configWithChroot = {
         ...mockConfig,
         enableChroot: true,
@@ -666,14 +666,14 @@ describe('docker-manager', () => {
       const volumes = agent.volumes as string[];
       const tmpfs = agent.tmpfs as string[];
 
-      // Should NOT mount .cargo as volume (it's hidden via tmpfs)
+      // Should mount .cargo as volume (read-only) so toolchain binaries are accessible
       const homeDir = process.env.HOME || '/root';
       const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const cargoVolumePattern = new RegExp(`${escapeRegExp(homeDir)}.*\\.cargo.*:/host.*\\.cargo`);
-      expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(false);
+      const cargoVolumePattern = new RegExp(`${escapeRegExp(homeDir)}/\\.cargo:/host.*\\.cargo:ro`);
+      expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(true);
 
-      // Should have .cargo hidden via tmpfs
-      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(true);
+      // Should hide only .cargo/credentials via tmpfs (not the entire directory)
+      expect(tmpfs.some((t: string) => t.includes('.cargo/credentials'))).toBe(true);
     });
 
     it('should mount .cargo when enableChroot is true and allowFullFilesystemAccess is true', () => {
