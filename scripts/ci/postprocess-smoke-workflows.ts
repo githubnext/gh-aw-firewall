@@ -4,22 +4,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../..');
-const workflowPaths = [
-  // Existing smoke workflows
-  path.join(repoRoot, '.github/workflows/smoke-copilot.lock.yml'),
-  path.join(repoRoot, '.github/workflows/smoke-claude.lock.yml'),
-  path.join(repoRoot, '.github/workflows/smoke-chroot.lock.yml'),
-  path.join(repoRoot, '.github/workflows/smoke-codex.lock.yml'),
-  // Build test workflows
-  path.join(repoRoot, '.github/workflows/build-test-node.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-go.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-rust.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-java.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-cpp.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-deno.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-bun.lock.yml'),
-  path.join(repoRoot, '.github/workflows/build-test-dotnet.lock.yml'),
-];
+
+// Find all .lock.yml files that contain "Ingest agent output" step
+// This ensures we cover all agentic workflows, not just a hardcoded subset
+const workflowsDir = path.join(repoRoot, '.github/workflows');
+const allLockFiles = fs
+  .readdirSync(workflowsDir)
+  .filter((file) => file.endsWith('.lock.yml'))
+  .map((file) => path.join(workflowsDir, file));
+
+// Filter to only workflows that have the "Ingest agent output" step
+const workflowPaths = allLockFiles.filter((filePath) => {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return content.includes('- name: Ingest agent output');
+});
 
 // Matches the install step with captured indentation:
 // - "Install awf binary" step at any indent level
@@ -137,8 +135,10 @@ for (const workflowPath of workflowPaths) {
 
   if (modified) {
     fs.writeFileSync(workflowPath, content);
-    console.log(`Updated ${workflowPath}`);
+    console.log(`Updated ${path.basename(workflowPath)}`);
   } else {
-    console.log(`Skipping ${workflowPath}: no changes needed.`);
+    console.log(`Skipping ${path.basename(workflowPath)}: no changes needed.`);
   }
 }
+
+console.log(`\nProcessed ${workflowPaths.length} workflow(s) with "Ingest agent output" step`);
