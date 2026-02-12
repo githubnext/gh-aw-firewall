@@ -282,7 +282,7 @@ After calling `unsetenv()` to clear tokens from `/proc/self/environ`, the librar
 
 **Log messages:**
 - `INFO: Token <name> verified cleared from N task(s)` - Token successfully cleared from all tasks (✓ secure)
-- `WARNING: Token <name> still exposed in /proc/self/task/TID/environ` - Token still visible in task environ (⚠ security concern)
+- `WARNING: Token <name> still exposed in /proc/self/task/<tid>/environ` - Token still visible in task environ, where `<tid>` is the actual task ID (⚠ security concern)
 - `INFO: No tasks found under /proc/self/task` - Task directory not accessible or empty
 - `INFO: Could not access /proc/self/task` - Filesystem not available (e.g., non-Linux systems)
 
