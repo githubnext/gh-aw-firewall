@@ -1,8 +1,9 @@
 //! One-Shot Token LD_PRELOAD Library
 //!
 //! Intercepts getenv() calls for sensitive token environment variables.
-//! On first access, returns the real value and immediately unsets the variable.
-//! Subsequent calls return NULL, preventing token reuse by malicious code.
+//! On first access, caches the value in memory and unsets from environment.
+//! Subsequent calls return the cached value, so the process can read tokens
+//! multiple times while /proc/self/environ no longer exposes them.
 //!
 //! Configuration:
 //!   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
@@ -13,7 +14,7 @@
 
 use libc::{c_char, c_void};
 use once_cell::sync::Lazy;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::Mutex;
@@ -40,17 +41,17 @@ const DEFAULT_SENSITIVE_TOKENS: &[&str] = &[
     "CODEX_API_KEY",
 ];
 
-/// State for tracking tokens and their access status
+/// State for tracking tokens and their cached values
 struct TokenState {
     /// List of sensitive token names to protect
     tokens: Vec<String>,
-    /// Set of tokens that have already been accessed
-    accessed: HashSet<String>,
+    /// Cached token values - stored on first access so subsequent reads succeed
+    /// even after the variable is unset from the environment. This allows
+    /// /proc/self/environ to be cleaned while the process can still read tokens.
+    /// Maps token name to cached C string pointer (or null if token was not set).
+    cache: HashMap<String, *mut c_char>,
     /// Whether initialization has completed
     initialized: bool,
-    /// Leaked CStrings that must persist for the lifetime of the process
-    /// (returned pointers must remain valid for callers)
-    leaked_strings: Vec<*mut c_char>,
 }
 
 // SAFETY: TokenState is only accessed through a Mutex, ensuring thread safety
@@ -61,9 +62,8 @@ impl TokenState {
     fn new() -> Self {
         Self {
             tokens: Vec::new(),
-            accessed: HashSet::new(),
+            cache: HashMap::new(),
             initialized: false,
-            leaked_strings: Vec::new(),
         }
     }
 }
@@ -178,12 +178,25 @@ fn init_token_list(state: &mut TokenState) {
     state.initialized = true;
 }
 
-/// Check if a token name is sensitive and return whether it's been accessed
+/// Check if a token name is sensitive
 fn is_sensitive_token(state: &TokenState, name: &str) -> bool {
     state.tokens.iter().any(|t| t == name)
 }
 
-/// Core implementation for one-shot token access
+/// Format token value for logging: show first 4 characters + "..."
+fn format_token_value(value: &str) -> String {
+    if value.is_empty() {
+        return "(empty)".to_string();
+    }
+    
+    if value.len() <= 4 {
+        format!("{}...", value)
+    } else {
+        format!("{}...", &value[..4])
+    }
+}
+
+/// Core implementation for cached token access
 ///
 /// # Safety
 /// - `name` must be a valid null-terminated C string
@@ -222,58 +235,59 @@ unsafe fn handle_getenv_impl(
         return real_getenv_fn(name);
     }
 
-    // Sensitive token - handle one-shot access
-    if state.accessed.contains(name_str) {
-        // Already accessed - return NULL
-        return ptr::null_mut();
+    // Sensitive token - check if already cached
+    if let Some(&cached_ptr) = state.cache.get(name_str) {
+        // Already accessed - return cached value (may be null if token wasn't set)
+        return cached_ptr;
     }
 
-    // First access - get the real value
+    // First access - get the real value and cache it
     let result = real_getenv_fn(name);
 
     if result.is_null() {
-        // Token not set - mark as accessed to prevent repeated log messages
-        state.accessed.insert(name_str.to_string());
+        // Token not set - cache null to prevent repeated log messages
+        state.cache.insert(name_str.to_string(), ptr::null_mut());
         return ptr::null_mut();
     }
 
     // Copy the value before unsetting
     let value_cstr = CStr::from_ptr(result);
+    let value_str = value_cstr.to_str().unwrap_or("");
     let value_bytes = value_cstr.to_bytes_with_nul();
     
     // Allocate memory that will never be freed (must persist for caller's use)
-    let leaked = libc::malloc(value_bytes.len()) as *mut c_char;
-    if leaked.is_null() {
+    let cached = libc::malloc(value_bytes.len()) as *mut c_char;
+    if cached.is_null() {
         eprintln!("[one-shot-token] ERROR: Failed to allocate memory for token value");
         std::process::abort();
     }
     
     // Copy the value
-    ptr::copy_nonoverlapping(value_bytes.as_ptr(), leaked as *mut u8, value_bytes.len());
+    ptr::copy_nonoverlapping(value_bytes.as_ptr(), cached as *mut u8, value_bytes.len());
     
-    // Track the leaked pointer (for documentation purposes - we never free it)
-    state.leaked_strings.push(leaked);
+    // Cache the pointer so subsequent reads return the same value
+    state.cache.insert(name_str.to_string(), cached);
 
-    // Unset the environment variable
+    // Unset the environment variable so /proc/self/environ is cleared
     libc::unsetenv(name);
 
     let suffix = if via_secure { " (via secure_getenv)" } else { "" };
     eprintln!(
-        "[one-shot-token] Token {} accessed and cleared{}",
-        name_str, suffix
+        "[one-shot-token] Token {} accessed and cached (value: {}){}",
+        name_str, format_token_value(value_str), suffix
     );
 
-    // Mark as accessed
-    state.accessed.insert(name_str.to_string());
-
-    leaked
+    cached
 }
 
 /// Intercepted getenv function
 ///
 /// For sensitive tokens:
-/// - First call: returns the real value, then unsets the variable
-/// - Subsequent calls: returns NULL
+/// - First call: caches the value, unsets from environment, returns cached value
+/// - Subsequent calls: returns the cached value from memory
+///
+/// This clears tokens from /proc/self/environ while allowing the process
+/// to read them multiple times via getenv().
 ///
 /// For all other variables: passes through to real getenv
 ///
@@ -288,11 +302,11 @@ pub unsafe extern "C" fn getenv(name: *const c_char) -> *mut c_char {
 /// Intercepted secure_getenv function
 ///
 /// This function preserves secure_getenv semantics (returns NULL in privileged contexts)
-/// while applying the same one-shot token protection as getenv.
+/// while applying the same cached token protection as getenv.
 ///
 /// For sensitive tokens:
-/// - First call: returns the real value (if not in privileged context), then unsets the variable
-/// - Subsequent calls: returns NULL
+/// - First call: caches the value, unsets from environment, returns cached value
+/// - Subsequent calls: returns the cached value from memory
 ///
 /// For all other variables: passes through to real secure_getenv (or getenv if unavailable)
 ///
@@ -319,7 +333,16 @@ mod tests {
     fn test_token_state_new() {
         let state = TokenState::new();
         assert!(state.tokens.is_empty());
-        assert!(state.accessed.is_empty());
+        assert!(state.cache.is_empty());
         assert!(!state.initialized);
+    }
+
+    #[test]
+    fn test_format_token_value() {
+        assert_eq!(format_token_value(""), "(empty)");
+        assert_eq!(format_token_value("ab"), "ab...");
+        assert_eq!(format_token_value("abcd"), "abcd...");
+        assert_eq!(format_token_value("abcde"), "abcd...");
+        assert_eq!(format_token_value("ghp_1234567890"), "ghp_...");
     }
 }
