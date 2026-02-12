@@ -2089,6 +2089,18 @@ describe('docker-manager', () => {
       expect(fs.existsSync(testDir)).toBe(false);
     });
 
+    it('should clean up chroot-home directory alongside workDir', async () => {
+      // Create chroot-home sibling directory (as writeConfigs does in chroot mode)
+      const chrootHomeDir = `${testDir}-chroot-home`;
+      fs.mkdirSync(chrootHomeDir, { recursive: true });
+
+      await cleanup(testDir, false);
+
+      // Both workDir and chroot-home should be removed
+      expect(fs.existsSync(testDir)).toBe(false);
+      expect(fs.existsSync(chrootHomeDir)).toBe(false);
+    });
+
     it('should preserve agent logs when they exist', async () => {
       // Create agent logs directory with a file
       const agentLogsDir = path.join(testDir, 'agent-logs');
