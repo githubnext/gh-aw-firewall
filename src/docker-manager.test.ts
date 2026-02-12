@@ -505,8 +505,10 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
       // Should include home directory mount
       expect(volumes.some((v: string) => v.includes(process.env.HOME || '/root'))).toBe(true);
-      // Should include credential hiding mounts
-      expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(true);
+      // Should include credential hiding via tmpfs (not volumes)
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      expect(tmpfs.some((t: string) => t.includes('.docker'))).toBe(true);
     });
 
     it('should use custom volume mounts when specified', () => {
@@ -537,8 +539,10 @@ describe('docker-manager', () => {
 
       // Default: selective mounting (no blanket /:/host:rw)
       expect(volumes).not.toContain('/:/host:rw');
-      // Should include selective mounts with credential hiding
-      expect(volumes.some((v: string) => v.includes('/dev/null'))).toBe(true);
+      // Should include selective mounts with credential hiding via tmpfs
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      expect(tmpfs.some((t: string) => t.includes('.docker') || t.includes('.ssh') || t.includes('.aws'))).toBe(true);
     });
 
     it('should use blanket mount when allowFullFilesystemAccess is true', () => {
@@ -552,8 +556,13 @@ describe('docker-manager', () => {
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
-      // Should NOT include /dev/null credential hiding
-      expect(volumes.some((v: string) => v.startsWith('/dev/null'))).toBe(false);
+      // Should NOT include credential hiding tmpfs (only MCP logs tmpfs)
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      // Should have MCP logs tmpfs
+      expect(tmpfs.some((t: string) => t.includes('mcp-logs'))).toBe(true);
+      // Should NOT have credential tmpfs
+      expect(tmpfs.some((t: string) => t.includes('.docker') || t.includes('.ssh') || t.includes('.aws'))).toBe(false);
     });
 
     it('should use blanket mount when allowFullFilesystemAccess is true in chroot mode', () => {

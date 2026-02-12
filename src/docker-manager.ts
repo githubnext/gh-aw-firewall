@@ -672,6 +672,9 @@ export function generateDockerCompose(
     });
   }
 
+  // Store credential tmpfs mounts to add later
+  const credentialTmpfsMounts: string[] = [];
+
   // Apply security policy: selective mounting vs full filesystem access
   if (config.allowFullFilesystemAccess) {
     // User explicitly opted into full filesystem access - log security warning
@@ -687,82 +690,66 @@ export function generateDockerCompose(
     // This provides security against credential exfiltration via prompt injection
     logger.debug('Using selective mounting for security (credential files hidden)');
 
-    // SECURITY: Hide credential files by mounting /dev/null over them
+    // SECURITY: Hide credential directories using tmpfs (empty in-memory filesystem)
     // This prevents prompt-injected commands from reading sensitive tokens
-    // even if the attacker knows the file paths
-    const credentialFiles = [
-      `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
-      `${effectiveHome}/.npmrc`,                    // NPM registry tokens
-      `${effectiveHome}/.cargo/credentials`,        // Rust crates.io tokens
-      `${effectiveHome}/.composer/auth.json`,       // PHP Composer tokens
-      `${effectiveHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
-      // SSH private keys (CRITICAL - server access, git operations)
-      `${effectiveHome}/.ssh/id_rsa`,
-      `${effectiveHome}/.ssh/id_ed25519`,
-      `${effectiveHome}/.ssh/id_ecdsa`,
-      `${effectiveHome}/.ssh/id_dsa`,
-      // Cloud provider credentials (CRITICAL - infrastructure access)
-      `${effectiveHome}/.aws/credentials`,
-      `${effectiveHome}/.aws/config`,
-      `${effectiveHome}/.kube/config`,
-      `${effectiveHome}/.azure/credentials`,
-      `${effectiveHome}/.config/gcloud/credentials.db`,
+    // even if the attacker knows the file paths.
+    // Using tmpfs instead of /dev/null mounts avoids Docker errors when parent directories
+    // don't exist in the container filesystem.
+    const credentialDirs = [
+      `${effectiveHome}/.docker`,       // Docker Hub tokens (config.json)
+      `${effectiveHome}/.ssh`,          // SSH private keys (CRITICAL - server access, git operations)
+      `${effectiveHome}/.aws`,          // AWS credentials (CRITICAL - infrastructure access)
+      `${effectiveHome}/.kube`,         // Kubernetes config (CRITICAL - cluster access)
+      `${effectiveHome}/.azure`,        // Azure credentials
+      `${effectiveHome}/.config/gcloud`, // Google Cloud credentials
+      `${effectiveHome}/.config/gh`,    // GitHub CLI OAuth tokens
+      `${effectiveHome}/.cargo`,        // Rust crates.io tokens (credentials file)
+      `${effectiveHome}/.composer`,     // PHP Composer tokens (auth.json)
     ];
 
-    // Only mount /dev/null over credential files if their parent directory exists
-    // This prevents Docker mount errors when the parent directory doesn't exist
-    let hiddenCount = 0;
-    credentialFiles.forEach(credFile => {
-      const parentDir = path.dirname(credFile);
-      if (fs.existsSync(parentDir)) {
-        agentVolumes.push(`/dev/null:${credFile}:ro`);
-        hiddenCount++;
-      } else {
-        logger.debug(`Skipping credential hide for ${credFile} (parent dir doesn't exist)`);
-      }
+    // Add tmpfs mounts for credential directories
+    credentialDirs.forEach(credDir => {
+      credentialTmpfsMounts.push(`${credDir}:rw,noexec,nosuid,size=1m`);
     });
 
-    logger.debug(`Hidden ${hiddenCount} credential file(s) via /dev/null mounts`);
+    // Also hide ~/.npmrc file (NPM registry tokens) - needs special handling as it's a file
+    // Mount its parent directory as tmpfs to hide it
+    const npmrcParent = effectiveHome;
+    if (!credentialTmpfsMounts.some(mount => mount.startsWith(`${npmrcParent}:`))) {
+      // Only add if we're not already mounting the entire home directory
+      // In practice, we'll mount ~/.npmrc as a tmpfs (which will be an empty directory)
+      credentialTmpfsMounts.push(`${effectiveHome}/.npmrc:rw,noexec,nosuid,size=1m`);
+    }
+
+    logger.debug(`Hidden ${credentialTmpfsMounts.length} credential location(s) via tmpfs mounts`);
   }
 
   // Chroot mode: Hide credentials at /host paths
   if (config.enableChroot && !config.allowFullFilesystemAccess) {
-    logger.debug('Chroot mode: Hiding credential files at /host paths');
+    logger.debug('Chroot mode: Hiding credential directories at /host paths');
 
     const userHome = getRealUserHome();
-    const chrootCredentialPaths = [
-      `${userHome}/.docker/config.json`,       // Docker Hub tokens
-      `${userHome}/.npmrc`,                    // NPM registry tokens
-      `${userHome}/.cargo/credentials`,        // Rust crates.io tokens
-      `${userHome}/.composer/auth.json`,       // PHP Composer tokens
-      `${userHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
-      // SSH private keys (CRITICAL - server access, git operations)
-      `${userHome}/.ssh/id_rsa`,
-      `${userHome}/.ssh/id_ed25519`,
-      `${userHome}/.ssh/id_ecdsa`,
-      `${userHome}/.ssh/id_dsa`,
-      // Cloud provider credentials (CRITICAL - infrastructure access)
-      `${userHome}/.aws/credentials`,
-      `${userHome}/.aws/config`,
-      `${userHome}/.kube/config`,
-      `${userHome}/.azure/credentials`,
-      `${userHome}/.config/gcloud/credentials.db`,
+    const chrootCredentialDirs = [
+      `${userHome}/.docker`,       // Docker Hub tokens (config.json)
+      `${userHome}/.ssh`,          // SSH private keys (CRITICAL - server access, git operations)
+      `${userHome}/.aws`,          // AWS credentials (CRITICAL - infrastructure access)
+      `${userHome}/.kube`,         // Kubernetes config (CRITICAL - cluster access)
+      `${userHome}/.azure`,        // Azure credentials
+      `${userHome}/.config/gcloud`, // Google Cloud credentials
+      `${userHome}/.config/gh`,    // GitHub CLI OAuth tokens
+      `${userHome}/.cargo`,        // Rust crates.io tokens (credentials file)
+      `${userHome}/.composer`,     // PHP Composer tokens (auth.json)
     ];
 
-    // Only mount /dev/null over credential files if their parent directory exists
-    // This prevents Docker mount errors when the parent directory doesn't exist
-    let chrootHiddenCount = 0;
-    chrootCredentialPaths.forEach(credPath => {
-      const parentDir = path.dirname(credPath);
-      if (fs.existsSync(parentDir)) {
-        agentVolumes.push(`/dev/null:/host${credPath}:ro`);
-        chrootHiddenCount++;
-      } else {
-        logger.debug(`Skipping chroot credential hide for ${credPath} (parent dir doesn't exist)`);
-      }
+    // Add tmpfs mounts for credential directories in chroot mode
+    chrootCredentialDirs.forEach(credDir => {
+      credentialTmpfsMounts.push(`/host${credDir}:rw,noexec,nosuid,size=1m`);
     });
 
-    logger.debug(`Hidden ${chrootHiddenCount} credential file(s) in chroot mode`);
+    // Also hide ~/.npmrc file (NPM registry tokens) - mount as tmpfs
+    credentialTmpfsMounts.push(`/host${userHome}/.npmrc:rw,noexec,nosuid,size=1m`);
+
+    logger.debug(`Hidden ${credentialTmpfsMounts.length} credential location(s) in chroot mode via tmpfs mounts`);
   }
 
   // Agent service configuration
@@ -777,17 +764,28 @@ export function generateDockerCompose(
     dns_search: [], // Disable DNS search domains to prevent embedded DNS fallback
     volumes: agentVolumes,
     environment,
-    // Hide /tmp/gh-aw/mcp-logs directory using tmpfs (empty in-memory filesystem)
-    // This prevents the agent from accessing MCP server logs while still allowing
-    // the host to write logs to /tmp/gh-aw/mcp-logs/ (e.g., /tmp/gh-aw/mcp-logs/safeoutputs/)
-    // For normal mode: hide /tmp/gh-aw/mcp-logs
-    // For chroot mode: hide both /tmp/gh-aw/mcp-logs and /host/tmp/gh-aw/mcp-logs
-    tmpfs: config.enableChroot
-      ? [
-          '/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
-          '/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
-        ]
-      : ['/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m'],
+    // Hide sensitive directories using tmpfs (empty in-memory filesystem)
+    // This prevents the agent from accessing:
+    // 1. MCP server logs at /tmp/gh-aw/mcp-logs
+    // 2. Credential files/directories (when not using --allow-full-filesystem-access)
+    tmpfs: (() => {
+      const tmpfsMounts = [];
+
+      // Always hide MCP logs directory
+      if (config.enableChroot) {
+        tmpfsMounts.push('/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
+        tmpfsMounts.push('/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
+      } else {
+        tmpfsMounts.push('/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m');
+      }
+
+      // Add credential tmpfs mounts (if any were generated)
+      if (credentialTmpfsMounts.length > 0) {
+        tmpfsMounts.push(...credentialTmpfsMounts);
+      }
+
+      return tmpfsMounts;
+    })(),
     depends_on: {
       'squid-proxy': {
         condition: 'service_healthy',
