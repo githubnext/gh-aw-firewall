@@ -1495,7 +1495,7 @@ describe('docker-manager', () => {
       expect(fs.existsSync(path.join(testDir, 'squid-logs'))).toBe(true);
     });
 
-    it('should create /tmp/gh-aw/mcp-logs directory', async () => {
+    it('should create /tmp/gh-aw/mcp-logs directory with world-writable permissions', async () => {
       const config: WrapperConfig = {
         allowedDomains: ['github.com'],
         agentCommand: 'echo test',
@@ -1514,6 +1514,8 @@ describe('docker-manager', () => {
       expect(fs.existsSync('/tmp/gh-aw/mcp-logs')).toBe(true);
       const stats = fs.statSync('/tmp/gh-aw/mcp-logs');
       expect(stats.isDirectory()).toBe(true);
+      // Verify permissions are 0o777 (rwxrwxrwx) to allow non-root users to create subdirectories
+      expect((stats.mode & 0o777).toString(8)).toBe('777');
     });
 
     it('should write squid.conf file', async () => {
