@@ -5,6 +5,7 @@ FROM ubuntu/squid:latest
 RUN set -eux; \
     PKGS="curl dnsutils net-tools netcat-openbsd openssl squid-openssl"; \
     apt-get update && \
+    apt-get install -y --only-upgrade gpgv && \
     ( apt-get install -y --no-install-recommends $PKGS || \
       (rm -rf /var/lib/apt/lists/* && apt-get update && \
        apt-get install -y --no-install-recommends $PKGS) ) && \
