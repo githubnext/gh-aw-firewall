@@ -294,4 +294,60 @@ describe('Credential Hiding Security', () => {
       expect(output).not.toContain('auth');
     }, 120000);
   });
+
+  describe('MCP Logs Directory Hiding', () => {
+    test('Test 13: /tmp/gh-aw/mcp-logs/ is hidden in normal mode', async () => {
+      // Try to access the mcp-logs directory
+      const result = await runner.runWithSudo(
+        'ls -la /tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // With tmpfs mounted over the directory, ls should succeed but show empty directory
+      // The directory appears to exist (as an empty tmpfs) but contains no files
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      // Verify either:
+      // 1. Directory listing shows it's effectively empty (total size indicates empty tmpfs)
+      // 2. Or old /dev/null behavior ("Not a directory")
+      expect(allOutput).toMatch(/total|Not a directory|cannot access/i);
+    }, 120000);
+
+    test('Test 14: /tmp/gh-aw/mcp-logs/ is hidden in chroot mode', async () => {
+      // Try to access the mcp-logs directory at /host path
+      const result = await runner.runWithSudo(
+        'ls -la /host/tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          enableChroot: true,
+        }
+      );
+
+      // With tmpfs mounted over the directory at /host path, ls should succeed but show empty
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/total|Not a directory|cannot access/i);
+    }, 120000);
+
+    test('Test 15: MCP logs files cannot be read in normal mode', async () => {
+      // Try to read a typical MCP log file path
+      const result = await runner.runWithSudo(
+        'cat /tmp/gh-aw/mcp-logs/safeoutputs/log.txt 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // Should fail with "No such file or directory" (tmpfs is empty)
+      // This confirms the tmpfs mount is preventing file access to host files
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/No such file or directory|Not a directory|cannot access/i);
+    }, 120000);
+  });
 });

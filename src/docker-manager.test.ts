@@ -1420,6 +1420,39 @@ describe('docker-manager', () => {
         expect(env.AWF_DNS_SERVERS).toBe('8.8.8.8,8.8.4.4');
       });
     });
+
+    describe('workDir tmpfs overlay (secrets protection)', () => {
+      it('should hide workDir from agent container via tmpfs in normal mode', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const tmpfs = agent.tmpfs as string[];
+
+        // workDir should be hidden via tmpfs overlay to prevent reading docker-compose.yml
+        expect(tmpfs).toContainEqual(expect.stringContaining(mockConfig.workDir));
+        expect(tmpfs.some((t: string) => t.startsWith(`${mockConfig.workDir}:`))).toBe(true);
+      });
+
+      it('should hide workDir at both paths in chroot mode', () => {
+        const configWithChroot = { ...mockConfig, enableChroot: true };
+        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const agent = result.services.agent;
+        const tmpfs = agent.tmpfs as string[];
+
+        // Both /tmp/awf-test and /host/tmp/awf-test should be hidden
+        expect(tmpfs.some((t: string) => t.startsWith(`${mockConfig.workDir}:`))).toBe(true);
+        expect(tmpfs.some((t: string) => t.startsWith(`/host${mockConfig.workDir}:`))).toBe(true);
+      });
+
+      it('should still hide mcp-logs alongside workDir', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+        const agent = result.services.agent;
+        const tmpfs = agent.tmpfs as string[];
+
+        // Both mcp-logs and workDir should be hidden
+        expect(tmpfs.some((t: string) => t.includes('/tmp/gh-aw/mcp-logs'))).toBe(true);
+        expect(tmpfs.some((t: string) => t.startsWith(`${mockConfig.workDir}:`))).toBe(true);
+      });
+    });
   });
 
   describe('writeConfigs', () => {
@@ -1495,6 +1528,29 @@ describe('docker-manager', () => {
       expect(fs.existsSync(path.join(testDir, 'squid-logs'))).toBe(true);
     });
 
+    it('should create /tmp/gh-aw/mcp-logs directory with world-writable permissions', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail, but directory should still be created
+      }
+
+      // Verify /tmp/gh-aw/mcp-logs directory was created
+      expect(fs.existsSync('/tmp/gh-aw/mcp-logs')).toBe(true);
+      const stats = fs.statSync('/tmp/gh-aw/mcp-logs');
+      expect(stats.isDirectory()).toBe(true);
+      // Verify permissions are 0o777 (rwxrwxrwx) to allow non-root users to create subdirectories
+      expect((stats.mode & 0o777).toString(8)).toBe('777');
+    });
+
     it('should write squid.conf file', async () => {
       const config: WrapperConfig = {
         allowedDomains: ['github.com', 'example.com'],
@@ -1540,6 +1596,58 @@ describe('docker-manager', () => {
         const content = fs.readFileSync(dockerComposePath, 'utf-8');
         expect(content).toContain('awf-squid');
         expect(content).toContain('awf-agent');
+      }
+    });
+
+    it('should create work directory with restricted permissions (0o700)', async () => {
+      const newWorkDir = path.join(testDir, 'restricted-dir');
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: newWorkDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail if seccomp profile not found
+      }
+
+      // Verify directory was created with restricted permissions
+      expect(fs.existsSync(newWorkDir)).toBe(true);
+      const stats = fs.statSync(newWorkDir);
+      expect((stats.mode & 0o777).toString(8)).toBe('700');
+    });
+
+    it('should write config files with restricted permissions (0o600)', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf has restricted permissions
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const stats = fs.statSync(squidConfPath);
+        expect((stats.mode & 0o777).toString(8)).toBe('600');
+      }
+
+      // Verify docker-compose.yml has restricted permissions
+      const dockerComposePath = path.join(testDir, 'docker-compose.yml');
+      if (fs.existsSync(dockerComposePath)) {
+        const stats = fs.statSync(dockerComposePath);
+        expect((stats.mode & 0o777).toString(8)).toBe('600');
       }
     });
 
