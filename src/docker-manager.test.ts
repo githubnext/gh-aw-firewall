@@ -668,7 +668,8 @@ describe('docker-manager', () => {
 
       // Should NOT mount .cargo as volume (it's hidden via tmpfs)
       const homeDir = process.env.HOME || '/root';
-      const cargoVolumePattern = new RegExp(`${homeDir.replace(/\//g, '\\/')}.*\\.cargo.*:/host.*\\.cargo`);
+      const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const cargoVolumePattern = new RegExp(`${escapeRegExp(homeDir)}.*\\.cargo.*:/host.*\\.cargo`);
       expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(false);
 
       // Should have .cargo hidden via tmpfs
