@@ -709,11 +709,20 @@ export function generateDockerCompose(
       `${effectiveHome}/.config/gcloud/credentials.db`,
     ];
 
+    // Only mount /dev/null over credential files if their parent directory exists
+    // This prevents Docker mount errors when the parent directory doesn't exist
+    let hiddenCount = 0;
     credentialFiles.forEach(credFile => {
-      agentVolumes.push(`/dev/null:${credFile}:ro`);
+      const parentDir = path.dirname(credFile);
+      if (fs.existsSync(parentDir)) {
+        agentVolumes.push(`/dev/null:${credFile}:ro`);
+        hiddenCount++;
+      } else {
+        logger.debug(`Skipping credential hide for ${credFile} (parent dir doesn't exist)`);
+      }
     });
 
-    logger.debug(`Hidden ${credentialFiles.length} credential file(s) via /dev/null mounts`);
+    logger.debug(`Hidden ${hiddenCount} credential file(s) via /dev/null mounts`);
   }
 
   // Chroot mode: Hide credentials at /host paths
@@ -721,30 +730,39 @@ export function generateDockerCompose(
     logger.debug('Chroot mode: Hiding credential files at /host paths');
 
     const userHome = getRealUserHome();
-    const chrootCredentialFiles = [
-      `/dev/null:/host${userHome}/.docker/config.json:ro`,
-      `/dev/null:/host${userHome}/.npmrc:ro`,
-      `/dev/null:/host${userHome}/.cargo/credentials:ro`,
-      `/dev/null:/host${userHome}/.composer/auth.json:ro`,
-      `/dev/null:/host${userHome}/.config/gh/hosts.yml:ro`,
+    const chrootCredentialPaths = [
+      `${userHome}/.docker/config.json`,       // Docker Hub tokens
+      `${userHome}/.npmrc`,                    // NPM registry tokens
+      `${userHome}/.cargo/credentials`,        // Rust crates.io tokens
+      `${userHome}/.composer/auth.json`,       // PHP Composer tokens
+      `${userHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
       // SSH private keys (CRITICAL - server access, git operations)
-      `/dev/null:/host${userHome}/.ssh/id_rsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ed25519:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ecdsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_dsa:ro`,
+      `${userHome}/.ssh/id_rsa`,
+      `${userHome}/.ssh/id_ed25519`,
+      `${userHome}/.ssh/id_ecdsa`,
+      `${userHome}/.ssh/id_dsa`,
       // Cloud provider credentials (CRITICAL - infrastructure access)
-      `/dev/null:/host${userHome}/.aws/credentials:ro`,
-      `/dev/null:/host${userHome}/.aws/config:ro`,
-      `/dev/null:/host${userHome}/.kube/config:ro`,
-      `/dev/null:/host${userHome}/.azure/credentials:ro`,
-      `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      `${userHome}/.aws/credentials`,
+      `${userHome}/.aws/config`,
+      `${userHome}/.kube/config`,
+      `${userHome}/.azure/credentials`,
+      `${userHome}/.config/gcloud/credentials.db`,
     ];
 
-    chrootCredentialFiles.forEach(mount => {
-      agentVolumes.push(mount);
+    // Only mount /dev/null over credential files if their parent directory exists
+    // This prevents Docker mount errors when the parent directory doesn't exist
+    let chrootHiddenCount = 0;
+    chrootCredentialPaths.forEach(credPath => {
+      const parentDir = path.dirname(credPath);
+      if (fs.existsSync(parentDir)) {
+        agentVolumes.push(`/dev/null:/host${credPath}:ro`);
+        chrootHiddenCount++;
+      } else {
+        logger.debug(`Skipping chroot credential hide for ${credPath} (parent dir doesn't exist)`);
+      }
     });
 
-    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) in chroot mode`);
+    logger.debug(`Hidden ${chrootHiddenCount} credential file(s) in chroot mode`);
   }
 
   // Agent service configuration
