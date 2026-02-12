@@ -651,8 +651,8 @@ export function generateDockerCompose(
     // even if the attacker knows the file paths
     //
     // IMPORTANT: In chroot mode, the home directory is mounted at BOTH locations:
-    // - At ${effectiveHome} (direct mount for container environment)
-    // - At /host${userHome} (for chroot operations)
+    // - At the effective home path used inside the container environment
+    // - At /host plus the real user home path on the host (for chroot operations)
     // We must hide credentials at BOTH paths to prevent bypass attacks
     const credentialFiles = [
       `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
@@ -682,9 +682,9 @@ export function generateDockerCompose(
 
   // Chroot mode: Also hide credentials at /host paths
   // SECURITY FIX: Previously only /host paths were protected in chroot mode, but the home
-  // directory is mounted at BOTH ${effectiveHome} AND /host${userHome}. An attacker could
-  // bypass protection by accessing credentials via the direct home mount instead of /host.
-  // This fix ensures credentials are hidden at both mount locations.
+  // directory is mounted at BOTH the effective home path AND /host plus real user home.
+  // An attacker could bypass protection by accessing credentials via the direct home mount
+  // instead of /host. This fix ensures credentials are hidden at both mount locations.
   if (config.enableChroot && !config.allowFullFilesystemAccess) {
     logger.debug('Chroot mode: Also hiding credential files at /host paths');
 

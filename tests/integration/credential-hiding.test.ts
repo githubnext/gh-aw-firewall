@@ -186,9 +186,9 @@ describe('Credential Hiding Security', () => {
       // but the home directory was ALSO mounted directly at $HOME. An attacker could bypass
       // protection by reading from the direct mount instead of /host.
       //
-      // This test verifies that credentials are hidden at BOTH locations:
-      // 1. At /host${HOME} (chroot path)
-      // 2. At ${HOME} (direct mount)
+      // This test specifically verifies that credentials are hidden at the direct home mount
+      // (the bypass path). The /host chroot path is covered by
+      // "Test 6: Chroot mode hides credentials at /host paths".
 
       const result = await runner.runWithSudo(
         `cat ${homeDir}/.docker/config.json 2>&1 | grep -v "^\\[" | head -1`,
@@ -210,7 +210,8 @@ describe('Credential Hiding Security', () => {
     test('Test 9: Chroot mode hides GitHub CLI tokens at direct home path', async () => {
       const homeDir = os.homedir();
 
-      // Verify another critical credential file is hidden at direct home mount
+      // Verify another critical credential file is hidden at the direct home mount
+      // (the bypass path). The /host chroot path is covered by Test 6.
       const result = await runner.runWithSudo(
         `cat ${homeDir}/.config/gh/hosts.yml 2>&1 | grep -v "^\\[" | head -1`,
         {
