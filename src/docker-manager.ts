@@ -720,14 +720,17 @@ export function generateDockerCompose(
     environment,
     // SECURITY: Hide sensitive directories from agent using tmpfs overlays (empty in-memory filesystems)
     //
-    // 1. Hide /tmp/gh-aw/mcp-logs - prevents agent from accessing MCP server logs
-    //    while still allowing the host to write logs there
+    // 1. MCP logs: tmpfs over /tmp/gh-aw/mcp-logs prevents the agent from reading
+    //    MCP server logs inside the container. The host can still write to its own
+    //    /tmp/gh-aw/mcp-logs directory since tmpfs only affects the container's view.
     //
-    // 2. Hide workDir (e.g., /tmp/awf-<timestamp>) - prevents agent from reading
-    //    docker-compose.yml which contains all environment variables (tokens, API keys)
-    //    in plaintext. Without this, any code inside the container could extract secrets via:
-    //    cat /tmp/awf-*/docker-compose.yml
-    //    This is the primary fix for the secrets exposure vulnerability.
+    // 2. WorkDir: tmpfs over workDir (e.g., /tmp/awf-<timestamp>) prevents the agent
+    //    from reading docker-compose.yml which contains environment variables (tokens,
+    //    API keys) in plaintext. Without this overlay, code inside the container could
+    //    extract secrets via: cat /tmp/awf-*/docker-compose.yml
+    //    Note: volume mounts of workDir subdirectories (agent-logs, squid-logs, etc.)
+    //    are mapped to different container paths (e.g., ~/.copilot/logs, /var/log/squid)
+    //    so they are unaffected by the tmpfs overlay on workDir.
     //
     // For chroot mode: hide both normal and /host-prefixed paths since /tmp is
     // mounted at both /tmp and /host/tmp

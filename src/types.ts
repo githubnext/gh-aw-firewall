@@ -860,9 +860,12 @@ export interface DockerService {
   /**
    * Tmpfs mounts for the container
    *
-   * In-memory filesystems mounted over directories to hide their contents.
-   * Used as a security measure to prevent the agent from reading sensitive
-   * files (e.g., docker-compose.yml containing tokens, MCP logs).
+   * In-memory filesystems mounted over files or directories to shadow their
+   * contents. Used as a security measure to prevent the agent from reading
+   * sensitive files (e.g., docker-compose.yml containing tokens, MCP logs).
+   *
+   * Note: volume mounts of subdirectories that map to different container
+   * paths are unaffected by a tmpfs overlay on the parent directory.
    *
    * @example ['/tmp/awf-123:rw,noexec,nosuid,size=1m']
    */
