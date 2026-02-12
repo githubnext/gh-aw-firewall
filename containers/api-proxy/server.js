@@ -25,10 +25,10 @@ console.log('[API Proxy] Starting AWF API proxy sidecar...');
 console.log(`[API Proxy] HTTP_PROXY: ${HTTP_PROXY}`);
 console.log(`[API Proxy] HTTPS_PROXY: ${HTTPS_PROXY}`);
 if (OPENAI_API_KEY) {
-  console.log(`[API Proxy] OpenAI API key configured (${OPENAI_API_KEY.substring(0, 7)}...)`);
+  console.log('[API Proxy] OpenAI API key configured');
 }
 if (ANTHROPIC_API_KEY) {
-  console.log(`[API Proxy] Anthropic API key configured (${ANTHROPIC_API_KEY.substring(0, 10)}...)`);
+  console.log('[API Proxy] Anthropic API key configured');
 }
 
 // Create Express app
