@@ -484,6 +484,16 @@ export function generateDockerCompose(
     // Mount workspace directory at /host path for chroot
     agentVolumes.push(`${workspaceDir}:/host${workspaceDir}:rw`);
 
+    // Mount an empty writable home directory at /host$HOME
+    // This gives tools a writable $HOME without exposing credential files.
+    // The specific subdirectory mounts below (.cargo, .claude, etc.) overlay
+    // on top, providing access to only the directories we explicitly mount.
+    // Without this, $HOME inside the chroot is an empty root-owned directory
+    // created by Docker as a side effect of subdirectory mounts, which causes
+    // tools like rustc and Claude Code to hang or fail.
+    const emptyHomeDir = path.join(config.workDir, 'chroot-home');
+    agentVolumes.push(`${emptyHomeDir}:/host${effectiveHome}:rw`);
+
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
@@ -968,29 +978,26 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
   }
 
-  // Ensure chroot home directory and subdirectories exist with correct ownership
-  // before Docker bind-mounts them. If a source directory doesn't exist, Docker
-  // creates it as root:root, making it inaccessible to the agent user (e.g., UID 1001).
-  // This is critical for CLI tools that need writable home subdirectories
-  // (e.g., Claude Code needs ~/.claude, npm needs ~/.npm).
-  // We also ensure $HOME itself has correct ownership because Docker's creation of
-  // subdirectory mounts creates parent directories as root:root, which prevents
-  // tools from creating new files/directories directly in $HOME.
+  // Ensure chroot home subdirectories exist with correct ownership before Docker
+  // bind-mounts them. If a source directory doesn't exist, Docker creates it as
+  // root:root, making it inaccessible to the agent user (e.g., UID 1001).
+  // Also create an empty writable home directory that gets mounted as $HOME
+  // in the chroot, giving tools a writable home without exposing credentials.
   if (config.enableChroot) {
     const effectiveHome = getRealUserHome();
     const uid = parseInt(getSafeHostUid(), 10);
     const gid = parseInt(getSafeHostGid(), 10);
 
-    // Ensure $HOME exists and is owned by the agent user
-    // (Docker creates parent directories as root when bind-mounting subdirectories)
-    if (fs.existsSync(effectiveHome)) {
-      const stats = fs.statSync(effectiveHome);
-      if (stats.uid !== uid || stats.gid !== gid) {
-        fs.chownSync(effectiveHome, uid, gid);
-        logger.debug(`Fixed ownership of ${effectiveHome} to ${uid}:${gid}`);
-      }
+    // Create empty writable home directory for the chroot
+    // This is mounted as $HOME inside the container so tools can write to it
+    const emptyHomeDir = path.join(config.workDir, 'chroot-home');
+    if (!fs.existsSync(emptyHomeDir)) {
+      fs.mkdirSync(emptyHomeDir, { recursive: true });
     }
+    fs.chownSync(emptyHomeDir, uid, gid);
+    logger.debug(`Created chroot home directory: ${emptyHomeDir} (${uid}:${gid})`);
 
+    // Ensure source directories for subdirectory mounts exist with correct ownership
     const chrootHomeDirs = [
       '.copilot', '.cache', '.config', '.local',
       '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
@@ -1000,7 +1007,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
       if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
         fs.chownSync(dirPath, uid, gid);
-        logger.debug(`Created chroot home directory: ${dirPath} (${uid}:${gid})`);
+        logger.debug(`Created host home subdirectory: ${dirPath} (${uid}:${gid})`);
       }
     }
   }
