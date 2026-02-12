@@ -16,6 +16,8 @@ use libc::{c_char, c_void};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
+use std::fs;
+use std::io::Read;
 use std::ptr;
 use std::sync::Mutex;
 
@@ -196,6 +198,66 @@ fn format_token_value(value: &str) -> String {
     }
 }
 
+/// Check if a token still exists in /proc/self/task/*/environ files
+/// 
+/// This function verifies whether unsetenv() successfully cleared the token
+/// from all task-level environment files. Due to a Linux kernel behavior,
+/// /proc/PID/task/TID/environ may still expose the token even after unsetenv().
+fn check_task_environ_exposure(token_name: &str) {
+    // Try to read /proc/self/task directory
+    let task_dir = "/proc/self/task";
+    
+    let entries = match fs::read_dir(task_dir) {
+        Ok(entries) => entries,
+        Err(_) => {
+            eprintln!("[one-shot-token] INFO: Could not access {}", task_dir);
+            return;
+        }
+    };
+    
+    let mut task_count = 0;
+    let mut exposed_count = 0;
+    
+    // Check each task's environ file
+    for entry in entries.flatten() {
+        if let Ok(file_name) = entry.file_name().into_string() {
+            task_count += 1;
+            let environ_path = format!("{}/{}/environ", task_dir, file_name);
+            
+            // Try to read the environ file
+            if let Ok(mut file) = fs::File::open(&environ_path) {
+                let mut contents = Vec::new();
+                if file.read_to_end(&mut contents).is_ok() {
+                    // Parse null-separated KEY=VALUE pairs
+                    let environ_str = String::from_utf8_lossy(&contents);
+                    for entry in environ_str.split('\0') {
+                        if let Some(eq_pos) = entry.find('=') {
+                            let key = &entry[..eq_pos];
+                            if key == token_name {
+                                exposed_count += 1;
+                                eprintln!(
+                                    "[one-shot-token] WARNING: Token {} still exposed in {}",
+                                    token_name, environ_path
+                                );
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if task_count == 0 {
+        eprintln!("[one-shot-token] INFO: No tasks found under {}", task_dir);
+    } else if exposed_count == 0 {
+        eprintln!(
+            "[one-shot-token] INFO: Token {} verified cleared from {} task(s)",
+            token_name, task_count
+        );
+    }
+}
+
 /// Core implementation for cached token access
 ///
 /// # Safety
@@ -270,6 +332,9 @@ unsafe fn handle_getenv_impl(
 
     // Unset the environment variable so /proc/self/environ is cleared
     libc::unsetenv(name);
+
+    // Check if the token still exists in task-level environ files
+    check_task_environ_exposure(name_str);
 
     let suffix = if via_secure { " (via secure_getenv)" } else { "" };
     eprintln!(
