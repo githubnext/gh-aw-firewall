@@ -16,10 +16,14 @@ use libc::{c_char, c_void};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use std::fs;
-use std::io::Read;
 use std::ptr;
 use std::sync::Mutex;
+
+// External declaration of the environ pointer
+// This is a POSIX standard global that points to the process's environment
+extern "C" {
+    static mut environ: *mut *mut c_char;
+}
 
 /// Maximum number of tokens we can track
 const MAX_TOKENS: usize = 100;
@@ -198,92 +202,49 @@ fn format_token_value(value: &str) -> String {
     }
 }
 
-/// Check if a token still exists in /proc/self/environ and /proc/self/task/*/environ files
+/// Check if a token still exists in the process environment
 /// 
 /// This function verifies whether unsetenv() successfully cleared the token
-/// from process-level and all task-level environment files. Due to a Linux kernel 
-/// behavior, /proc/PID/task/TID/environ may still expose the token even after unsetenv().
+/// by directly checking the process's environ pointer. This works correctly
+/// in both chroot and non-chroot modes (reading /proc/self/environ fails in
+/// chroot because it shows the host's procfs, not the chrooted process's state).
 fn check_task_environ_exposure(token_name: &str) {
-    eprintln!("[one-shot-token] DEBUG: Starting environ check for {}", token_name);
-    let mut exposed_locations = Vec::new();
-    
-    // First, check /proc/self/environ
-    if let Ok(mut file) = fs::File::open("/proc/self/environ") {
-        let mut contents = Vec::new();
-        if file.read_to_end(&mut contents).is_ok() {
-            let environ_str = String::from_utf8_lossy(&contents);
-            for entry in environ_str.split('\0') {
-                if let Some(eq_pos) = entry.find('=') {
-                    let key = &entry[..eq_pos];
-                    if key == token_name {
-                        exposed_locations.push("/proc/self/environ".to_string());
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Then check /proc/self/task/*/environ
-    let task_dir = "/proc/self/task";
-    let entries = match fs::read_dir(task_dir) {
-        Ok(entries) => entries,
-        Err(_) => {
-            if exposed_locations.is_empty() {
-                eprintln!("[one-shot-token] INFO: Token {} cleared (could not verify task environ)", token_name);
-            } else {
-                for location in &exposed_locations {
-                    eprintln!("[one-shot-token] WARNING: Token {} still exposed in {}", token_name, location);
-                }
-            }
+    // SAFETY: environ is a standard POSIX global that points to the process's environment.
+    // It's safe to read as long as we don't hold references across modifications.
+    // We're only reading it after unsetenv() has completed, so the pointer is stable.
+    unsafe {
+        let mut env_ptr = environ;
+        if env_ptr.is_null() {
+            eprintln!("[one-shot-token] INFO: Token {} cleared (environ is null)", token_name);
             return;
         }
-    };
-    
-    let mut task_count = 0;
-    
-    // Check each task's environ file
-    for entry in entries.flatten() {
-        if let Ok(file_name) = entry.file_name().into_string() {
-            // Only count numeric directory names (actual task IDs)
-            if file_name.parse::<u32>().is_ok() {
-                task_count += 1;
-                let environ_path = format!("{}/{}/environ", task_dir, file_name);
-                
-                // Try to read the environ file
-                if let Ok(mut file) = fs::File::open(&environ_path) {
-                    let mut contents = Vec::new();
-                    if file.read_to_end(&mut contents).is_ok() {
-                        // Parse null-separated KEY=VALUE pairs
-                        let environ_str = String::from_utf8_lossy(&contents);
-                        for entry in environ_str.split('\0') {
-                            if let Some(eq_pos) = entry.find('=') {
-                                let key = &entry[..eq_pos];
-                                if key == token_name {
-                                    exposed_locations.push(environ_path.clone());
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
+        
+        // Iterate through environment variables
+        let token_prefix = format!("{}=", token_name);
+        let token_prefix_bytes = token_prefix.as_bytes();
+        
+        while !(*env_ptr).is_null() {
+            let env_cstr = CStr::from_ptr(*env_ptr);
+            let env_bytes = env_cstr.to_bytes();
+            
+            // Check if this entry starts with our token name
+            if env_bytes.len() >= token_prefix_bytes.len() 
+                && &env_bytes[..token_prefix_bytes.len()] == token_prefix_bytes {
+                eprintln!(
+                    "[one-shot-token] WARNING: Token {} still exposed in process environment",
+                    token_name
+                );
+                return;
             }
+            
+            env_ptr = env_ptr.add(1);
         }
-    }
-    
-    // Report results
-    if exposed_locations.is_empty() {
+        
+        // Token not found in environment - success!
         eprintln!(
-            "[one-shot-token] INFO: Token {} cleared from /proc/self/environ and all {} task(s)",
-            token_name, task_count
+            "[one-shot-token] INFO: Token {} cleared from process environment",
+            token_name
         );
-    } else {
-        for location in &exposed_locations {
-            eprintln!(
-                "[one-shot-token] WARNING: Token {} still exposed in {}",
-                token_name, location
-            );
-        }
     }
 }
 
@@ -359,14 +320,10 @@ unsafe fn handle_getenv_impl(
     // Cache the pointer so subsequent reads return the same value
     state.cache.insert(name_str.to_string(), cached);
 
-    eprintln!("[one-shot-token] DEBUG: About to call unsetenv for {}", name_str);
-    
-    // Unset the environment variable so /proc/self/environ is cleared
+    // Unset the environment variable so it's no longer accessible
     libc::unsetenv(name);
 
-    eprintln!("[one-shot-token] DEBUG: unsetenv completed, now checking environ files");
-    
-    // Check if the token still exists in task-level environ files
+    // Verify the token was cleared from the process environment
     check_task_environ_exposure(name_str);
 
     let suffix = if via_secure { " (via secure_getenv)" } else { "" };
