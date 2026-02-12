@@ -293,6 +293,11 @@ AWFEOF
       echo "[entrypoint] Adding CARGO_HOME/bin to PATH: ${AWF_CARGO_HOME}/bin"
       echo "export PATH=\"${AWF_CARGO_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export CARGO_HOME=\"${AWF_CARGO_HOME}\"" >> "/host${SCRIPT_FILE}"
+    else
+      # Fallback: detect Cargo from default location if CARGO_HOME not provided
+      # This ensures Rust binaries work even when CARGO_HOME env var is not set
+      echo "# Add Cargo bin for Rust if it exists (fallback when CARGO_HOME not provided)" >> "/host${SCRIPT_FILE}"
+      echo "[ -d \"\$HOME/.cargo/bin\" ] && export PATH=\"\$HOME/.cargo/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
     fi
     # Add JAVA_HOME/bin to PATH if provided (for Java on GitHub Actions)
     # Also set LD_LIBRARY_PATH to include Java's lib directory for libjli.so
