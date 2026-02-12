@@ -204,6 +204,7 @@ fn format_token_value(value: &str) -> String {
 /// from process-level and all task-level environment files. Due to a Linux kernel 
 /// behavior, /proc/PID/task/TID/environ may still expose the token even after unsetenv().
 fn check_task_environ_exposure(token_name: &str) {
+    eprintln!("[one-shot-token] DEBUG: Starting environ check for {}", token_name);
     let mut exposed_locations = Vec::new();
     
     // First, check /proc/self/environ
@@ -358,9 +359,13 @@ unsafe fn handle_getenv_impl(
     // Cache the pointer so subsequent reads return the same value
     state.cache.insert(name_str.to_string(), cached);
 
+    eprintln!("[one-shot-token] DEBUG: About to call unsetenv for {}", name_str);
+    
     // Unset the environment variable so /proc/self/environ is cleared
     libc::unsetenv(name);
 
+    eprintln!("[one-shot-token] DEBUG: unsetenv completed, now checking environ files");
+    
     // Check if the token still exists in task-level environ files
     check_task_environ_exposure(name_str);
 
