@@ -85,12 +85,12 @@ awf --enable-api-proxy \
 
 ## Environment Variables
 
-The sidecar sets these environment variables in the agent container:
+When API keys are provided, the sidecar sets these environment variables in the agent container:
 
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `OPENAI_BASE_URL` | `http://api-proxy:10000` | OpenAI API proxy endpoint |
-| `ANTHROPIC_BASE_URL` | `http://api-proxy:10001` | Anthropic API proxy endpoint |
+| Variable | Value | When Set | Description |
+|----------|-------|----------|-------------|
+| `OPENAI_BASE_URL` | `http://api-proxy:10000` | When `OPENAI_API_KEY` is provided | OpenAI API proxy endpoint |
+| `ANTHROPIC_BASE_URL` | `http://api-proxy:10001` | When `ANTHROPIC_API_KEY` is provided | Anthropic API proxy endpoint |
 
 These are standard environment variables recognized by:
 - OpenAI Python SDK

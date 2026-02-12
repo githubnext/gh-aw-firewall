@@ -1453,6 +1453,171 @@ describe('docker-manager', () => {
         expect(tmpfs.some((t: string) => t.startsWith(`${mockConfig.workDir}:`))).toBe(true);
       });
     });
+
+    describe('API proxy sidecar', () => {
+      const mockNetworkConfigWithProxy = {
+        ...mockNetworkConfig,
+        proxyIp: '172.30.0.30',
+      };
+
+      it('should not include api-proxy service when enableApiProxy is false', () => {
+        const result = generateDockerCompose(mockConfig, mockNetworkConfigWithProxy);
+        expect(result.services['api-proxy']).toBeUndefined();
+      });
+
+      it('should not include api-proxy service when enableApiProxy is true but no proxyIp', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfig);
+        expect(result.services['api-proxy']).toBeUndefined();
+      });
+
+      it('should include api-proxy service when enableApiProxy is true with OpenAI key', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        expect(result.services['api-proxy']).toBeDefined();
+        const proxy = result.services['api-proxy'];
+        expect(proxy.container_name).toBe('awf-api-proxy');
+        expect((proxy.networks as any)['awf-net'].ipv4_address).toBe('172.30.0.30');
+      });
+
+      it('should include api-proxy service when enableApiProxy is true with Anthropic key', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        expect(result.services['api-proxy']).toBeDefined();
+        const proxy = result.services['api-proxy'];
+        expect(proxy.container_name).toBe('awf-api-proxy');
+      });
+
+      it('should include api-proxy service with both keys', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key', anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        expect(result.services['api-proxy']).toBeDefined();
+        const proxy = result.services['api-proxy'];
+        const env = proxy.environment as Record<string, string>;
+        expect(env.OPENAI_API_KEY).toBe('sk-test-openai-key');
+        expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test-key');
+      });
+
+      it('should only pass OpenAI key when only OpenAI key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        const env = proxy.environment as Record<string, string>;
+        expect(env.OPENAI_API_KEY).toBe('sk-test-openai-key');
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      });
+
+      it('should only pass Anthropic key when only Anthropic key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        const env = proxy.environment as Record<string, string>;
+        expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test-key');
+        expect(env.OPENAI_API_KEY).toBeUndefined();
+      });
+
+      it('should use GHCR image by default', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.image).toBe('ghcr.io/github/gh-aw-firewall/envoy:latest');
+        expect(proxy.build).toBeUndefined();
+      });
+
+      it('should build locally when buildLocal is true', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: true };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.build).toBeDefined();
+        expect((proxy.build as any).context).toContain('containers/envoy');
+        expect(proxy.image).toBeUndefined();
+      });
+
+      it('should use custom registry and tag', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false, imageRegistry: 'my-registry.com', imageTag: 'v1.0.0' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.image).toBe('my-registry.com/envoy:v1.0.0');
+      });
+
+      it('should configure healthcheck for api-proxy', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.healthcheck).toBeDefined();
+        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:9901/ready']);
+      });
+
+      it('should drop all capabilities', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.cap_drop).toEqual(['ALL']);
+        expect(proxy.security_opt).toContain('no-new-privileges:true');
+      });
+
+      it('should set resource limits', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        expect(proxy.mem_limit).toBe('512m');
+        expect(proxy.memswap_limit).toBe('512m');
+        expect(proxy.pids_limit).toBe(100);
+        expect(proxy.cpu_shares).toBe(512);
+      });
+
+      it('should update agent depends_on to wait for api-proxy', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const dependsOn = agent.depends_on as { [key: string]: { condition: string } };
+        expect(dependsOn['api-proxy']).toBeDefined();
+        expect(dependsOn['api-proxy'].condition).toBe('service_healthy');
+      });
+
+      it('should set OPENAI_BASE_URL in agent when OpenAI key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+      });
+
+      it('should set ANTHROPIC_BASE_URL in agent when Anthropic key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+      });
+
+      it('should set both BASE_URL variables when both keys are provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key', anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+      });
+
+      it('should not set OPENAI_BASE_URL in agent when only Anthropic key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.OPENAI_BASE_URL).toBeUndefined();
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+      });
+
+      it('should not set ANTHROPIC_BASE_URL in agent when only OpenAI key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+      });
+    });
   });
 
   describe('writeConfigs', () => {

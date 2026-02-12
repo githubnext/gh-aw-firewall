@@ -869,24 +869,14 @@ export function generateDockerCompose(
         ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
       },
       healthcheck: {
-        test: ['CMD', 'curl', '-f', 'http://localhost:10000/'],
+        test: ['CMD', 'curl', '-f', 'http://localhost:9901/ready'],
         interval: '5s',
         timeout: '3s',
         retries: 5,
         start_period: '5s',
       },
-      // Security hardening: Drop all unnecessary capabilities
-      cap_drop: [
-        'NET_RAW',
-        'NET_ADMIN',
-        'SYS_ADMIN',
-        'SYS_PTRACE',
-        'SYS_MODULE',
-        'SYS_RAWIO',
-        'MKNOD',
-        'AUDIT_WRITE',
-        'SETFCAP',
-      ],
+      // Security hardening: Drop all capabilities
+      cap_drop: ['ALL'],
       security_opt: [
         'no-new-privileges:true',
       ],

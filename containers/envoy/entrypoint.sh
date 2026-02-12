@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-# Generate Envoy configuration from environment variables
-# This allows API keys to be injected at runtime without persisting to disk
+# Generate Envoy configuration from environment variables at runtime
+# API keys are written to /etc/envoy/envoy.yaml and present in docker-compose.yml
+# environment variables
 
 # Start building the configuration
 cat > /etc/envoy/envoy.yaml <<EOF
@@ -32,6 +33,7 @@ static_resources:
                 route:
                   cluster: openai_cluster
                   timeout: 300s
+                  host_rewrite_literal: api.openai.com
 EOF
 
 # Add Authorization header injection for OpenAI if API key is provided
@@ -75,6 +77,7 @@ cat >> /etc/envoy/envoy.yaml <<EOF
                 route:
                   cluster: anthropic_cluster
                   timeout: 300s
+                  host_rewrite_literal: api.anthropic.com
 EOF
 
 # Add API key injection for Anthropic if provided
