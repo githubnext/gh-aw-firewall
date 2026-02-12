@@ -33,6 +33,10 @@ RUN set -eux; \
     fi && \
     rm -rf /var/lib/apt/lists/*
 
+# Upgrade all packages to pick up security patches
+# Addresses CVE-2023-44487 (HTTP/2 Rapid Reset) and other known vulnerabilities
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user with UID/GID matching host user
 # This allows the user command to run with appropriate permissions
 # and prevents file ownership issues with mounted volumes
