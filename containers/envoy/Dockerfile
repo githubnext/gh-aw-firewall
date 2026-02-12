@@ -14,8 +14,9 @@ RUN apt-get update && \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Create directory for generated config
-RUN mkdir -p /etc/envoy
+# Create directory for generated config and ensure envoy can write to it
+RUN mkdir -p /etc/envoy && \
+    chown -R envoy:envoy /etc/envoy
 
 # Switch back to envoy user for running the proxy
 USER envoy
