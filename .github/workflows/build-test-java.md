@@ -50,19 +50,19 @@ Clone and test the following projects from the test repository:
 1. **Clone Repository**: `gh repo clone Mossaka/gh-aw-firewall-test-java /tmp/test-java`
    - **CRITICAL**: If clone fails, immediately call `safeoutputs-missing_tool` with message "CLONE_FAILED: Unable to clone test repository" and stop execution
 
-2. **Configure Maven Proxy**: Maven ignores Java system properties for proxy configuration, so you must create `~/.m2/settings.xml` before running any Maven commands:
+2. **Configure Maven Proxy**: Maven ignores Java system properties for proxy configuration, so you must create `~/.m2/settings.xml` before running any Maven commands. **IMPORTANT**: Use the literal values `squid-proxy` and `3128` directly in the XML - do NOT use shell variables or environment variable syntax:
    ```bash
    mkdir -p ~/.m2
-   cat > ~/.m2/settings.xml << SETTINGS
+   cat > ~/.m2/settings.xml << 'SETTINGS'
    <settings>
      <proxies>
        <proxy>
          <id>awf-http</id><active>true</active><protocol>http</protocol>
-         <host>${SQUID_PROXY_HOST}</host><port>${SQUID_PROXY_PORT}</port>
+         <host>squid-proxy</host><port>3128</port>
        </proxy>
        <proxy>
          <id>awf-https</id><active>true</active><protocol>https</protocol>
-         <host>${SQUID_PROXY_HOST}</host><port>${SQUID_PROXY_PORT}</port>
+         <host>squid-proxy</host><port>3128</port>
        </proxy>
      </proxies>
    </settings>
