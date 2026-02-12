@@ -489,6 +489,26 @@ export function generateDockerCompose(
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
 
+    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs)
+    // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
+    agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
+
+    // Mount ~/.cache, ~/.config, ~/.local for CLI tool state management (Claude Code, etc.)
+    // These directories are safe to mount as they contain application state, not credentials
+    // Note: Specific credential files within ~/.config (like ~/.config/gh/hosts.yml) are
+    // still blocked via /dev/null overlays applied later in the code
+    agentVolumes.push(`${effectiveHome}/.cache:/host${effectiveHome}/.cache:rw`);
+    agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
+    agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
+
+    // Mount ~/.anthropic for Claude Code state and configuration
+    // This is safe as ~/.anthropic contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.anthropic:/host${effectiveHome}/.anthropic:rw`);
+
+    // Mount ~/.claude for Claude CLI state and configuration
+    // This is safe as ~/.claude contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
+
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
     agentVolumes.push(
