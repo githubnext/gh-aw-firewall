@@ -244,6 +244,51 @@ export function processAgentImageOption(
 }
 
 /**
+ * Result of validating API proxy configuration
+ */
+export interface ApiProxyValidationResult {
+  /** Whether the API proxy should be enabled */
+  enabled: boolean;
+  /** Warning messages to display */
+  warnings: string[];
+  /** Debug messages to display */
+  debugMessages: string[];
+}
+
+/**
+ * Validates the API proxy configuration and returns appropriate messages
+ * @param enableApiProxy - Whether --enable-api-proxy flag was provided
+ * @param openaiApiKey - OpenAI API key from environment
+ * @param anthropicApiKey - Anthropic API key from environment
+ * @returns ApiProxyValidationResult with warnings and debug messages
+ */
+export function validateApiProxyConfig(
+  enableApiProxy: boolean,
+  openaiApiKey?: string,
+  anthropicApiKey?: string
+): ApiProxyValidationResult {
+  if (!enableApiProxy) {
+    return { enabled: false, warnings: [], debugMessages: [] };
+  }
+
+  const warnings: string[] = [];
+  const debugMessages: string[] = [];
+
+  if (!openaiApiKey && !anthropicApiKey) {
+    warnings.push('⚠️  API proxy enabled but no API keys found in environment');
+    warnings.push('   Set OPENAI_API_KEY or ANTHROPIC_API_KEY to use the proxy');
+  }
+  if (openaiApiKey) {
+    debugMessages.push('OpenAI API key detected - will be held securely in sidecar');
+  }
+  if (anthropicApiKey) {
+    debugMessages.push('Anthropic API key detected - will be held securely in sidecar');
+  }
+
+  return { enabled: true, warnings, debugMessages };
+}
+
+/**
  * Result of validating flag combinations
  */
 export interface FlagValidationResult {
@@ -973,18 +1018,17 @@ program
       }
     }
 
-    // Warn if --enable-api-proxy is used without API keys
-    if (config.enableApiProxy) {
-      if (!config.openaiApiKey && !config.anthropicApiKey) {
-        logger.warn('⚠️  API proxy enabled but no API keys found in environment');
-        logger.warn('   Set OPENAI_API_KEY or ANTHROPIC_API_KEY to use the proxy');
-      }
-      if (config.openaiApiKey) {
-        logger.debug('OpenAI API key detected - will be held securely in sidecar');
-      }
-      if (config.anthropicApiKey) {
-        logger.debug('Anthropic API key detected - will be held securely in sidecar');
-      }
+    // Validate and warn about API proxy configuration
+    const apiProxyValidation = validateApiProxyConfig(
+      config.enableApiProxy || false,
+      config.openaiApiKey,
+      config.anthropicApiKey
+    );
+    for (const warning of apiProxyValidation.warnings) {
+      logger.warn(warning);
+    }
+    for (const msg of apiProxyValidation.debugMessages) {
+      logger.debug(msg);
     }
 
     // Log config with redacted secrets

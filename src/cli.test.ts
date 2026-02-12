@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, processLocalhostKeyword, validateSkipPullWithBuildLocal, validateFormat } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, processLocalhostKeyword, validateSkipPullWithBuildLocal, validateFormat, validateApiProxyConfig } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1355,6 +1355,61 @@ describe('cli', () => {
 
     it('should exit with error for invalid format', () => {
       expect(() => validateFormat('xml', ['json', 'markdown', 'pretty'])).toThrow('process.exit called');
+    });
+  });
+
+  describe('validateApiProxyConfig', () => {
+    it('should return disabled when enableApiProxy is false', () => {
+      const result = validateApiProxyConfig(false);
+      expect(result.enabled).toBe(false);
+      expect(result.warnings).toEqual([]);
+      expect(result.debugMessages).toEqual([]);
+    });
+
+    it('should warn when enabled but no API keys provided', () => {
+      const result = validateApiProxyConfig(true);
+      expect(result.enabled).toBe(true);
+      expect(result.warnings).toHaveLength(2);
+      expect(result.warnings[0]).toContain('no API keys found');
+      expect(result.debugMessages).toEqual([]);
+    });
+
+    it('should warn when enabled with undefined keys', () => {
+      const result = validateApiProxyConfig(true, undefined, undefined);
+      expect(result.enabled).toBe(true);
+      expect(result.warnings).toHaveLength(2);
+    });
+
+    it('should detect OpenAI key', () => {
+      const result = validateApiProxyConfig(true, 'sk-test-key');
+      expect(result.enabled).toBe(true);
+      expect(result.warnings).toEqual([]);
+      expect(result.debugMessages).toHaveLength(1);
+      expect(result.debugMessages[0]).toContain('OpenAI');
+    });
+
+    it('should detect Anthropic key', () => {
+      const result = validateApiProxyConfig(true, undefined, 'sk-ant-test');
+      expect(result.enabled).toBe(true);
+      expect(result.warnings).toEqual([]);
+      expect(result.debugMessages).toHaveLength(1);
+      expect(result.debugMessages[0]).toContain('Anthropic');
+    });
+
+    it('should detect both keys', () => {
+      const result = validateApiProxyConfig(true, 'sk-test', 'sk-ant-test');
+      expect(result.enabled).toBe(true);
+      expect(result.warnings).toEqual([]);
+      expect(result.debugMessages).toHaveLength(2);
+      expect(result.debugMessages[0]).toContain('OpenAI');
+      expect(result.debugMessages[1]).toContain('Anthropic');
+    });
+
+    it('should not warn when disabled even with keys', () => {
+      const result = validateApiProxyConfig(false, 'sk-test', 'sk-ant-test');
+      expect(result.enabled).toBe(false);
+      expect(result.warnings).toEqual([]);
+      expect(result.debugMessages).toEqual([]);
     });
   });
 });
