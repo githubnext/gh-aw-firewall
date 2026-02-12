@@ -856,6 +856,17 @@ export interface DockerService {
    * @example '/workspace'
    */
   working_dir?: string;
+
+  /**
+   * Tmpfs mounts for the container
+   *
+   * In-memory filesystems mounted over directories to hide their contents.
+   * Used as a security measure to prevent the agent from reading sensitive
+   * files (e.g., docker-compose.yml containing tokens, MCP logs).
+   *
+   * @example ['/tmp/awf-123:rw,noexec,nosuid,size=1m']
+   */
+  tmpfs?: string[];
 }
 
 /**
