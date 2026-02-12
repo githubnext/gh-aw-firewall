@@ -307,16 +307,10 @@ describe('Credential Hiding Security', () => {
         }
       );
 
-      // The directory should not be accessible or should appear empty
-      // Expected: "No such file or directory" or "Not a directory"
-      if (!result.success) {
-        expect(result.stderr).toMatch(/No such file or directory|Not a directory|cannot access/i);
-      } else {
-        // If it succeeds, it should be empty or show no real content
-        const output = result.stdout.trim();
-        expect(output).not.toContain('safeoutputs');
-        expect(output).not.toContain('playwright');
-      }
+      // With /dev/null mounted over the directory, ls should fail
+      // Expected: "Not a directory" (because /dev/null is a character device, not a directory)
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/Not a directory|cannot access/i);
     }, 120000);
 
     test('Test 14: /tmp/gh-aw/mcp-logs/ is hidden in chroot mode', async () => {
@@ -331,14 +325,9 @@ describe('Credential Hiding Security', () => {
         }
       );
 
-      // The directory should not be accessible or should appear empty
-      if (!result.success) {
-        expect(result.stderr).toMatch(/No such file or directory|Not a directory|cannot access/i);
-      } else {
-        const output = result.stdout.trim();
-        expect(output).not.toContain('safeoutputs');
-        expect(output).not.toContain('playwright');
-      }
+      // With /dev/null mounted over the directory at /host path, ls should fail
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/Not a directory|cannot access/i);
     }, 120000);
 
     test('Test 15: MCP logs files cannot be read in normal mode', async () => {
@@ -352,10 +341,10 @@ describe('Credential Hiding Security', () => {
         }
       );
 
-      // Should fail with "Not a directory" (because /dev/null is mounted)
-      // or with "No such file" (depending on the state)
+      // Should fail with "Not a directory" (because /dev/null is mounted over parent path)
+      // This confirms the /dev/null mount is preventing file access
       const allOutput = `${result.stdout}\n${result.stderr}`;
-      expect(allOutput).toMatch(/No such file|cannot access|Not a directory/i);
+      expect(allOutput).toMatch(/Not a directory|cannot access/i);
     }, 120000);
   });
 });
