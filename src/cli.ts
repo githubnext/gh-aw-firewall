@@ -1035,6 +1035,8 @@ program
     const redactedConfig = {
       ...config,
       agentCommand: redactSecrets(config.agentCommand),
+      openaiApiKey: config.openaiApiKey ? '[REDACTED]' : undefined,
+      anthropicApiKey: config.anthropicApiKey ? '[REDACTED]' : undefined,
     };
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
