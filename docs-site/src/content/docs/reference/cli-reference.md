@@ -43,7 +43,6 @@ awf [options] -- <command>
 | `--allow-host-ports <ports>` | string | `80,443` | Ports to allow when using --enable-host-access |
 | `--agent-image <value>` | string | `default` | Agent container image (default, act, or custom) |
 | `--allow-full-filesystem-access` | flag | `false` | ⚠️ Mount entire host filesystem with read-write access |
-| `--enable-chroot` | flag | `false` | Run command inside chroot to host filesystem |
 | `-V, --version` | flag | — | Display version |
 | `-h, --help` | flag | — | Display help |
 
@@ -271,42 +270,8 @@ Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to 
 Docker's embedded DNS (127.0.0.11) is always allowed for container name resolution, regardless of this setting.
 :::
 
-### `--enable-chroot`
-
-Run user commands inside a `chroot /host` jail, making the host filesystem appear as the root filesystem. This enables transparent access to host-installed binaries (Python, Node.js, Go, etc.) without needing to prefix paths with `/host`.
-
-```bash
-# Use host's Python directly
-sudo awf --enable-chroot --allow-domains pypi.org \
-  -- python3 -c "import requests; print(requests.__version__)"
-
-# Combined with --env-all for full host environment
-sudo awf --enable-chroot --env-all --allow-domains api.github.com \
-  -- curl https://api.github.com
-```
-
-**How it works:**
-1. Host filesystem is mounted at `/host` inside the container
-2. The entrypoint performs `chroot /host` before running your command
-3. Inside the chroot, `/` = host's `/`, so binaries work with normal paths
-4. Network isolation is maintained (iptables rules apply at namespace level)
-
-**Requirements:**
-- `capsh` must be installed on the host (`apt-get install libcap2-bin`)
-- Host user must exist in `/etc/passwd` (matched by UID)
-
-**Security:**
-- `CAP_NET_ADMIN` and `CAP_SYS_CHROOT` are dropped before user command executes
-- Docker socket is hidden (`/dev/null`) to prevent firewall bypass
-- `/proc` is mounted read-only (host processes visible but not modifiable)
-
-**Use cases:**
-- GitHub Actions runners with pre-installed tools
-- Minimal container + host binaries
-- Avoiding version conflicts between container and host tools
-
-:::caution[Security Trade-offs]
-Chroot mode exposes the host filesystem (read-only for system paths, read-write for `$HOME` and `/tmp`). See [Chroot Mode Documentation](/gh-aw-firewall/docs/chroot-mode/) for security details.
+:::note[Chroot Mode]
+AWF always runs in chroot mode, making the host filesystem appear as the root filesystem inside the container. This provides transparent access to host-installed binaries (Python, Node.js, Go, etc.) while maintaining network isolation. See [Chroot Mode Documentation](/gh-aw-firewall/docs/chroot-mode/) for details.
 :::
 
 ### `--enable-host-access`
@@ -424,7 +389,6 @@ sudo awf --allow-full-filesystem-access \
 
 **Alternatives:**
 - Use `--mount` to selectively mount only needed directories (recommended)
-- Use `--enable-chroot` for transparent host binary access with selective mounting
 
 ## Exit Codes
 
