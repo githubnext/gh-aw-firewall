@@ -511,12 +511,16 @@ export function generateDockerCompose(
 
     // Mount ~/.cargo and ~/.rustup for Rust toolchain access
     // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
-    // ~/.cargo must be rw (not ro) because the credential-hiding code later mounts
-    // /dev/null over ~/.cargo/credentials, which requires a writable parent filesystem
-    // to create the mountpoint. The credentials file is protected by the /dev/null overlay.
-    // ~/.rustup is read-only since it only contains toolchain binaries.
+    // ~/.cargo must be rw because the credential-hiding code mounts /dev/null over
+    // ~/.cargo/credentials, which needs a writable parent to create the mountpoint.
+    // ~/.rustup must be rw because rustup proxy binaries (rustc, cargo) need to
+    // acquire file locks in ~/.rustup/ when executing toolchain binaries.
     agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:rw`);
-    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:ro`);
+    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:rw`);
+
+    // Mount ~/.npm for npm cache directory access
+    // npm requires write access to ~/.npm for caching packages and writing logs
+    agentVolumes.push(`${effectiveHome}/.npm:/host${effectiveHome}/.npm:rw`);
 
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
