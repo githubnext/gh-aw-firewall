@@ -505,8 +505,10 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
       // Should include home directory mount
       expect(volumes.some((v: string) => v.includes(process.env.HOME || '/root'))).toBe(true);
-      // Should include credential hiding mounts
-      expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(true);
+      // Should include credential hiding via tmpfs (not volumes)
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      expect(tmpfs.some((t: string) => t.includes('.docker'))).toBe(true);
     });
 
     it('should use custom volume mounts when specified', () => {
@@ -537,8 +539,10 @@ describe('docker-manager', () => {
 
       // Default: selective mounting (no blanket /:/host:rw)
       expect(volumes).not.toContain('/:/host:rw');
-      // Should include selective mounts with credential hiding
-      expect(volumes.some((v: string) => v.includes('/dev/null'))).toBe(true);
+      // Should include selective mounts with credential hiding via tmpfs
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      expect(tmpfs.some((t: string) => t.includes('.docker') || t.includes('.ssh') || t.includes('.aws'))).toBe(true);
     });
 
     it('should use blanket mount when allowFullFilesystemAccess is true', () => {
@@ -552,8 +556,13 @@ describe('docker-manager', () => {
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
-      // Should NOT include /dev/null credential hiding
-      expect(volumes.some((v: string) => v.startsWith('/dev/null'))).toBe(false);
+      // Should NOT include credential hiding tmpfs (only MCP logs tmpfs)
+      const tmpfs = agent.tmpfs as string[];
+      expect(tmpfs).toBeDefined();
+      // Should have MCP logs tmpfs
+      expect(tmpfs.some((t: string) => t.includes('mcp-logs'))).toBe(true);
+      // Should NOT have credential tmpfs
+      expect(tmpfs.some((t: string) => t.includes('.docker') || t.includes('.ssh') || t.includes('.aws'))).toBe(false);
     });
 
     it('should use blanket mount when allowFullFilesystemAccess is true in chroot mode', () => {
@@ -644,6 +653,44 @@ describe('docker-manager', () => {
       // Should NOT mount entire home directory (security: prevents access to ~/actions-runner, etc.)
       const homeDir = process.env.HOME || '/root';
       expect(volumes).not.toContain(`${homeDir}:/host${homeDir}:rw`);
+    });
+
+    it('should not mount .cargo when enableChroot is true and allowFullFilesystemAccess is false', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        allowFullFilesystemAccess: false
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const tmpfs = agent.tmpfs as string[];
+
+      // Should NOT mount .cargo as volume (it's hidden via tmpfs)
+      const homeDir = process.env.HOME || '/root';
+      const cargoVolumePattern = new RegExp(`${homeDir.replace(/\//g, '\\/')}.*\\.cargo.*:/host.*\\.cargo`);
+      expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(false);
+
+      // Should have .cargo hidden via tmpfs
+      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(true);
+    });
+
+    it('should mount .cargo when enableChroot is true and allowFullFilesystemAccess is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        allowFullFilesystemAccess: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const tmpfs = agent.tmpfs as string[];
+
+      // With allowFullFilesystemAccess, should have blanket mount
+      expect(volumes).toContain('/:/host:rw');
+
+      // Should NOT have credential hiding tmpfs (only MCP logs tmpfs)
+      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(false);
     });
 
     it('should add SYS_CHROOT and SYS_ADMIN capabilities when enableChroot is true', () => {
