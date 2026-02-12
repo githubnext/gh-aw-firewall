@@ -184,6 +184,7 @@ jobs:
 
           # Rust/Cargo: CARGO_HOME is needed so entrypoint can add $CARGO_HOME/bin to PATH
           # The rust-toolchain action doesn't set CARGO_HOME, so detect it from cargo location
+          # We must export it so sudo -E can preserve it
           if [ -n "$CARGO_HOME" ]; then
             CARGO_HOME_VALUE="$CARGO_HOME"
           else
@@ -199,6 +200,9 @@ jobs:
           fi
           echo "CARGO_HOME=${CARGO_HOME_VALUE}" >> $GITHUB_ENV
           echo "Captured CARGO_HOME: ${CARGO_HOME_VALUE}"
+          # Also add CARGO_HOME/bin to PATH so host's cargo/rustc are accessible
+          echo "${CARGO_HOME_VALUE}/bin" >> $GITHUB_PATH
+          echo "Added CARGO_HOME/bin to PATH"
 
           # Java: JAVA_HOME is needed so entrypoint can add $JAVA_HOME/bin to PATH
           # The setup-java action sets JAVA_HOME but sudo may not preserve it
