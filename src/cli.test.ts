@@ -1381,7 +1381,7 @@ describe('cli', () => {
     });
 
     it('should detect OpenAI key', () => {
-      const result = validateApiProxyConfig(true, 'sk-test-key');
+      const result = validateApiProxyConfig(true, true);
       expect(result.enabled).toBe(true);
       expect(result.warnings).toEqual([]);
       expect(result.debugMessages).toHaveLength(1);
@@ -1389,7 +1389,7 @@ describe('cli', () => {
     });
 
     it('should detect Anthropic key', () => {
-      const result = validateApiProxyConfig(true, undefined, 'sk-ant-test');
+      const result = validateApiProxyConfig(true, false, true);
       expect(result.enabled).toBe(true);
       expect(result.warnings).toEqual([]);
       expect(result.debugMessages).toHaveLength(1);
@@ -1397,7 +1397,7 @@ describe('cli', () => {
     });
 
     it('should detect both keys', () => {
-      const result = validateApiProxyConfig(true, 'sk-test', 'sk-ant-test');
+      const result = validateApiProxyConfig(true, true, true);
       expect(result.enabled).toBe(true);
       expect(result.warnings).toEqual([]);
       expect(result.debugMessages).toHaveLength(2);
@@ -1406,7 +1406,7 @@ describe('cli', () => {
     });
 
     it('should not warn when disabled even with keys', () => {
-      const result = validateApiProxyConfig(false, 'sk-test', 'sk-ant-test');
+      const result = validateApiProxyConfig(false, true, true);
       expect(result.enabled).toBe(false);
       expect(result.warnings).toEqual([]);
       expect(result.debugMessages).toEqual([]);

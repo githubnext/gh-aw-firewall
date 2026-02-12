@@ -256,16 +256,18 @@ export interface ApiProxyValidationResult {
 }
 
 /**
- * Validates the API proxy configuration and returns appropriate messages
+ * Validates the API proxy configuration and returns appropriate messages.
+ * Accepts booleans (not actual keys) to prevent sensitive data from flowing
+ * through to log output (CodeQL: clear-text logging of sensitive information).
  * @param enableApiProxy - Whether --enable-api-proxy flag was provided
- * @param openaiApiKey - OpenAI API key from environment
- * @param anthropicApiKey - Anthropic API key from environment
+ * @param hasOpenaiKey - Whether an OpenAI API key is present
+ * @param hasAnthropicKey - Whether an Anthropic API key is present
  * @returns ApiProxyValidationResult with warnings and debug messages
  */
 export function validateApiProxyConfig(
   enableApiProxy: boolean,
-  openaiApiKey?: string,
-  anthropicApiKey?: string
+  hasOpenaiKey?: boolean,
+  hasAnthropicKey?: boolean
 ): ApiProxyValidationResult {
   if (!enableApiProxy) {
     return { enabled: false, warnings: [], debugMessages: [] };
@@ -274,14 +276,14 @@ export function validateApiProxyConfig(
   const warnings: string[] = [];
   const debugMessages: string[] = [];
 
-  if (!openaiApiKey && !anthropicApiKey) {
+  if (!hasOpenaiKey && !hasAnthropicKey) {
     warnings.push('⚠️  API proxy enabled but no API keys found in environment');
     warnings.push('   Set OPENAI_API_KEY or ANTHROPIC_API_KEY to use the proxy');
   }
-  if (openaiApiKey) {
+  if (hasOpenaiKey) {
     debugMessages.push('OpenAI API key detected - will be held securely in sidecar');
   }
-  if (anthropicApiKey) {
+  if (hasAnthropicKey) {
     debugMessages.push('Anthropic API key detected - will be held securely in sidecar');
   }
 
@@ -1019,10 +1021,11 @@ program
     }
 
     // Validate and warn about API proxy configuration
+    // Pass booleans (not actual keys) to prevent sensitive data flow to logger
     const apiProxyValidation = validateApiProxyConfig(
       config.enableApiProxy || false,
-      config.openaiApiKey,
-      config.anthropicApiKey
+      !!config.openaiApiKey,
+      !!config.anthropicApiKey
     );
     for (const warning of apiProxyValidation.warnings) {
       logger.warn(warning);
@@ -1031,13 +1034,13 @@ program
       logger.debug(msg);
     }
 
-    // Log config with redacted secrets
-    const redactedConfig = {
-      ...config,
-      agentCommand: redactSecrets(config.agentCommand),
-      openaiApiKey: config.openaiApiKey ? '[REDACTED]' : undefined,
-      anthropicApiKey: config.anthropicApiKey ? '[REDACTED]' : undefined,
-    };
+    // Log config with redacted secrets - remove API keys entirely
+    // to prevent sensitive data from flowing to logger (CodeQL sensitive data logging)
+    const redactedConfig: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (key === 'openaiApiKey' || key === 'anthropicApiKey') continue;
+      redactedConfig[key] = key === 'agentCommand' ? redactSecrets(value as string) : value;
+    }
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
     if (blockedDomains.length > 0) {
