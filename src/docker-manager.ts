@@ -968,6 +968,29 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
   }
 
+  // Ensure chroot home subdirectories exist with correct ownership before Docker
+  // bind-mounts them. If a source directory doesn't exist, Docker creates it as
+  // root:root, making it inaccessible to the agent user (e.g., UID 1001).
+  // This is critical for CLI tools that need writable home subdirectories
+  // (e.g., Claude Code needs ~/.claude, npm needs ~/.npm).
+  if (config.enableChroot) {
+    const effectiveHome = getRealUserHome();
+    const uid = parseInt(getSafeHostUid(), 10);
+    const gid = parseInt(getSafeHostGid(), 10);
+    const chrootHomeDirs = [
+      '.copilot', '.cache', '.config', '.local',
+      '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
+    ];
+    for (const dir of chrootHomeDirs) {
+      const dirPath = path.join(effectiveHome, dir);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.chownSync(dirPath, uid, gid);
+        logger.debug(`Created chroot home directory: ${dirPath} (${uid}:${gid})`);
+      }
+    }
+  }
+
   // Use fixed network configuration (network is created by host-iptables.ts)
   const networkConfig = {
     subnet: '172.30.0.0/24',
