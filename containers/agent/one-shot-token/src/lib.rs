@@ -198,25 +198,48 @@ fn format_token_value(value: &str) -> String {
     }
 }
 
-/// Check if a token still exists in /proc/self/task/*/environ files
+/// Check if a token still exists in /proc/self/environ and /proc/self/task/*/environ files
 /// 
 /// This function verifies whether unsetenv() successfully cleared the token
-/// from all task-level environment files. Due to a Linux kernel behavior,
-/// /proc/PID/task/TID/environ may still expose the token even after unsetenv().
+/// from process-level and all task-level environment files. Due to a Linux kernel 
+/// behavior, /proc/PID/task/TID/environ may still expose the token even after unsetenv().
 fn check_task_environ_exposure(token_name: &str) {
-    // Try to read /proc/self/task directory
-    let task_dir = "/proc/self/task";
+    let mut exposed_locations = Vec::new();
     
+    // First, check /proc/self/environ
+    if let Ok(mut file) = fs::File::open("/proc/self/environ") {
+        let mut contents = Vec::new();
+        if file.read_to_end(&mut contents).is_ok() {
+            let environ_str = String::from_utf8_lossy(&contents);
+            for entry in environ_str.split('\0') {
+                if let Some(eq_pos) = entry.find('=') {
+                    let key = &entry[..eq_pos];
+                    if key == token_name {
+                        exposed_locations.push("/proc/self/environ".to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Then check /proc/self/task/*/environ
+    let task_dir = "/proc/self/task";
     let entries = match fs::read_dir(task_dir) {
         Ok(entries) => entries,
         Err(_) => {
-            eprintln!("[one-shot-token] INFO: Could not access {}", task_dir);
+            if exposed_locations.is_empty() {
+                eprintln!("[one-shot-token] INFO: Token {} cleared (could not verify task environ)", token_name);
+            } else {
+                for location in &exposed_locations {
+                    eprintln!("[one-shot-token] WARNING: Token {} still exposed in {}", token_name, location);
+                }
+            }
             return;
         }
     };
     
     let mut task_count = 0;
-    let mut exposed_count = 0;
     
     // Check each task's environ file
     for entry in entries.flatten() {
@@ -236,11 +259,7 @@ fn check_task_environ_exposure(token_name: &str) {
                             if let Some(eq_pos) = entry.find('=') {
                                 let key = &entry[..eq_pos];
                                 if key == token_name {
-                                    exposed_count += 1;
-                                    eprintln!(
-                                        "[one-shot-token] WARNING: Token {} still exposed in {}",
-                                        token_name, environ_path
-                                    );
+                                    exposed_locations.push(environ_path.clone());
                                     break;
                                 }
                             }
@@ -251,13 +270,19 @@ fn check_task_environ_exposure(token_name: &str) {
         }
     }
     
-    if task_count == 0 {
-        eprintln!("[one-shot-token] INFO: No tasks found under {}", task_dir);
-    } else if exposed_count == 0 {
+    // Report results
+    if exposed_locations.is_empty() {
         eprintln!(
-            "[one-shot-token] INFO: Token {} verified cleared from {} task(s)",
+            "[one-shot-token] INFO: Token {} cleared from /proc/self/environ and all {} task(s)",
             token_name, task_count
         );
+    } else {
+        for location in &exposed_locations {
+            eprintln!(
+                "[one-shot-token] WARNING: Token {} still exposed in {}",
+                token_name, location
+            );
+        }
     }
 }
 

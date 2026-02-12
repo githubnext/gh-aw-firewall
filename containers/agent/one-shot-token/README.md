@@ -278,15 +278,14 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 
 ### Task-Level Environment Verification
 
-After calling `unsetenv()` to clear tokens from `/proc/self/environ`, the library automatically checks if tokens are still exposed in `/proc/self/task/*/environ` files (per-task environment). This verification provides visibility into a known Linux kernel behavior where task-level environ files may retain values even after the process-level environment is cleared.
+After calling `unsetenv()` to clear tokens, the library automatically verifies whether the token was successfully removed from both `/proc/self/environ` (process-level) and `/proc/self/task/*/environ` (per-task environment). This verification provides visibility into a known Linux kernel behavior where task-level environ files may retain values even after the process-level environment is cleared.
 
 **Log messages:**
-- `INFO: Token <name> verified cleared from N task(s)` - Token successfully cleared from all tasks (✓ secure)
-- `WARNING: Token <name> still exposed in /proc/self/task/<tid>/environ` - Token still visible in task environ, where `<tid>` is the actual task ID (⚠ security concern)
-- `INFO: No tasks found under /proc/self/task` - Task directory not accessible or empty
-- `INFO: Could not access /proc/self/task` - Filesystem not available (e.g., non-Linux systems)
+- `INFO: Token <name> cleared from /proc/self/environ and all N task(s)` - Token successfully cleared from process and all tasks (✓ secure)
+- `WARNING: Token <name> still exposed in <path>` - Token still visible in the specified path (⚠ security concern)
+- `INFO: Token <name> cleared (could not verify task environ)` - Token cleared from /proc/self/environ but task directory not accessible
 
-This verification runs automatically on first access to each sensitive token and helps identify potential security issues with task-level environment exposure.
+This verification runs automatically after `unsetenv()` on first access to each sensitive token and helps identify potential security issues with environment exposure.
 
 ### Defense in Depth
 
