@@ -38,7 +38,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -57,7 +56,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -79,7 +77,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -95,7 +92,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -110,7 +106,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -145,7 +140,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 120000,
-          enableChroot: true,
         }
       );
 
@@ -173,7 +167,6 @@ describe('Chroot /proc Filesystem Correctness', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 120000,
-          enableChroot: true,
         }
       );
 

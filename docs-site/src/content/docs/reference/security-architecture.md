@@ -284,7 +284,7 @@ DNS tunneling through the *allowed* DNS servers (encoding data in query names to
 
 ## Chroot Mode Security
 
-When `--enable-chroot` is enabled, user commands run inside a `chroot /host` jail, providing transparent access to host binaries while maintaining network isolation.
+AWF always runs in chroot mode, where user commands run inside a `chroot /host` jail, providing transparent access to host binaries while maintaining network isolation.
 
 ### Why Chroot Doesn't Break Network Isolation
 
@@ -320,14 +320,13 @@ A common question: "If the command runs in the host filesystem, doesn't it escap
 | **Host $HOME access** | Can read `.ssh/`, `.aws/` | Use env vars for secrets, not files |
 | **DNS override** | Host's resolv.conf modified | Backup created, restored on exit |
 
-### When to Use Chroot Mode
+### Chroot Mode Use Cases
 
-| Scenario | Recommendation |
-|----------|----------------|
-| GitHub Actions with pre-installed tools | Use `--enable-chroot` |
-| Need host-specific binaries (Python, Go) | Use `--enable-chroot` |
-| Want full container isolation | Use default mode |
-| Sensitive secrets in home directory | Consider default mode |
+| Scenario | Notes |
+|----------|-------|
+| GitHub Actions with pre-installed tools | Primary use case |
+| Need host-specific binaries (Python, Go) | Works transparently |
+| Sensitive secrets in home directory | Use `--env` for secrets instead of files |
 
 For complete documentation, see [Chroot Mode](/gh-aw-firewall/docs/chroot-mode/).
 

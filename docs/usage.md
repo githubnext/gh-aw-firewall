@@ -20,8 +20,6 @@ Options:
   --ssl-bump                   Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>          Comma-separated list of allowed URL patterns (requires --ssl-bump)
                                Example: https://github.com/myorg/*
-  --enable-chroot              Enable chroot to /host for running host binaries
-                               (Python, Node, Go, etc.) See chroot-mode.md
   --log-level <level>          Log level: debug, info, warn, error (default: info)
   --keep-containers            Keep containers running after command exits
   --work-dir <dir>             Working directory for temporary files
@@ -607,15 +605,15 @@ To fix this, remove `--skip-pull` to allow automatic pulling, or pre-download th
 
 ## Chroot Mode
 
-The `--enable-chroot` flag enables transparent access to host binaries (Python, Node.js, Go, etc.) while maintaining network isolation. This is useful for GitHub Actions runners with pre-installed tools.
+AWF always runs in chroot mode, providing transparent access to host binaries (Python, Node.js, Go, etc.) while maintaining network isolation. This is especially useful for GitHub Actions runners with pre-installed tools.
 
 ```bash
-# Run with chroot mode to use host binaries
-sudo awf --enable-chroot --allow-domains api.github.com \
+# Use host binaries with network isolation
+sudo awf --allow-domains api.github.com \
   -- python3 -c "import requests; print(requests.get('https://api.github.com').status_code)"
 
 # Combine with --env-all for environment variables
-sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+sudo awf --env-all --allow-domains api.github.com \
   -- bash -c 'echo "Home: $HOME, User: $USER"'
 ```
 

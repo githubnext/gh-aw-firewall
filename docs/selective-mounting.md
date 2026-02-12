@@ -57,46 +57,9 @@ The agent's legitimate tools (Read, Bash) become attack vectors when credentials
 
 ## Selective Mounting Solution
 
-### Normal Mode (without --enable-chroot)
+### Selective Mounting
 
-**What gets mounted:**
-
-```typescript
-// Essential directories only
-const agentVolumes = [
-  '/tmp:/tmp:rw',                                    // Temporary files
-  `${HOME}:${HOME}:rw`,                             // User home (includes workspace)
-  `${workDir}/agent-logs:${HOME}/.copilot/logs:rw`, // Copilot CLI logs
-];
-// Note: $GITHUB_WORKSPACE is typically a subdirectory of $HOME
-// (e.g., /home/runner/work/repo/repo), so it's accessible via the HOME mount.
-```
-
-**What gets hidden:**
-
-```typescript
-// Credential files are mounted as /dev/null (empty file)
-const hiddenCredentials = [
-  '/dev/null:~/.docker/config.json:ro',           // Docker Hub tokens
-  '/dev/null:~/.npmrc:ro',                        // NPM tokens
-  '/dev/null:~/.cargo/credentials:ro',            // Rust tokens
-  '/dev/null:~/.composer/auth.json:ro',           // PHP tokens
-  '/dev/null:~/.config/gh/hosts.yml:ro',          // GitHub CLI tokens
-  '/dev/null:~/.ssh/id_rsa:ro',                   // SSH private keys
-  '/dev/null:~/.ssh/id_ed25519:ro',
-  '/dev/null:~/.ssh/id_ecdsa:ro',
-  '/dev/null:~/.ssh/id_dsa:ro',
-  '/dev/null:~/.aws/credentials:ro',              // AWS credentials
-  '/dev/null:~/.aws/config:ro',
-  '/dev/null:~/.kube/config:ro',                  // Kubernetes credentials
-  '/dev/null:~/.azure/credentials:ro',            // Azure credentials
-  '/dev/null:~/.config/gcloud/credentials.db:ro', // GCP credentials
-];
-```
-
-**Result:** Even if an attacker successfully injects a command like `cat ~/.docker/config.json`, the file will be empty (reads from `/dev/null`).
-
-### Chroot Mode (with --enable-chroot)
+AWF uses chroot mode with selective path mounts. Credential files are hidden at the `/host` paths:
 
 **What gets mounted:**
 

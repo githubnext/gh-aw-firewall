@@ -1,7 +1,7 @@
 /**
  * Chroot Package Manager Tests
  *
- * These tests verify that the --enable-chroot feature correctly provides access
+ * These tests verify that the chroot mode correctly provides access
  * to package managers and SDK tools. Tests validate that tools can perform
  * network operations through the firewall with proper domain whitelisting.
  *
@@ -33,7 +33,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['pypi.org', 'files.pythonhosted.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -45,7 +44,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -57,7 +55,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['pypi.org'],
         logLevel: 'debug',
         timeout: 90000,
-        enableChroot: true,
       });
 
       // pip index versions should work or show available versions
@@ -72,7 +69,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['registry.npmjs.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -83,7 +79,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['registry.npmjs.org'],
         logLevel: 'debug',
         timeout: 90000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -95,7 +90,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // Should fail because registry is not allowed
@@ -109,7 +103,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['crates.io', 'static.crates.io'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -121,7 +114,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -133,7 +125,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['crates.io', 'static.crates.io', 'index.crates.io'],
         logLevel: 'debug',
         timeout: 120000,
-        enableChroot: true,
       });
 
       // Should succeed or fail gracefully - the key is it attempts network access
@@ -149,7 +140,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -161,7 +151,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // javac might not always be available, but Java should be
@@ -175,7 +164,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['repo.maven.apache.org', 'repo1.maven.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // Maven might not be installed, that's OK
@@ -191,7 +179,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -203,7 +190,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -221,7 +207,6 @@ describe('Chroot Package Manager Support', () => {
           allowDomains: ['api.nuget.org', 'nuget.org', 'dotnetcli.azureedge.net'],
           logLevel: 'debug',
           timeout: 180000,
-          enableChroot: true,
         }
       );
 
@@ -244,7 +229,6 @@ describe('Chroot Package Manager Support', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 90000,
-          enableChroot: true,
         }
       );
 
@@ -259,7 +243,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -271,7 +254,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['rubygems.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -283,7 +265,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -294,7 +275,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['rubygems.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // Bundler might not be installed
@@ -308,7 +288,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['rubygems.org', 'index.rubygems.org'],
         logLevel: 'debug',
         timeout: 120000,
-        enableChroot: true,
       });
 
       // Should attempt network access
@@ -324,7 +303,6 @@ describe('Chroot Package Manager Support', () => {
         allowDomains: ['proxy.golang.org', 'sum.golang.org'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -338,7 +316,6 @@ describe('Chroot Package Manager Support', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
