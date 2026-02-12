@@ -321,8 +321,8 @@ export function generateDockerCompose(
   ]);
 
   // Start with required/overridden environment variables
-  // For chroot mode, use the real user's home (not /root when running with sudo)
-  const homeDir = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
+  // Use the real user's home (not /root when running with sudo)
+  const homeDir = getRealUserHome();
   const environment: Record<string, string> = {
     HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
     HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
@@ -344,35 +344,33 @@ export function generateDockerCompose(
     environment.no_proxy = environment.NO_PROXY;
   }
 
-  // For chroot mode, pass the host's actual PATH and tool directories so the entrypoint can use them
+  // Pass the host's actual PATH and tool directories so the entrypoint can use them
   // This ensures toolcache paths (Python, Node, Go, Rust, Java) are correctly resolved
-  if (config.enableChroot) {
-    if (process.env.PATH) {
-      environment.AWF_HOST_PATH = process.env.PATH;
-    }
-    // Go on GitHub Actions uses trimmed binaries that require GOROOT to be set
-    // Pass GOROOT as AWF_GOROOT so entrypoint.sh can export it in the chroot script
-    if (process.env.GOROOT) {
-      environment.AWF_GOROOT = process.env.GOROOT;
-    }
-    // Rust: Pass CARGO_HOME so entrypoint can add $CARGO_HOME/bin to PATH
-    if (process.env.CARGO_HOME) {
-      environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
-    }
-    // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
-    if (process.env.JAVA_HOME) {
-      environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
-    }
-    // .NET: Pass DOTNET_ROOT so entrypoint can add it to PATH and set DOTNET_ROOT
-    if (process.env.DOTNET_ROOT) {
-      environment.AWF_DOTNET_ROOT = process.env.DOTNET_ROOT;
-    }
-    // Bun: Pass BUN_INSTALL so entrypoint can add $BUN_INSTALL/bin to PATH
-    // Bun crashes with core dump when installed inside chroot (restricted /proc access),
-    // so it must be pre-installed on the host via setup-bun action
-    if (process.env.BUN_INSTALL) {
-      environment.AWF_BUN_INSTALL = process.env.BUN_INSTALL;
-    }
+  if (process.env.PATH) {
+    environment.AWF_HOST_PATH = process.env.PATH;
+  }
+  // Go on GitHub Actions uses trimmed binaries that require GOROOT to be set
+  // Pass GOROOT as AWF_GOROOT so entrypoint.sh can export it in the chroot script
+  if (process.env.GOROOT) {
+    environment.AWF_GOROOT = process.env.GOROOT;
+  }
+  // Rust: Pass CARGO_HOME so entrypoint can add $CARGO_HOME/bin to PATH
+  if (process.env.CARGO_HOME) {
+    environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
+  }
+  // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
+  if (process.env.JAVA_HOME) {
+    environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
+  }
+  // .NET: Pass DOTNET_ROOT so entrypoint can add it to PATH and set DOTNET_ROOT
+  if (process.env.DOTNET_ROOT) {
+    environment.AWF_DOTNET_ROOT = process.env.DOTNET_ROOT;
+  }
+  // Bun: Pass BUN_INSTALL so entrypoint can add $BUN_INSTALL/bin to PATH
+  // Bun crashes with core dump when installed inside chroot (restricted /proc access),
+  // so it must be pre-installed on the host via setup-bun action
+  if (process.env.BUN_INSTALL) {
+    environment.AWF_BUN_INSTALL = process.env.BUN_INSTALL;
   }
 
   // If --env-all is specified, pass through all host environment variables (except excluded ones)
@@ -409,17 +407,15 @@ export function generateDockerCompose(
   }
 
   // Pass chroot mode flag to container for entrypoint.sh capability drop
-  if (config.enableChroot) {
-    environment.AWF_CHROOT_ENABLED = 'true';
-    // Pass the container working directory for chroot mode
-    // If containerWorkDir is set, use it; otherwise use home directory
-    // The entrypoint will strip /host prefix to get the correct path inside chroot
-    if (config.containerWorkDir) {
-      environment.AWF_WORKDIR = config.containerWorkDir;
-    } else {
-      // Default to real user's home directory (not /root when running with sudo)
-      environment.AWF_WORKDIR = getRealUserHome();
-    }
+  environment.AWF_CHROOT_ENABLED = 'true';
+  // Pass the container working directory for chroot mode
+  // If containerWorkDir is set, use it; otherwise use home directory
+  // The entrypoint will strip /host prefix to get the correct path inside chroot
+  if (config.containerWorkDir) {
+    environment.AWF_WORKDIR = config.containerWorkDir;
+  } else {
+    // Default to real user's home directory (not /root when running with sudo)
+    environment.AWF_WORKDIR = getRealUserHome();
   }
 
   // Pass host UID/GID for runtime user adjustment in entrypoint
@@ -429,8 +425,8 @@ export function generateDockerCompose(
   // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
   // Build volumes list for agent execution container
-  // For chroot mode, use the real user's home (not /root when running with sudo)
-  const effectiveHome = config.enableChroot ? getRealUserHome() : (process.env.HOME || '/root');
+  // Use the real user's home (not /root when running with sudo)
+  const effectiveHome = getRealUserHome();
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
@@ -439,10 +435,8 @@ export function generateDockerCompose(
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
 
-  // Add chroot-related volume mounts when --enable-chroot is specified
-  // These mounts enable chroot /host to work properly for running host binaries
-  if (config.enableChroot) {
-    logger.debug('Chroot mode enabled - using selective path mounts for security');
+  // Volume mounts for chroot /host to work properly with host binaries
+  logger.debug('Using selective path mounts for security');
 
     // System paths (read-only) - required for binaries and libraries
     agentVolumes.push(
@@ -566,7 +560,6 @@ export function generateDockerCompose(
     agentVolumes.push('/dev/null:/host/run/docker.sock:ro');
 
     logger.debug('Selective mounts configured: system paths (ro), home (rw), Docker socket hidden');
-  }
 
   // Add SSL CA certificate mount if SSL Bump is enabled
   // This allows the agent container to trust the dynamically-generated CA
@@ -613,11 +606,7 @@ export function generateDockerCompose(
   //
   // **Implementation Details**
   //
-  // Normal mode (without --enable-chroot):
-  // - Mount: $HOME (for workspace, including $GITHUB_WORKSPACE when it resides under $HOME), /tmp, ~/.copilot/logs
-  // - Hide: credential files (Docker, NPM, Cargo, Composer, GitHub CLI, SSH keys, AWS, Azure, GCP, k8s)
-  //
-  // Chroot mode (with --enable-chroot):
+  // AWF always runs in chroot mode:
   // - Mount: $HOME at /host$HOME (for chroot environment), system paths at /host
   // - Hide: Same credentials at /host paths
   //
@@ -639,44 +628,12 @@ export function generateDockerCompose(
     logger.warn('   This exposes sensitive credential files to potential prompt injection attacks');
     logger.warn('   Consider using selective mounting (default) or --volume-mount for specific directories');
 
-    // Add blanket mount for full filesystem access in both modes
+    // Add blanket mount for full filesystem access
     agentVolumes.unshift('/:/host:rw');
-  } else if (!config.enableChroot) {
-    // Default: Selective mounting for normal mode (chroot already uses selective mounting)
-    // This provides security against credential exfiltration via prompt injection
-    logger.debug('Using selective mounting for security (credential files hidden)');
-
-    // SECURITY: Hide credential files by mounting /dev/null over them
-    // This prevents prompt-injected commands from reading sensitive tokens
-    // even if the attacker knows the file paths
-    const credentialFiles = [
-      `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
-      `${effectiveHome}/.npmrc`,                    // NPM registry tokens
-      `${effectiveHome}/.cargo/credentials`,        // Rust crates.io tokens
-      `${effectiveHome}/.composer/auth.json`,       // PHP Composer tokens
-      `${effectiveHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
-      // SSH private keys (CRITICAL - server access, git operations)
-      `${effectiveHome}/.ssh/id_rsa`,
-      `${effectiveHome}/.ssh/id_ed25519`,
-      `${effectiveHome}/.ssh/id_ecdsa`,
-      `${effectiveHome}/.ssh/id_dsa`,
-      // Cloud provider credentials (CRITICAL - infrastructure access)
-      `${effectiveHome}/.aws/credentials`,
-      `${effectiveHome}/.aws/config`,
-      `${effectiveHome}/.kube/config`,
-      `${effectiveHome}/.azure/credentials`,
-      `${effectiveHome}/.config/gcloud/credentials.db`,
-    ];
-
-    credentialFiles.forEach(credFile => {
-      agentVolumes.push(`/dev/null:${credFile}:ro`);
-    });
-
-    logger.debug(`Hidden ${credentialFiles.length} credential file(s) via /dev/null mounts`);
   }
 
-  // Chroot mode: Hide credentials at /host paths
-  if (config.enableChroot && !config.allowFullFilesystemAccess) {
+  // Hide credentials at /host paths
+  if (!config.allowFullFilesystemAccess) {
     logger.debug('Chroot mode: Hiding credential files at /host paths');
 
     const userHome = getRealUserHome();
@@ -732,31 +689,26 @@ export function generateDockerCompose(
     //    are mapped to different container paths (e.g., ~/.copilot/logs, /var/log/squid)
     //    so they are unaffected by the tmpfs overlay on workDir.
     //
-    // For chroot mode: hide both normal and /host-prefixed paths since /tmp is
-    // mounted at both /tmp and /host/tmp
-    tmpfs: config.enableChroot
-      ? [
-          '/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
-          '/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
-          `${config.workDir}:rw,noexec,nosuid,size=1m`,
-          `/host${config.workDir}:rw,noexec,nosuid,size=1m`,
-        ]
-      : [
-          '/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
-          `${config.workDir}:rw,noexec,nosuid,size=1m`,
-        ],
+    // Hide both normal and /host-prefixed paths since /tmp is mounted at both
+    // /tmp and /host/tmp in chroot mode (which is always on)
+    tmpfs: [
+      '/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
+      '/host/tmp/gh-aw/mcp-logs:rw,noexec,nosuid,size=1m',
+      `${config.workDir}:rw,noexec,nosuid,size=1m`,
+      `/host${config.workDir}:rw,noexec,nosuid,size=1m`,
+    ],
     depends_on: {
       'squid-proxy': {
         condition: 'service_healthy',
       },
     },
     // NET_ADMIN is required for iptables setup in entrypoint.sh.
-    // SYS_CHROOT is added when --enable-chroot is specified for chroot operations.
-    // SYS_ADMIN is added in chroot mode to mount procfs at /host/proc (required for
+    // SYS_CHROOT is required for chroot operations.
+    // SYS_ADMIN is required to mount procfs at /host/proc (required for
     // dynamic /proc/self/exe resolution needed by .NET CLR and other runtimes).
     // Security: All capabilities are dropped before running user commands
     // via 'capsh --drop=cap_net_admin,cap_sys_chroot,cap_sys_admin' in entrypoint.sh.
-    cap_add: config.enableChroot ? ['NET_ADMIN', 'SYS_CHROOT', 'SYS_ADMIN'] : ['NET_ADMIN'],
+    cap_add: ['NET_ADMIN', 'SYS_CHROOT', 'SYS_ADMIN'],
     // Drop capabilities to reduce attack surface (security hardening)
     cap_drop: [
       'NET_RAW',      // Prevents raw socket creation (iptables bypass attempts)
@@ -766,13 +718,13 @@ export function generateDockerCompose(
       'MKNOD',        // Prevents device node creation
     ],
     // Apply seccomp profile and no-new-privileges to restrict dangerous syscalls and prevent privilege escalation
-    // In chroot mode, AppArmor is set to unconfined to allow mounting procfs at /host/proc
+    // AppArmor is set to unconfined to allow mounting procfs at /host/proc
     // (Docker's default AppArmor profile blocks mount). This is safe because SYS_ADMIN is
     // dropped via capsh before user code runs, so user code cannot mount anything.
     security_opt: [
       'no-new-privileges:true',
       `seccomp=${config.workDir}/seccomp-profile.json`,
-      ...(config.enableChroot ? ['apparmor:unconfined'] : []),
+      'apparmor:unconfined',
     ],
     // Resource limits to prevent DoS attacks (conservative defaults)
     mem_limit: '4g',           // 4GB memory limit
@@ -799,23 +751,20 @@ export function generateDockerCompose(
 
   // Use GHCR image or build locally
   // Priority: GHCR preset images > local build (when requested) > custom images
-  // For presets ('default', 'act'), use GHCR images (even in chroot mode)
-  // This fixes a bug where --enable-chroot would ignore --agent-image preset
+  // For presets ('default', 'act'), use GHCR images
   const agentImage = config.agentImage || 'default';
   const isPreset = agentImage === 'default' || agentImage === 'act';
 
   if (useGHCR && isPreset) {
-    // Use pre-built GHCR image for preset images (works in both normal and chroot mode)
+    // Use pre-built GHCR image for preset images
     // The GHCR images already have the necessary setup for chroot mode
     const imageName = agentImage === 'act' ? 'agent-act' : 'agent';
     agentService.image = `${registry}/${imageName}:${tag}`;
-    if (config.enableChroot) {
-      logger.debug(`Chroot mode: using GHCR image ${imageName}:${tag}`);
-    }
-  } else if (config.buildLocal || (config.enableChroot && !isPreset)) {
+    logger.debug(`Using GHCR image ${imageName}:${tag}`);
+  } else if (config.buildLocal || !isPreset) {
     // Build locally when:
     // 1. --build-local is explicitly specified, OR
-    // 2. --enable-chroot with a custom (non-preset) image
+    // 2. A custom (non-preset) image is specified
     const buildArgs: Record<string, string> = {
       USER_UID: getSafeHostUid(),
       USER_GID: getSafeHostGid(),
@@ -901,7 +850,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // This directory exists on the HOST for MCP gateway to write logs
   // Inside the AWF container, it's hidden via tmpfs mount (see generateDockerCompose)
   // Uses mode 0o777 to allow GitHub Actions workflows and MCP gateway to create subdirectories
-  // even when AWF runs as root (e.g., sudo awf --enable-chroot)
+  // even when AWF runs as root (e.g., sudo awf)
   const mcpLogsDir = '/tmp/gh-aw/mcp-logs';
   if (!fs.existsSync(mcpLogsDir)) {
     fs.mkdirSync(mcpLogsDir, { recursive: true, mode: 0o777 });
