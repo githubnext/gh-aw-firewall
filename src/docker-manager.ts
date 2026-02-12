@@ -493,6 +493,14 @@ export function generateDockerCompose(
     // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
     agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
 
+    // Mount ~/.cache, ~/.config, ~/.local for CLI tool state management (Claude Code, etc.)
+    // These directories are safe to mount as they contain application state, not credentials
+    // Note: Specific credential files within ~/.config (like ~/.config/gh/hosts.yml) are
+    // still blocked via /dev/null overlays applied later in the code
+    agentVolumes.push(`${effectiveHome}/.cache:/host${effectiveHome}/.cache:rw`);
+    agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
+    agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
+
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
     agentVolumes.push(
