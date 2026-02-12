@@ -872,6 +872,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const squidLogsDir = config.proxyLogsDir || path.join(config.workDir, 'squid-logs');
   if (!fs.existsSync(squidLogsDir)) {
     fs.mkdirSync(squidLogsDir, { recursive: true, mode: 0o777 });
+    // Explicitly set permissions to 0o777 (not affected by umask)
+    fs.chmodSync(squidLogsDir, 0o777);
   }
   logger.debug(`Squid logs directory created at: ${squidLogsDir}`);
 
