@@ -1135,7 +1135,7 @@ export async function startContainers(workDir: string, allowedDomains: string[],
     }
     await execa('docker', composeArgs, {
       cwd: workDir,
-      stdio: 'inherit',
+      stdio: ['ignore', 'ignore', 'inherit'], // Only inherit stderr for errors, ignore stdout to prevent container names appearing in output
     });
     logger.success('Containers started successfully');
 
@@ -1307,7 +1307,7 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
       // Normal path: use docker compose down
       await execa('docker', ['compose', 'down', '-v'], {
         cwd: workDir,
-        stdio: 'inherit',
+        stdio: ['ignore', 'ignore', 'inherit'], // Ignore stdout to prevent container names appearing in output
       });
       logger.success('Containers stopped successfully');
     } else {
@@ -1322,7 +1322,7 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
           const { stdout } = await execa('docker', ['ps', '-aq', '-f', `name=^${name}$`]);
           if (stdout.trim()) {
             logger.debug(`Stopping container: ${name}`);
-            await execa('docker', ['rm', '-f', name], { stdio: 'inherit' });
+            await execa('docker', ['rm', '-f', name], { stdio: ['ignore', 'ignore', 'inherit'] }); // Ignore stdout to prevent container names appearing in output
           }
         } catch (err) {
           logger.debug(`Could not stop container ${name}:`, err);
