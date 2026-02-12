@@ -64,7 +64,7 @@ if (OPENAI_API_KEY) {
     }
   }));
 
-  const openaiServer = app.listen(10000, '0.0.0.0', () => {
+  app.listen(10000, '0.0.0.0', () => {
     console.log('[API Proxy] OpenAI proxy listening on port 10000');
     console.log('[API Proxy] Routing through Squid to api.openai.com');
   });
