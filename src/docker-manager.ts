@@ -321,7 +321,7 @@ export function generateDockerCompose(
   ]);
 
   // Start with required/overridden environment variables
-  // Use the real user's home (not /root when running with sudo) for chroot mode
+  // Use the real user's home (not /root when running with sudo)
   const homeDir = getRealUserHome();
   const environment: Record<string, string> = {
     HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
@@ -425,7 +425,7 @@ export function generateDockerCompose(
   // Note: UID/GID values are logged by the container entrypoint if needed for debugging
 
   // Build volumes list for agent execution container
-  // Use the real user's home (not /root when running with sudo) for chroot mode
+  // Use the real user's home (not /root when running with sudo)
   const effectiveHome = getRealUserHome();
   const agentVolumes: string[] = [
     // Essential mounts that are always included
@@ -435,9 +435,8 @@ export function generateDockerCompose(
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
 
-  // Add chroot-related volume mounts
-  // These mounts enable chroot /host to work properly for running host binaries
-  logger.debug('Chroot mode enabled - using selective path mounts for security');
+  // Volume mounts for chroot /host to work properly with host binaries
+  logger.debug('Using selective path mounts for security');
 
     // System paths (read-only) - required for binaries and libraries
     agentVolumes.push(
