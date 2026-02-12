@@ -167,6 +167,26 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
     exit 1
   fi
 
+  # SECURITY: Mask sensitive /proc entries to prevent kernel info disclosure (#223)
+  # /proc/kallsyms exposes kernel symbol addresses (aids ASLR bypass / exploit development)
+  # /proc/modules lists loaded kernel modules (aids kernel exploit targeting)
+  mount --bind /dev/null /host/proc/kallsyms 2>/dev/null || true
+  mount --bind /dev/null /host/proc/modules 2>/dev/null || true
+  echo "[entrypoint] Masked /proc/kallsyms and /proc/modules"
+
+  # Set up additional /dev entries in chroot (#223)
+  # Since /dev is selectively mounted (only null, zero, random, urandom, tty),
+  # we need to create pts, shm, and standard symlinks for proper operation
+  mkdir -p /host/dev/pts /host/dev/shm
+  mount -t devpts devpts /host/dev/pts 2>/dev/null || true
+  mount -t tmpfs tmpfs /host/dev/shm -o mode=1777 2>/dev/null || true
+  # Standard /dev symlinks needed by many programs
+  ln -sf /proc/self/fd /host/dev/fd 2>/dev/null || true
+  ln -sf /proc/self/fd/0 /host/dev/stdin 2>/dev/null || true
+  ln -sf /proc/self/fd/1 /host/dev/stdout 2>/dev/null || true
+  ln -sf /proc/self/fd/2 /host/dev/stderr 2>/dev/null || true
+  echo "[entrypoint] Set up /dev/pts, /dev/shm, and standard symlinks in chroot"
+
   # Copy one-shot-token library to host filesystem for LD_PRELOAD in chroot
   # This prevents tokens from being read multiple times by malicious code
   # Note: /tmp is always writable in chroot mode (mounted from host /tmp as rw)

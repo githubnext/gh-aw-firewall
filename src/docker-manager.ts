@@ -439,6 +439,14 @@ export function generateDockerCompose(
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
 
+  // SECURITY: Mask sensitive /proc entries to prevent kernel info disclosure (#223)
+  // /proc/kallsyms exposes kernel symbol addresses (aids ASLR bypass and exploit development)
+  // /proc/modules lists loaded kernel modules (aids kernel exploit targeting)
+  agentVolumes.push(
+    '/dev/null:/proc/kallsyms:ro',
+    '/dev/null:/proc/modules:ro',
+  );
+
   // Add chroot-related volume mounts when --enable-chroot is specified
   // These mounts enable chroot /host to work properly for running host binaries
   if (config.enableChroot) {
@@ -460,16 +468,29 @@ export function generateDockerCompose(
     // /opt/hostedtoolcache contains Python, Node, Ruby, Go, Java, etc.
     agentVolumes.push('/opt:/host/opt:ro');
 
-    // Special filesystem mounts for chroot (needed for devices and runtime introspection)
+    // Special filesystem mounts for chroot (needed for runtime introspection)
     // NOTE: /proc is NOT bind-mounted here. Instead, a fresh container-scoped procfs is
     // mounted at /host/proc in entrypoint.sh via 'mount -t proc'. This provides:
     //   - Dynamic /proc/self/exe (required by .NET CLR and other runtimes)
     //   - /proc/cpuinfo, /proc/meminfo (required by JVM, .NET GC)
     //   - Container-scoped only (does not expose host process info)
     // The mount requires SYS_ADMIN capability, which is dropped before user code runs.
+    // Additionally, /proc/kallsyms and /proc/modules are masked in entrypoint.sh.
     agentVolumes.push(
       '/sys:/host/sys:ro',             // Read-only sysfs
-      '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
+    );
+
+    // SECURITY: Selective /dev mounting to prevent host block device access (#223)
+    // A blanket /dev:/host/dev:ro mount exposes ALL host device nodes including
+    // /dev/sda*, /dev/nvme* etc. which aids disk forensics and potential data exfiltration.
+    // Instead, mount only the specific device nodes that runtimes need.
+    // Additional /dev entries (pts, shm, symlinks) are set up in entrypoint.sh.
+    agentVolumes.push(
+      '/dev/null:/host/dev/null:rw',
+      '/dev/zero:/host/dev/zero:rw',
+      '/dev/random:/host/dev/random:ro',
+      '/dev/urandom:/host/dev/urandom:ro',
+      '/dev/tty:/host/dev/tty:rw',
     );
 
     // User home directory for project files and Rust/Cargo (read-write)

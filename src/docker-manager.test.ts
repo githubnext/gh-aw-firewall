@@ -552,8 +552,11 @@ describe('docker-manager', () => {
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
-      // Should NOT include /dev/null credential hiding
-      expect(volumes.some((v: string) => v.startsWith('/dev/null'))).toBe(false);
+      // Should NOT include /dev/null credential hiding (but /proc masking is still present)
+      expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(false);
+      // /proc masking should still be present even with full filesystem access
+      expect(volumes).toContain('/dev/null:/proc/kallsyms:ro');
+      expect(volumes).toContain('/dev/null:/proc/modules:ro');
     });
 
     it('should use blanket mount when allowFullFilesystemAccess is true in chroot mode', () => {
@@ -597,7 +600,15 @@ describe('docker-manager', () => {
       expect(volumes).not.toContain('/proc:/host/proc:ro');
       expect(volumes).not.toContain('/proc/self:/host/proc/self:ro');
       expect(volumes).toContain('/sys:/host/sys:ro');
-      expect(volumes).toContain('/dev:/host/dev:ro');
+
+      // SECURITY: /dev is NOT blanket-mounted to prevent host block device access (#223)
+      // Only specific safe device nodes are exposed
+      expect(volumes).not.toContain('/dev:/host/dev:ro');
+      expect(volumes).toContain('/dev/null:/host/dev/null:rw');
+      expect(volumes).toContain('/dev/zero:/host/dev/zero:rw');
+      expect(volumes).toContain('/dev/random:/host/dev/random:ro');
+      expect(volumes).toContain('/dev/urandom:/host/dev/urandom:ro');
+      expect(volumes).toContain('/dev/tty:/host/dev/tty:rw');
 
       // Should include /etc subdirectories (read-only)
       expect(volumes).toContain('/etc/ssl:/host/etc/ssl:ro');
@@ -1091,6 +1102,52 @@ describe('docker-manager', () => {
       expect(agent.memswap_limit).toBe('4g');
       expect(agent.pids_limit).toBe(1000);
       expect(agent.cpu_shares).toBe(1024);
+    });
+
+    it('should mask /proc/kallsyms and /proc/modules for security (#223)', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // SECURITY: Prevent kernel info disclosure
+      // /proc/kallsyms aids ASLR bypass, /proc/modules aids kernel exploit targeting
+      expect(volumes).toContain('/dev/null:/proc/kallsyms:ro');
+      expect(volumes).toContain('/dev/null:/proc/modules:ro');
+    });
+
+    it('should mask /proc/kallsyms and /proc/modules in chroot mode (#223)', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Container-level /proc masking should apply in chroot mode too (defense in depth)
+      // Additionally, entrypoint.sh masks /host/proc/kallsyms and /host/proc/modules
+      expect(volumes).toContain('/dev/null:/proc/kallsyms:ro');
+      expect(volumes).toContain('/dev/null:/proc/modules:ro');
+    });
+
+    it('should use selective /dev mounts in chroot mode instead of blanket mount (#223)', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
+      // Should NOT include blanket /dev mount (exposes host block devices)
+      expect(volumes).not.toContain('/dev:/host/dev:ro');
+
+      // Should include only safe device nodes
+      expect(volumes).toContain('/dev/null:/host/dev/null:rw');
+      expect(volumes).toContain('/dev/zero:/host/dev/zero:rw');
+      expect(volumes).toContain('/dev/random:/host/dev/random:ro');
+      expect(volumes).toContain('/dev/urandom:/host/dev/urandom:ro');
+      expect(volumes).toContain('/dev/tty:/host/dev/tty:rw');
     });
 
     it('should disable TTY by default to prevent ANSI escape sequences', () => {
