@@ -76,6 +76,7 @@ const chrootVolumes = [
   '/dev:/host/dev:ro',                        // Device nodes
   '/tmp:/host/tmp:rw',                        // Temporary files
   `${HOME}:/host${HOME}:rw`,                  // User home at /host path
+  `${HOME}:${HOME}:rw`,                       // User home at direct path (for container env)
 
   // Minimal /etc (no /etc/shadow)
   '/etc/ssl:/host/etc/ssl:ro',
@@ -89,28 +90,50 @@ const chrootVolumes = [
 **What gets hidden:**
 
 ```typescript
-// Same credentials, but at /host paths
+// IMPORTANT: Home directory is mounted at TWO locations in chroot mode
+// Credentials MUST be hidden at BOTH paths to prevent bypass attacks
+
+// 1. Direct home mount (for container environment)
+const directHomeCredentials = [
+  '/dev/null:${HOME}/.docker/config.json:ro',
+  '/dev/null:${HOME}/.npmrc:ro',
+  '/dev/null:${HOME}/.cargo/credentials:ro',
+  '/dev/null:${HOME}/.composer/auth.json:ro',
+  '/dev/null:${HOME}/.config/gh/hosts.yml:ro',
+  '/dev/null:${HOME}/.ssh/id_rsa:ro',
+  '/dev/null:${HOME}/.ssh/id_ed25519:ro',
+  '/dev/null:${HOME}/.ssh/id_ecdsa:ro',
+  '/dev/null:${HOME}/.ssh/id_dsa:ro',
+  '/dev/null:${HOME}/.aws/credentials:ro',
+  '/dev/null:${HOME}/.aws/config:ro',
+  '/dev/null:${HOME}/.kube/config:ro',
+  '/dev/null:${HOME}/.azure/credentials:ro',
+  '/dev/null:${HOME}/.config/gcloud/credentials.db:ro',
+];
+
+// 2. Chroot /host mount (for chroot operations)
 const chrootHiddenCredentials = [
-  '/dev/null:/host/home/runner/.docker/config.json:ro',
-  '/dev/null:/host/home/runner/.npmrc:ro',
-  '/dev/null:/host/home/runner/.cargo/credentials:ro',
-  '/dev/null:/host/home/runner/.composer/auth.json:ro',
-  '/dev/null:/host/home/runner/.config/gh/hosts.yml:ro',
-  '/dev/null:/host/home/runner/.ssh/id_rsa:ro',
-  '/dev/null:/host/home/runner/.ssh/id_ed25519:ro',
-  '/dev/null:/host/home/runner/.ssh/id_ecdsa:ro',
-  '/dev/null:/host/home/runner/.ssh/id_dsa:ro',
-  '/dev/null:/host/home/runner/.aws/credentials:ro',
-  '/dev/null:/host/home/runner/.aws/config:ro',
-  '/dev/null:/host/home/runner/.kube/config:ro',
-  '/dev/null:/host/home/runner/.azure/credentials:ro',
-  '/dev/null:/host/home/runner/.config/gcloud/credentials.db:ro',
+  '/dev/null:/host${HOME}/.docker/config.json:ro',
+  '/dev/null:/host${HOME}/.npmrc:ro',
+  '/dev/null:/host${HOME}/.cargo/credentials:ro',
+  '/dev/null:/host${HOME}/.composer/auth.json:ro',
+  '/dev/null:/host${HOME}/.config/gh/hosts.yml:ro',
+  '/dev/null:/host${HOME}/.ssh/id_rsa:ro',
+  '/dev/null:/host${HOME}/.ssh/id_ed25519:ro',
+  '/dev/null:/host${HOME}/.ssh/id_ecdsa:ro',
+  '/dev/null:/host${HOME}/.ssh/id_dsa:ro',
+  '/dev/null:/host${HOME}/.aws/credentials:ro',
+  '/dev/null:/host${HOME}/.aws/config:ro',
+  '/dev/null:/host${HOME}/.kube/config:ro',
+  '/dev/null:/host${HOME}/.azure/credentials:ro',
+  '/dev/null:/host${HOME}/.config/gcloud/credentials.db:ro',
 ];
 ```
 
 **Additional security:**
 - Docker socket hidden: `/dev/null:/host/var/run/docker.sock:ro`
 - Prevents `docker run` firewall bypass
+- **Dual-mount protection**: Credentials hidden at both `$HOME` and `/host$HOME` paths
 
 ## Usage Examples
 

@@ -630,37 +630,73 @@ export function generateDockerCompose(
 
     // Add blanket mount for full filesystem access
     agentVolumes.unshift('/:/host:rw');
+  } else {
+    // Default: Selective mounting for security against credential exfiltration
+    // This provides protection against prompt injection attacks
+    logger.debug('Using selective mounting for security (credential files hidden)');
+
+    // SECURITY: Hide credential files by mounting /dev/null over them
+    // This prevents prompt-injected commands from reading sensitive tokens
+    // even if the attacker knows the file paths
+    //
+    // The home directory is mounted at both $HOME and /host$HOME.
+    // We must hide credentials at BOTH paths to prevent bypass attacks.
+    const credentialFiles = [
+      `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
+      `${effectiveHome}/.npmrc`,                    // NPM registry tokens
+      `${effectiveHome}/.cargo/credentials`,        // Rust crates.io tokens
+      `${effectiveHome}/.composer/auth.json`,       // PHP Composer tokens
+      `${effectiveHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
+      // SSH private keys (CRITICAL - server access, git operations)
+      `${effectiveHome}/.ssh/id_rsa`,
+      `${effectiveHome}/.ssh/id_ed25519`,
+      `${effectiveHome}/.ssh/id_ecdsa`,
+      `${effectiveHome}/.ssh/id_dsa`,
+      // Cloud provider credentials (CRITICAL - infrastructure access)
+      `${effectiveHome}/.aws/credentials`,
+      `${effectiveHome}/.aws/config`,
+      `${effectiveHome}/.kube/config`,
+      `${effectiveHome}/.azure/credentials`,
+      `${effectiveHome}/.config/gcloud/credentials.db`,
+    ];
+
+    credentialFiles.forEach(credFile => {
+      agentVolumes.push(`/dev/null:${credFile}:ro`);
+    });
+
+    logger.debug(`Hidden ${credentialFiles.length} credential file(s) via /dev/null mounts`);
   }
 
-  // Hide credentials at /host paths
+  // Also hide credentials at /host paths (chroot mounts home at /host$HOME too)
   if (!config.allowFullFilesystemAccess) {
-    logger.debug('Chroot mode: Hiding credential files at /host paths');
+    logger.debug('Hiding credential files at /host paths');
 
-    const userHome = getRealUserHome();
+    // Note: In chroot mode, effectiveHome === getRealUserHome() (see line 433),
+    // so we reuse effectiveHome here instead of calling getRealUserHome() again.
     const chrootCredentialFiles = [
-      `/dev/null:/host${userHome}/.docker/config.json:ro`,
-      `/dev/null:/host${userHome}/.npmrc:ro`,
-      `/dev/null:/host${userHome}/.cargo/credentials:ro`,
-      `/dev/null:/host${userHome}/.composer/auth.json:ro`,
-      `/dev/null:/host${userHome}/.config/gh/hosts.yml:ro`,
+      `/dev/null:/host${effectiveHome}/.docker/config.json:ro`,
+      `/dev/null:/host${effectiveHome}/.npmrc:ro`,
+      `/dev/null:/host${effectiveHome}/.cargo/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.composer/auth.json:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gh/hosts.yml:ro`,
       // SSH private keys (CRITICAL - server access, git operations)
-      `/dev/null:/host${userHome}/.ssh/id_rsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ed25519:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ecdsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_dsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_rsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ed25519:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ecdsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_dsa:ro`,
       // Cloud provider credentials (CRITICAL - infrastructure access)
-      `/dev/null:/host${userHome}/.aws/credentials:ro`,
-      `/dev/null:/host${userHome}/.aws/config:ro`,
-      `/dev/null:/host${userHome}/.kube/config:ro`,
-      `/dev/null:/host${userHome}/.azure/credentials:ro`,
-      `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/config:ro`,
+      `/dev/null:/host${effectiveHome}/.kube/config:ro`,
+      `/dev/null:/host${effectiveHome}/.azure/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gcloud/credentials.db:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {
       agentVolumes.push(mount);
     });
 
-    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) in chroot mode`);
+    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) at /host paths`);
   }
 
   // Agent service configuration
