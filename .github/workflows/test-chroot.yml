@@ -100,6 +100,9 @@ jobs:
         run: |
           echo "=== Pre-test cleanup ==="
           ./scripts/ci/cleanup.sh || true
+          # Clean npm cache to avoid permission errors (cache may be root-owned from previous runs)
+          rm -rf ~/.npm 2>/dev/null || true
+          echo "npm cache cleaned"
 
       - name: Run chroot language tests
         run: |
@@ -213,10 +216,14 @@ jobs:
           echo "Rust: $(rustc --version)"
           echo "Cargo: $(cargo --version)"
           echo "CARGO_HOME: $CARGO_HOME"
+          echo "Cargo location: $(which cargo)"
+          echo "Rustc location: $(which rustc)"
+          echo "Cargo bin exists: $(ls -la ~/.cargo/bin/cargo 2>&1 || echo 'NOT FOUND')"
           echo "Java: $(java --version 2>&1 | head -1)"
           echo "JAVA_HOME: $JAVA_HOME"
           echo "dotnet: $(dotnet --version 2>&1)"
           echo "DOTNET_ROOT: $DOTNET_ROOT"
+          echo "npm cache: $(ls -ld ~/.npm 2>&1 || echo 'NOT FOUND')"
 
       - name: Install dependencies
         run: npm ci
@@ -234,6 +241,9 @@ jobs:
         run: |
           echo "=== Pre-test cleanup ==="
           ./scripts/ci/cleanup.sh || true
+          # Clean npm cache to avoid permission errors (cache may be root-owned from previous runs)
+          rm -rf ~/.npm 2>/dev/null || true
+          echo "npm cache cleaned"
 
       - name: Run chroot package manager tests
         run: |
@@ -308,6 +318,9 @@ jobs:
         run: |
           echo "=== Pre-test cleanup ==="
           ./scripts/ci/cleanup.sh || true
+          # Clean npm cache to avoid permission errors (cache may be root-owned from previous runs)
+          rm -rf ~/.npm 2>/dev/null || true
+          echo "npm cache cleaned"
 
       - name: Run chroot procfs tests
         run: |
@@ -364,6 +377,9 @@ jobs:
         run: |
           echo "=== Pre-test cleanup ==="
           ./scripts/ci/cleanup.sh || true
+          # Clean npm cache to avoid permission errors (cache may be root-owned from previous runs)
+          rm -rf ~/.npm 2>/dev/null || true
+          echo "npm cache cleaned"
 
       - name: Run chroot edge case tests
         run: |
