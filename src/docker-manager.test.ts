@@ -1679,7 +1679,7 @@ describe('docker-manager', () => {
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
         ['compose', 'up', '-d'],
-        { cwd: testDir, stdio: 'inherit' }
+        { cwd: testDir, stdio: ['ignore', 'ignore', 'inherit'] }
       );
     });
 
@@ -1692,7 +1692,7 @@ describe('docker-manager', () => {
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
         ['compose', 'up', '-d'],
-        { cwd: testDir, stdio: 'inherit' }
+        { cwd: testDir, stdio: ['ignore', 'ignore', 'inherit'] }
       );
     });
 
@@ -1705,7 +1705,7 @@ describe('docker-manager', () => {
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
         ['compose', 'up', '-d', '--pull', 'never'],
-        { cwd: testDir, stdio: 'inherit' }
+        { cwd: testDir, stdio: ['ignore', 'ignore', 'inherit'] }
       );
     });
 
@@ -1718,7 +1718,7 @@ describe('docker-manager', () => {
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
         ['compose', 'up', '-d'],
-        { cwd: testDir, stdio: 'inherit' }
+        { cwd: testDir, stdio: ['ignore', 'ignore', 'inherit'] }
       );
     });
 
@@ -1779,7 +1779,9 @@ describe('docker-manager', () => {
       expect(mockExecaFn).not.toHaveBeenCalled();
     });
 
-    it('should run docker compose down when keepContainers is false', async () => {
+    it('should run docker compose down when keepContainers is false and compose file exists', async () => {
+      // Create docker-compose.yml so the normal path is taken
+      fs.writeFileSync(path.join(testDir, 'docker-compose.yml'), 'version: "3"\n');
       mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
 
       await stopContainers(testDir, false);
@@ -1787,11 +1789,27 @@ describe('docker-manager', () => {
       expect(mockExecaFn).toHaveBeenCalledWith(
         'docker',
         ['compose', 'down', '-v'],
-        { cwd: testDir, stdio: 'inherit' }
+        { cwd: testDir, stdio: ['ignore', 'ignore', 'inherit'] }
+      );
+    });
+
+    it('should fall back to docker rm -f -v when compose file is missing', async () => {
+      // No docker-compose.yml in testDir, so fallback path is taken
+      // Mock docker ps returning empty (no containers found)
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+      mockExecaFn.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await stopContainers(testDir, false);
+
+      expect(mockExecaFn).toHaveBeenCalledWith(
+        'docker',
+        ['ps', '-aq', '-f', 'name=^awf-agent$'],
       );
     });
 
     it('should throw error when docker compose down fails', async () => {
+      // Create docker-compose.yml so the normal path is taken
+      fs.writeFileSync(path.join(testDir, 'docker-compose.yml'), 'version: "3"\n');
       mockExecaFn.mockRejectedValueOnce(new Error('Docker compose down failed'));
 
       await expect(stopContainers(testDir, false)).rejects.toThrow('Docker compose down failed');
