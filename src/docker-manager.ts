@@ -502,8 +502,9 @@ export function generateDockerCompose(
     }
 
     // Mount ~/.cargo for Rust binaries (read-only) if it exists
+    // SKIP if allowFullFilesystemAccess is false (credentials will be hidden via tmpfs)
     const hostCargoDir = path.join(userHome, '.cargo');
-    if (fs.existsSync(hostCargoDir)) {
+    if (fs.existsSync(hostCargoDir) && config.allowFullFilesystemAccess) {
       agentVolumes.push(`${hostCargoDir}:/host${hostCargoDir}:ro`);
     }
 
@@ -1300,11 +1301,36 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
   logger.info('Stopping containers...');
 
   try {
-    await execa('docker', ['compose', 'down', '-v'], {
-      cwd: workDir,
-      stdio: 'inherit',
-    });
-    logger.success('Containers stopped successfully');
+    // Check if workDir and docker-compose.yml exist before using docker compose
+    const composeFile = path.join(workDir, 'docker-compose.yml');
+    if (fs.existsSync(workDir) && fs.existsSync(composeFile)) {
+      // Normal path: use docker compose down
+      await execa('docker', ['compose', 'down', '-v'], {
+        cwd: workDir,
+        stdio: 'inherit',
+      });
+      logger.success('Containers stopped successfully');
+    } else {
+      // Fallback: compose file missing, stop containers by name
+      logger.debug('Compose file not found, stopping containers by name');
+
+      // Stop and remove containers by name
+      const containerNames = ['awf-agent', 'awf-squid'];
+      for (const name of containerNames) {
+        try {
+          // Check if container exists
+          const { stdout } = await execa('docker', ['ps', '-aq', '-f', `name=^${name}$`]);
+          if (stdout.trim()) {
+            logger.debug(`Stopping container: ${name}`);
+            await execa('docker', ['rm', '-f', name], { stdio: 'inherit' });
+          }
+        } catch (err) {
+          logger.debug(`Could not stop container ${name}:`, err);
+        }
+      }
+
+      logger.success('Containers stopped successfully');
+    }
   } catch (error) {
     logger.error('Failed to stop containers:', error);
     throw error;

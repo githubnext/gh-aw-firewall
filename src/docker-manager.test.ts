@@ -655,6 +655,44 @@ describe('docker-manager', () => {
       expect(volumes).not.toContain(`${homeDir}:/host${homeDir}:rw`);
     });
 
+    it('should not mount .cargo when enableChroot is true and allowFullFilesystemAccess is false', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        allowFullFilesystemAccess: false
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const tmpfs = agent.tmpfs as string[];
+
+      // Should NOT mount .cargo as volume (it's hidden via tmpfs)
+      const homeDir = process.env.HOME || '/root';
+      const cargoVolumePattern = new RegExp(`${homeDir.replace(/\//g, '\\/')}.*\\.cargo.*:/host.*\\.cargo`);
+      expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(false);
+
+      // Should have .cargo hidden via tmpfs
+      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(true);
+    });
+
+    it('should mount .cargo when enableChroot is true and allowFullFilesystemAccess is true', () => {
+      const configWithChroot = {
+        ...mockConfig,
+        enableChroot: true,
+        allowFullFilesystemAccess: true
+      };
+      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+      const tmpfs = agent.tmpfs as string[];
+
+      // With allowFullFilesystemAccess, should have blanket mount
+      expect(volumes).toContain('/:/host:rw');
+
+      // Should NOT have credential hiding tmpfs (only MCP logs tmpfs)
+      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(false);
+    });
+
     it('should add SYS_CHROOT and SYS_ADMIN capabilities when enableChroot is true', () => {
       const configWithChroot = {
         ...mockConfig,
