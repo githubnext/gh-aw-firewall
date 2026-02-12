@@ -509,6 +509,12 @@ export function generateDockerCompose(
     // This is safe as ~/.claude contains only Claude-specific state, not credentials
     agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
 
+    // Mount ~/.cargo and ~/.rustup for Rust toolchain access
+    // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
+    // These directories contain the Rust compiler, Cargo, and related tools - not credentials
+    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:ro`);
+    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:ro`);
+
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
     agentVolumes.push(
