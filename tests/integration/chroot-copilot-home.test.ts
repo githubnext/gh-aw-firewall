@@ -46,7 +46,6 @@ describe('Chroot Copilot Home Directory Access', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       }
     );
 
@@ -62,7 +61,6 @@ describe('Chroot Copilot Home Directory Access', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       }
     );
 
@@ -77,7 +75,6 @@ describe('Chroot Copilot Home Directory Access', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       }
     );
 
