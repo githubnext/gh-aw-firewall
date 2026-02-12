@@ -1,6 +1,6 @@
 # API Proxy Sidecar for Credential Management
 
-The AWF firewall supports an optional Envoy-based API proxy sidecar that securely holds LLM API credentials and automatically injects authentication headers.
+The AWF firewall supports an optional Node.js-based API proxy sidecar that securely holds LLM API credentials and automatically injects authentication headers while routing all traffic through Squid to respect domain whitelisting.
 
 ## Overview
 
@@ -9,6 +9,7 @@ When enabled, the API proxy sidecar:
 - **Auto-authentication**: Automatically injects Bearer tokens and API keys
 - **Dual provider support**: Supports both OpenAI (Codex) and Anthropic (Claude) APIs
 - **Transparent proxying**: Agent code uses standard environment variables
+- **Squid routing**: All traffic routes through Squid to respect domain whitelisting
 
 ## Architecture
 
@@ -17,21 +18,31 @@ When enabled, the API proxy sidecar:
 │ AWF Network (172.30.0.0/24)                     │
 │                                                  │
 │  ┌──────────────┐       ┌─────────────────┐   │
-│  │   Squid      │       │  Envoy Sidecar  │   │
+│  │   Squid      │◄──────│  Node.js Proxy  │   │
 │  │ 172.30.0.10  │       │  172.30.0.30    │   │
-│  └──────────────┘       └─────────────────┘   │
-│                                  │              │
-│  ┌──────────────────────────────┴──────────┐  │
-│  │      Agent Container                     │  │
-│  │      172.30.0.20                         │  │
-│  │  OPENAI_BASE_URL=http://api-proxy:10000 │  │
-│  │  ANTHROPIC_BASE_URL=http://api-proxy:10001│ │
-│  └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
-         │                          │
-         ↓                          ↓
-  api.openai.com          api.anthropic.com
+│  └──────┬───────┘       └─────────────────┘   │
+│         │                        ▲              │
+│         │  ┌──────────────────────────────┐    │
+│         │  │      Agent Container         │    │
+│         │  │      172.30.0.20             │    │
+│         │  │  OPENAI_BASE_URL=            │    │
+│         │  │    http://api-proxy:10000    │────┘
+│         │  │  ANTHROPIC_BASE_URL=         │
+│         │  │    http://api-proxy:10001    │
+│         │  └──────────────────────────────┘
+│         │
+└─────────┼─────────────────────────────────────┘
+          │ (Domain whitelist enforced)
+          ↓
+  api.openai.com or api.anthropic.com
 ```
+
+**Traffic Flow:**
+1. Agent makes request to `api-proxy:10000` or `api-proxy:10001`
+2. API proxy injects authentication headers
+3. API proxy routes through Squid via HTTP_PROXY/HTTPS_PROXY
+4. Squid enforces domain whitelist (only allowed domains pass)
+5. Request reaches api.openai.com or api.anthropic.com
 
 ## Usage
 
@@ -114,8 +125,9 @@ API keys are held in the sidecar container, not the agent:
 
 The proxy enforces domain-level egress control:
 - Agent can only reach `api-proxy` hostname
-- Sidecar proxies to whitelisted domains only
-- Squid proxy still enforces L7 filtering
+- Sidecar routes ALL traffic through Squid proxy
+- Squid enforces domain whitelist (L7 filtering)
+- No firewall exemption needed for sidecar
 
 ### Resource Limits
 
@@ -130,9 +142,9 @@ The sidecar has strict resource constraints:
 ### 1. Container Startup
 
 When `--enable-api-proxy` is set:
-1. Envoy sidecar starts at 172.30.0.30
+1. Node.js API proxy starts at 172.30.0.30
 2. API keys passed via environment variables
-3. Entrypoint generates `envoy.yaml` dynamically
+3. HTTP_PROXY/HTTPS_PROXY configured to route through Squid
 4. Agent container waits for sidecar health check
 
 ### 2. Request Flow
@@ -140,15 +152,18 @@ When `--enable-api-proxy` is set:
 ```
 Agent Code
   ↓ (makes HTTP request to api-proxy:10000)
-Envoy Sidecar
+Node.js API Proxy
   ↓ (injects Authorization: Bearer $OPENAI_API_KEY)
+  ↓ (routes via HTTP_PROXY to Squid)
+Squid Proxy
+  ↓ (enforces domain whitelist)
   ↓ (TLS connection to api.openai.com)
 OpenAI API
 ```
 
 ### 3. Header Injection
 
-Envoy automatically adds:
+The Node.js proxy automatically adds:
 - **OpenAI**: `Authorization: Bearer $OPENAI_API_KEY`
 - **Anthropic**: `x-api-key: $ANTHROPIC_API_KEY` and `anthropic-version: 2023-06-01`
 
@@ -171,14 +186,15 @@ awf --enable-api-proxy [OPTIONS] -- COMMAND
 ### Container Configuration
 
 The sidecar container:
-- **Image**: `ghcr.io/github/gh-aw-firewall/envoy:latest`
-- **Base**: `envoyproxy/envoy:v1.31-latest`
+- **Image**: `ghcr.io/github/gh-aw-firewall/api-proxy:latest`
+- **Base**: `node:22-alpine`
 - **Network**: `awf-net` at `172.30.0.30`
 - **Ports**: 10000 (OpenAI), 10001 (Anthropic)
+- **Proxy**: Routes via Squid at `http://172.30.0.10:3128`
 
 ### Health Check
 
-Envoy healthcheck on port 10000:
+API proxy healthcheck on `/health` endpoint:
 - **Interval**: 5s
 - **Timeout**: 3s
 - **Retries**: 5
@@ -202,12 +218,12 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ### Sidecar health check failing
 
-Check if Envoy container started:
+Check if API proxy container started:
 ```bash
 docker ps | grep awf-api-proxy
 ```
 
-View Envoy logs:
+View API proxy logs:
 ```bash
 docker logs awf-api-proxy
 ```

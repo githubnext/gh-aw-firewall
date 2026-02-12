@@ -848,13 +848,13 @@ export function generateDockerCompose(
     agentService.image = agentImage;
   }
 
-  // API Proxy sidecar service (Envoy) - optionally deployed
+  // API Proxy sidecar service (Node.js) - optionally deployed
   const services: Record<string, any> = {
     'squid-proxy': squidService,
     'agent': agentService,
   };
 
-  // Add Envoy API proxy sidecar if enabled
+  // Add Node.js API proxy sidecar if enabled
   if (config.enableApiProxy && networkConfig.proxyIp) {
     const proxyService: any = {
       container_name: 'awf-api-proxy',
@@ -867,9 +867,12 @@ export function generateDockerCompose(
         // Pass API keys securely to sidecar (not visible to agent)
         ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
         ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
+        // Route through Squid to respect domain whitelisting
+        HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+        HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
       },
       healthcheck: {
-        test: ['CMD', 'curl', '-f', 'http://localhost:9901/ready'],
+        test: ['CMD', 'curl', '-f', 'http://localhost:10000/health'],
         interval: '5s',
         timeout: '3s',
         retries: 5,
@@ -889,10 +892,10 @@ export function generateDockerCompose(
 
     // Use GHCR image or build locally
     if (useGHCR) {
-      proxyService.image = `${registry}/envoy:${tag}`;
+      proxyService.image = `${registry}/api-proxy:${tag}`;
     } else {
       proxyService.build = {
-        context: path.join(projectRoot, 'containers/envoy'),
+        context: path.join(projectRoot, 'containers/api-proxy'),
         dockerfile: 'Dockerfile',
       };
     }
@@ -915,6 +918,7 @@ export function generateDockerCompose(
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
+    logger.info('API proxy will route through Squid to respect domain whitelisting');
   }
 
   return {

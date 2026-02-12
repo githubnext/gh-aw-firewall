@@ -1520,7 +1520,7 @@ describe('docker-manager', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
-        expect(proxy.image).toBe('ghcr.io/github/gh-aw-firewall/envoy:latest');
+        expect(proxy.image).toBe('ghcr.io/github/gh-aw-firewall/api-proxy:latest');
         expect(proxy.build).toBeUndefined();
       });
 
@@ -1529,7 +1529,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
         expect(proxy.build).toBeDefined();
-        expect((proxy.build as any).context).toContain('containers/envoy');
+        expect((proxy.build as any).context).toContain('containers/api-proxy');
         expect(proxy.image).toBeUndefined();
       });
 
@@ -1537,7 +1537,7 @@ describe('docker-manager', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false, imageRegistry: 'my-registry.com', imageTag: 'v1.0.0' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
-        expect(proxy.image).toBe('my-registry.com/envoy:v1.0.0');
+        expect(proxy.image).toBe('my-registry.com/api-proxy:v1.0.0');
       });
 
       it('should configure healthcheck for api-proxy', () => {
@@ -1545,7 +1545,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
         expect(proxy.healthcheck).toBeDefined();
-        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:9901/ready']);
+        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:10000/health']);
       });
 
       it('should drop all capabilities', () => {
@@ -1581,6 +1581,15 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+      });
+
+      it('should configure HTTP_PROXY and HTTPS_PROXY in api-proxy to route through Squid', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const proxy = result.services['api-proxy'];
+        const env = proxy.environment as Record<string, string>;
+        expect(env.HTTP_PROXY).toBe('http://172.30.0.10:3128');
+        expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
       });
 
       it('should set ANTHROPIC_BASE_URL in agent when Anthropic key is provided', () => {

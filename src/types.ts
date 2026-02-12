@@ -410,9 +410,10 @@ export interface WrapperConfig {
   /**
    * Enable API proxy sidecar for holding authentication credentials
    *
-   * When true, deploys an Envoy proxy sidecar container that:
+   * When true, deploys a Node.js proxy sidecar container that:
    * - Holds OpenAI and Anthropic API keys securely
    * - Automatically injects authentication headers
+   * - Routes all traffic through Squid to respect domain whitelisting
    * - Proxies requests to LLM providers
    *
    * The sidecar exposes two endpoints accessible from the agent container:
@@ -442,7 +443,7 @@ export interface WrapperConfig {
   /**
    * OpenAI API key for Codex (used by API proxy sidecar)
    *
-   * When enableApiProxy is true, this key is injected into the Envoy sidecar
+   * When enableApiProxy is true, this key is injected into the Node.js sidecar
    * container and used to authenticate requests to api.openai.com.
    *
    * The key is NOT exposed to the agent container - only the proxy URL is provided.
@@ -454,7 +455,7 @@ export interface WrapperConfig {
   /**
    * Anthropic API key for Claude (used by API proxy sidecar)
    *
-   * When enableApiProxy is true, this key is injected into the Envoy sidecar
+   * When enableApiProxy is true, this key is injected into the Node.js sidecar
    * container and used to authenticate requests to api.anthropic.com.
    *
    * The key is NOT exposed to the agent container - only the proxy URL is provided.
