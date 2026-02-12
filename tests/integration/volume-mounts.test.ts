@@ -113,13 +113,14 @@ describe('Volume Mount Functionality', () => {
   }, 120000);
 
   test('Test 4: Blanket mount removed with custom mounts', async () => {
-    // Create a test file outside the custom mount
-    const secretFile = '/tmp/secret-file-12345.txt';
-    fs.writeFileSync(secretFile, 'Secret data');
+    // Create a test file outside the custom mount in a secure temp directory
+    const secretDir = fs.mkdtempSync(path.join(os.tmpdir(), 'awf-secret-'));
+    const secretFile = path.join(secretDir, 'secret.txt');
+    fs.writeFileSync(secretFile, 'Secret data', { mode: 0o600 });
 
     try {
       const result = await runner.runWithSudo(
-        'sh -c "cat /data/test.txt && cat /tmp/secret-file-12345.txt"',
+        `sh -c "cat /data/test.txt && cat ${secretFile}"`,
         {
           allowDomains: ['github.com'],
           logLevel: 'debug',
@@ -129,13 +130,13 @@ describe('Volume Mount Functionality', () => {
       );
 
       // First cat should fail (no file in /data)
-      // Second cat should fail (no blanket mount, /tmp not accessible from host)
+      // Second cat should fail (no blanket mount, host paths not accessible)
       expect(result).toFail();
       expect(result.stderr).toMatch(/No such file or directory/);
     } finally {
-      // Cleanup secret file
-      if (fs.existsSync(secretFile)) {
-        fs.unlinkSync(secretFile);
+      // Cleanup secret directory
+      if (fs.existsSync(secretDir)) {
+        fs.rmSync(secretDir, { recursive: true, force: true });
       }
     }
   }, 120000);
