@@ -274,6 +274,19 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 - **In-process getenv() calls**: Since values are cached, any code in the same process can still call `getenv()` and get the cached token
 - **Static linking**: Programs statically linked with libc bypass LD_PRELOAD
 - **Direct syscalls**: Code that reads `/proc/self/environ` directly (without getenv) bypasses this protection
+- **Task-level /proc exposure**: `/proc/PID/task/TID/environ` may still expose tokens even after `unsetenv()`. The library checks and logs warnings about this exposure.
+
+### Task-Level Environment Verification
+
+After calling `unsetenv()` to clear tokens from `/proc/self/environ`, the library automatically checks if tokens are still exposed in `/proc/self/task/*/environ` files (per-task environment). This verification provides visibility into a known Linux kernel behavior where task-level environ files may retain values even after the process-level environment is cleared.
+
+**Log messages:**
+- `INFO: Token <name> verified cleared from N task(s)` - Token successfully cleared from all tasks (✓ secure)
+- `WARNING: Token <name> still exposed in /proc/self/task/TID/environ` - Token still visible in task environ (⚠ security concern)
+- `INFO: No tasks found under /proc/self/task` - Task directory not accessible or empty
+- `INFO: Could not access /proc/self/task` - Filesystem not available (e.g., non-Linux systems)
+
+This verification runs automatically on first access to each sensitive token and helps identify potential security issues with task-level environment exposure.
 
 ### Defense in Depth
 
