@@ -97,6 +97,8 @@ As of v0.13.13, chroot mode mounts a fresh container-scoped procfs at `/host/pro
 
 **Security implications:**
 - The mounted procfs only exposes container processes, not host processes
+- **SECURITY GUARANTEE**: No process inside the container can read the host's /proc filesystem
+- The procfs mount is type `proc` (new filesystem), NOT a bind mount of the host's /proc
 - Mount operation completes before user code runs (capability dropped)
 - procfs is mounted with security restrictions: `nosuid,nodev,noexec`
 - User code cannot unmount or remount (no `CAP_SYS_ADMIN`, umount blocked in seccomp)

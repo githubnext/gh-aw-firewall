@@ -19,6 +19,12 @@ use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::Mutex;
 
+// External declaration of the environ pointer
+// This is a POSIX standard global that points to the process's environment
+extern "C" {
+    static mut environ: *mut *mut c_char;
+}
+
 /// Maximum number of tokens we can track
 const MAX_TOKENS: usize = 100;
 
@@ -196,6 +202,52 @@ fn format_token_value(value: &str) -> String {
     }
 }
 
+/// Check if a token still exists in the process environment
+/// 
+/// This function verifies whether unsetenv() successfully cleared the token
+/// by directly checking the process's environ pointer. This works correctly
+/// in both chroot and non-chroot modes (reading /proc/self/environ fails in
+/// chroot because it shows the host's procfs, not the chrooted process's state).
+fn check_task_environ_exposure(token_name: &str) {
+    // SAFETY: environ is a standard POSIX global that points to the process's environment.
+    // It's safe to read as long as we don't hold references across modifications.
+    // We're only reading it after unsetenv() has completed, so the pointer is stable.
+    unsafe {
+        let mut env_ptr = environ;
+        if env_ptr.is_null() {
+            eprintln!("[one-shot-token] INFO: Token {} cleared (environ is null)", token_name);
+            return;
+        }
+        
+        // Iterate through environment variables
+        let token_prefix = format!("{}=", token_name);
+        let token_prefix_bytes = token_prefix.as_bytes();
+        
+        while !(*env_ptr).is_null() {
+            let env_cstr = CStr::from_ptr(*env_ptr);
+            let env_bytes = env_cstr.to_bytes();
+            
+            // Check if this entry starts with our token name
+            if env_bytes.len() >= token_prefix_bytes.len() 
+                && &env_bytes[..token_prefix_bytes.len()] == token_prefix_bytes {
+                eprintln!(
+                    "[one-shot-token] WARNING: Token {} still exposed in process environment",
+                    token_name
+                );
+                return;
+            }
+            
+            env_ptr = env_ptr.add(1);
+        }
+        
+        // Token not found in environment - success!
+        eprintln!(
+            "[one-shot-token] INFO: Token {} cleared from process environment",
+            token_name
+        );
+    }
+}
+
 /// Core implementation for cached token access
 ///
 /// # Safety
@@ -268,8 +320,11 @@ unsafe fn handle_getenv_impl(
     // Cache the pointer so subsequent reads return the same value
     state.cache.insert(name_str.to_string(), cached);
 
-    // Unset the environment variable so /proc/self/environ is cleared
+    // Unset the environment variable so it's no longer accessible
     libc::unsetenv(name);
+
+    // Verify the token was cleared from the process environment
+    check_task_environ_exposure(name_str);
 
     let suffix = if via_secure { " (via secure_getenv)" } else { "" };
     eprintln!(

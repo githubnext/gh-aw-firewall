@@ -155,8 +155,9 @@ if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
   # This provides dynamic /proc/self/exe resolution (required by .NET CLR, JVM, and other
   # runtimes that read /proc/self/exe to find themselves). A static bind mount of /proc/self
   # always resolves to the parent shell's exe, causing runtime failures.
-  # Security: This procfs is container-scoped (only shows container processes, not host).
-  # SYS_ADMIN capability (required for mount) is dropped before user code runs.
+  # SECURITY: This creates a NEW procfs (mount -t proc), NOT a bind mount of host's /proc.
+  # Result: Container processes see only container PIDs, not host processes.
+  # The mount requires SYS_ADMIN capability (granted at container start, dropped before user code).
   mkdir -p /host/proc
   if mount -t proc -o nosuid,nodev,noexec proc /host/proc; then
     echo "[entrypoint] Mounted procfs at /host/proc (nosuid,nodev,noexec)"
