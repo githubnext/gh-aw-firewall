@@ -177,6 +177,17 @@ describe('SSL Bump', () => {
         'Failed to generate SSL Bump CA: OpenSSL not found'
       );
     });
+
+    it('should handle non-Error throws from OpenSSL', async () => {
+      mockExeca.mockImplementationOnce(() => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('string error message');
+      });
+
+      await expect(generateSessionCa({ workDir: tempDir })).rejects.toThrow(
+        'Failed to generate SSL Bump CA: string error message'
+      );
+    });
   });
 
   describe('initSslDb', () => {
@@ -235,6 +246,82 @@ describe('SSL Bump', () => {
       const result = await initSslDb(tempDir);
 
       expect(result).toBe(sslDbPath);
+    });
+
+    it('should handle EEXIST error when index.txt already exists', async () => {
+      // First initialization creates index.txt
+      const sslDbPath = await initSslDb(tempDir);
+      const indexPath = path.join(sslDbPath, 'index.txt');
+      
+      // Verify file exists
+      expect(fs.existsSync(indexPath)).toBe(true);
+      
+      // Second initialization should handle EEXIST gracefully
+      await expect(initSslDb(tempDir)).resolves.toBe(sslDbPath);
+      
+      // File should still exist
+      expect(fs.existsSync(indexPath)).toBe(true);
+    });
+
+    it('should handle EEXIST error when size file already exists', async () => {
+      // First initialization creates size file
+      const sslDbPath = await initSslDb(tempDir);
+      const sizePath = path.join(sslDbPath, 'size');
+      
+      // Verify file exists
+      expect(fs.existsSync(sizePath)).toBe(true);
+      
+      // Second initialization should handle EEXIST gracefully
+      await expect(initSslDb(tempDir)).resolves.toBe(sslDbPath);
+      
+      // File should still exist
+      expect(fs.existsSync(sizePath)).toBe(true);
+    });
+
+    it('should throw error for non-EEXIST errors when creating index.txt', async () => {
+      // Create a directory with no write permissions to trigger EACCES
+      const restrictedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssl-restricted-'));
+      
+      try {
+        // Create ssl_db and certs directories
+        const sslDbPath = path.join(restrictedDir, 'ssl_db');
+        fs.mkdirSync(sslDbPath, { mode: 0o700 });
+        fs.mkdirSync(path.join(sslDbPath, 'certs'), { mode: 0o700 });
+        
+        // Make the ssl_db directory read-only to trigger permission error
+        fs.chmodSync(sslDbPath, 0o500);
+        
+        // Should throw error when trying to create index.txt
+        await expect(initSslDb(restrictedDir)).rejects.toThrow();
+        
+        // Restore permissions for cleanup
+        fs.chmodSync(sslDbPath, 0o700);
+      } finally {
+        // Clean up
+        fs.rmSync(restrictedDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should throw error for non-EEXIST errors when creating size file', async () => {
+      // Create ssl_db directory and certs subdirectory  
+      const sslDbPath = path.join(tempDir, 'ssl_db');
+      fs.mkdirSync(sslDbPath, { mode: 0o700 });
+      fs.mkdirSync(path.join(sslDbPath, 'certs'), { mode: 0o700 });
+      
+      // Create index.txt successfully
+      const indexPath = path.join(sslDbPath, 'index.txt');
+      fs.writeFileSync(indexPath, '', { flag: 'wx', mode: 0o600 });
+      
+      // Now make the directory read-only before trying to create size file
+      fs.chmodSync(sslDbPath, 0o500);
+      
+      try {
+        // Should throw EACCES error when trying to create size file
+        await expect(initSslDb(tempDir)).rejects.toThrow();
+      } finally {
+        // Restore permissions for cleanup
+        fs.chmodSync(sslDbPath, 0o700);
+      }
     });
   });
 
