@@ -552,30 +552,27 @@ describe('docker-manager', () => {
 
       // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
-      // Should NOT include /dev/null credential hiding
-      expect(volumes.some((v: string) => v.startsWith('/dev/null'))).toBe(false);
+      // Docker socket should still be hidden for security even with full filesystem access
+      expect(volumes).toContain('/dev/null:/host/var/run/docker.sock:ro');
+      // But credential files should NOT be hidden (user opted in to full access)
+      expect(volumes.some((v: string) => v.includes('/dev/null') && v.includes('.docker/config.json'))).toBe(false);
     });
 
-    it('should use blanket mount when allowFullFilesystemAccess is true in chroot mode', () => {
-      const configWithFullAccessChroot = {
+    it('should use blanket mount when allowFullFilesystemAccess is true', () => {
+      const configWithFullAccess = {
         ...mockConfig,
         allowFullFilesystemAccess: true,
-        enableChroot: true,
       };
-      const result = generateDockerCompose(configWithFullAccessChroot, mockNetworkConfig);
+      const result = generateDockerCompose(configWithFullAccess, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should include blanket /:/host:rw mount even in chroot mode
+      // Should include blanket /:/host:rw mount
       expect(volumes).toContain('/:/host:rw');
     });
 
-    it('should use selective mounts when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+    it('should use selective mounts by default', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
@@ -614,12 +611,8 @@ describe('docker-manager', () => {
       expect(volumes.some((v: string) => v.includes('agent-logs'))).toBe(true);
     });
 
-    it('should hide Docker socket when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+    it('should hide Docker socket', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
@@ -628,12 +621,8 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/dev/null:/host/run/docker.sock:ro');
     });
 
-    it('should mount user home directory under /host when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+    it('should mount user home directory under /host', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
@@ -642,12 +631,8 @@ describe('docker-manager', () => {
       expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
     });
 
-    it('should add SYS_CHROOT and SYS_ADMIN capabilities when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+    it('should add SYS_CHROOT and SYS_ADMIN capabilities', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
 
       expect(agent.cap_add).toContain('NET_ADMIN');
@@ -656,46 +641,22 @@ describe('docker-manager', () => {
       expect(agent.cap_add).toContain('SYS_ADMIN');
     });
 
-    it('should not add SYS_CHROOT or SYS_ADMIN capability when enableChroot is false', () => {
+    it('should add apparmor:unconfined security_opt', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const agent = result.services.agent;
-
-      expect(agent.cap_add).toContain('NET_ADMIN');
-      expect(agent.cap_add).not.toContain('SYS_CHROOT');
-      expect(agent.cap_add).not.toContain('SYS_ADMIN');
-    });
-
-    it('should add apparmor:unconfined security_opt when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
       const agent = result.services.agent;
 
       expect(agent.security_opt).toContain('apparmor:unconfined');
     });
 
-    it('should not add apparmor:unconfined security_opt when enableChroot is false', () => {
+    it('should set AWF_CHROOT_ENABLED environment variable', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const agent = result.services.agent;
-
-      expect(agent.security_opt).not.toContain('apparmor:unconfined');
-    });
-
-    it('should set AWF_CHROOT_ENABLED environment variable when enableChroot is true', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
       const agent = result.services.agent;
       const environment = agent.environment as Record<string, string>;
 
       expect(environment.AWF_CHROOT_ENABLED).toBe('true');
     });
 
-    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, DOTNET_ROOT, BUN_INSTALL to container when enableChroot is true and env vars are set', () => {
+    it('should pass GOROOT, CARGO_HOME, JAVA_HOME, DOTNET_ROOT, BUN_INSTALL to container when env vars are set', () => {
       const originalGoroot = process.env.GOROOT;
       const originalCargoHome = process.env.CARGO_HOME;
       const originalJavaHome = process.env.JAVA_HOME;
@@ -709,11 +670,7 @@ describe('docker-manager', () => {
       process.env.BUN_INSTALL = '/home/user/.bun';
 
       try {
-        const configWithChroot = {
-          ...mockConfig,
-          enableChroot: true
-        };
-        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
         const agent = result.services.agent;
         const environment = agent.environment as Record<string, string>;
 
@@ -757,11 +714,7 @@ describe('docker-manager', () => {
       delete process.env.BUN_INSTALL;
 
       try {
-        const configWithChroot = {
-          ...mockConfig,
-          enableChroot: true
-        };
-        const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+        const result = generateDockerCompose(mockConfig, mockNetworkConfig);
         const agent = result.services.agent;
         const environment = agent.environment as Record<string, string>;
 
@@ -773,21 +726,12 @@ describe('docker-manager', () => {
       }
     });
 
-    it('should not set AWF_CHROOT_ENABLED when enableChroot is false', () => {
-      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
-      const agent = result.services.agent;
-      const environment = agent.environment as Record<string, string>;
-
-      expect(environment.AWF_CHROOT_ENABLED).toBeUndefined();
-    });
-
-    it('should set AWF_WORKDIR environment variable when enableChroot is true', () => {
-      const configWithChroot = {
+    it('should set AWF_WORKDIR environment variable', () => {
+      const configWithWorkDir = {
         ...mockConfig,
-        enableChroot: true,
         containerWorkDir: '/workspace/project'
       };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const result = generateDockerCompose(configWithWorkDir, mockNetworkConfig);
       const agent = result.services.agent;
       const environment = agent.environment as Record<string, string>;
 
@@ -795,11 +739,7 @@ describe('docker-manager', () => {
     });
 
     it('should mount /tmp under /host for chroot temp scripts', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
@@ -808,11 +748,7 @@ describe('docker-manager', () => {
     });
 
     it('should mount /etc/passwd and /etc/group for user lookup in chroot mode', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
@@ -822,10 +758,9 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/etc/nsswitch.conf:/host/etc/nsswitch.conf:ro');
     });
 
-    it('should mount read-only chroot-hosts when enableChroot and enableHostAccess are true', () => {
+    it('should mount read-only chroot-hosts when enableHostAccess is true', () => {
       const config = {
         ...mockConfig,
-        enableChroot: true,
         enableHostAccess: true
       };
       const result = generateDockerCompose(config, mockNetworkConfig);
@@ -841,7 +776,6 @@ describe('docker-manager', () => {
     it('should inject host.docker.internal into chroot-hosts file', () => {
       const config = {
         ...mockConfig,
-        enableChroot: true,
         enableHostAccess: true
       };
       generateDockerCompose(config, mockNetworkConfig);
@@ -857,10 +791,9 @@ describe('docker-manager', () => {
       expect(content).toContain('localhost');
     });
 
-    it('should mount custom chroot-hosts when enableChroot is true even without enableHostAccess', () => {
+    it('should mount custom chroot-hosts even without enableHostAccess', () => {
       const config = {
         ...mockConfig,
-        enableChroot: true,
         enableHostAccess: false
       };
       const result = generateDockerCompose(config, mockNetworkConfig);
@@ -893,7 +826,6 @@ describe('docker-manager', () => {
       const config = {
         ...mockConfig,
         allowedDomains: ['github.com', 'npmjs.org', '*.wildcard.com'],
-        enableChroot: true
       };
       generateDockerCompose(config, mockNetworkConfig);
 
@@ -923,7 +855,6 @@ describe('docker-manager', () => {
       const config = {
         ...mockConfig,
         allowedDomains: ['unreachable.tailnet.example'],
-        enableChroot: true
       };
       // Should not throw even if resolution fails
       generateDockerCompose(config, mockNetworkConfig);
@@ -956,7 +887,6 @@ describe('docker-manager', () => {
       const config = {
         ...mockConfig,
         allowedDomains: ['localhost'], // localhost is already in /etc/hosts
-        enableChroot: true
       };
       generateDockerCompose(config, mockNetworkConfig);
 
@@ -977,76 +907,55 @@ describe('docker-manager', () => {
       mockExecaSync.mockReset();
     });
 
-    it('should use GHCR image when enableChroot is true with default preset (GHCR)', () => {
-      const configWithChroot = {
-        ...mockConfig,
-        enableChroot: true
-      };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+    it('should use GHCR image with default preset', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // Chroot mode with preset image should use GHCR (not build locally)
-      // This fixes the bug where packaged binaries couldn't find containers/agent directory
+      // Preset image should use GHCR (not build locally)
       expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent:latest');
       expect(agent.build).toBeUndefined();
     });
 
-    it('should use GHCR agent-act image when enableChroot is true with act preset', () => {
-      const configWithChroot = {
+    it('should use GHCR agent-act image with act preset', () => {
+      const configWithAct = {
         ...mockConfig,
-        enableChroot: true,
         agentImage: 'act'
       };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const result = generateDockerCompose(configWithAct, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // Chroot mode with 'act' preset should use GHCR agent-act image
+      // 'act' preset should use GHCR agent-act image
       expect(agent.image).toBe('ghcr.io/github/gh-aw-firewall/agent-act:latest');
       expect(agent.build).toBeUndefined();
     });
 
-    it('should build locally with full Dockerfile when enableChroot with custom image', () => {
-      const configWithChroot = {
+    it('should build locally with full Dockerfile when using custom image', () => {
+      const configWithCustomImage = {
         ...mockConfig,
-        enableChroot: true,
         agentImage: 'ubuntu:24.04' // Custom (non-preset) image
       };
-      const result = generateDockerCompose(configWithChroot, mockNetworkConfig);
+      const result = generateDockerCompose(configWithCustomImage, mockNetworkConfig);
       const agent = result.services.agent as any;
 
-      // Chroot mode with custom image should build locally with full Dockerfile for feature parity
+      // Custom image should build locally with full Dockerfile for feature parity
       expect(agent.build).toBeDefined();
       expect(agent.build.dockerfile).toBe('Dockerfile');
       expect(agent.build.args.BASE_IMAGE).toBe('ubuntu:24.04');
       expect(agent.image).toBeUndefined();
     });
 
-    it('should build locally with full Dockerfile when buildLocal and enableChroot are both true', () => {
-      const configWithChrootAndBuildLocal = {
-        ...mockConfig,
-        enableChroot: true,
-        buildLocal: true
-      };
-      const result = generateDockerCompose(configWithChrootAndBuildLocal, mockNetworkConfig);
-      const agent = result.services.agent as any;
-
-      // When both buildLocal and enableChroot are set, should use full Dockerfile for feature parity
-      expect(agent.build).toBeDefined();
-      expect(agent.build.dockerfile).toBe('Dockerfile');
-      expect(agent.image).toBeUndefined();
-    });
-
-    it('should use standard Dockerfile when enableChroot is false and buildLocal is true', () => {
+    it('should build locally with full Dockerfile when buildLocal is true', () => {
       const configWithBuildLocal = {
         ...mockConfig,
-        buildLocal: true,
-        enableChroot: false
+        buildLocal: true
       };
       const result = generateDockerCompose(configWithBuildLocal, mockNetworkConfig);
       const agent = result.services.agent as any;
 
+      // Should use full Dockerfile for feature parity
       expect(agent.build).toBeDefined();
       expect(agent.build.dockerfile).toBe('Dockerfile');
+      expect(agent.image).toBeUndefined();
     });
 
     it('should set agent to depend on healthy squid', () => {
