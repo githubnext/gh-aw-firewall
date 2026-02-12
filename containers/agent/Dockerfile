@@ -68,14 +68,17 @@ RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/
 
 # Build one-shot-token LD_PRELOAD library for single-use token access
 # This prevents tokens from being read multiple times (e.g., by malicious code)
+# Build flags: -fvisibility=hidden hides internal symbols, -s strips at link time
 COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c
 RUN set -eux; \
-    BUILD_PKGS="gcc libc6-dev"; \
+    BUILD_PKGS="gcc libc6-dev binutils"; \
     apt-get update && \
     ( apt-get install -y --no-install-recommends $BUILD_PKGS || \
       (rm -rf /var/lib/apt/lists/* && apt-get update && \
        apt-get install -y --no-install-recommends $BUILD_PKGS) ) && \
-    gcc -shared -fPIC -O2 -Wall -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
+    gcc -shared -fPIC -fvisibility=hidden -O2 -Wall -s \
+        -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
+    strip --strip-unneeded /usr/local/lib/one-shot-token.so && \
     rm /tmp/one-shot-token.c && \
     apt-get remove -y $BUILD_PKGS && \
     apt-get autoremove -y && \
