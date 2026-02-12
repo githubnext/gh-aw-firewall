@@ -295,7 +295,6 @@ print(f"Second getenv: [{second}]")
           logLevel: 'debug',
           timeout: 60000,
           buildLocal: true,
-          enableChroot: true,
           env: {
             GITHUB_TOKEN: 'ghp_chroot_token_12345',
           },
@@ -326,7 +325,6 @@ print(f"Second getenv: [{second}]")
           logLevel: 'debug',
           timeout: 60000,
           buildLocal: true,
-          enableChroot: true,
           env: {
             COPILOT_GITHUB_TOKEN: 'copilot_chroot_token_67890',
           },
@@ -355,7 +353,6 @@ print(f"Second: [{second}]")
           logLevel: 'debug',
           timeout: 60000,
           buildLocal: true,
-          enableChroot: true,
           env: {
             GITHUB_TOKEN: 'ghp_chroot_python_token',
           },
@@ -385,7 +382,6 @@ print(f"Second: [{second}]")
           logLevel: 'debug',
           timeout: 60000,
           buildLocal: true,
-          enableChroot: true,
           env: {
             NORMAL_VAR: 'chroot_not_a_token',
           },
@@ -418,7 +414,6 @@ print(f"Second: [{second}]")
           logLevel: 'debug',
           timeout: 60000,
           buildLocal: true,
-          enableChroot: true,
           env: {
             GITHUB_TOKEN: 'ghp_chroot_multi_1',
             OPENAI_API_KEY: 'sk-chroot-multi-2',

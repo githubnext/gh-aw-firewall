@@ -670,16 +670,9 @@ program
     '                                   Supports wildcards: https://github.com/myorg/*'
   )
   .option(
-    '--enable-chroot',
-    'Enable chroot to /host for running host binaries (Python, Node, Go, etc.)\n' +
-    '                                   Uses selective path mounts instead of full filesystem access.\n' +
-    '                                   Docker socket is hidden to prevent firewall bypass.',
-    false
-  )
-  .option(
     '--enable-api-proxy',
     'Enable API proxy sidecar for holding authentication credentials.\n' +
-    '                                   Deploys an Envoy proxy that injects API keys securely.\n' +
+    '                                   Deploys a Node.js proxy that injects API keys securely.\n' +
     '                                   Supports OpenAI (Codex) and Anthropic (Claude) APIs.',
     false
   )
@@ -944,7 +937,6 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
-      enableChroot: options.enableChroot,
       enableApiProxy: options.enableApiProxy,
       openaiApiKey: process.env.OPENAI_API_KEY,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
@@ -1089,7 +1081,7 @@ program
  * @param validFormats - Array of valid format options
  * @throws Exits process with error if format is invalid
  */
-function validateFormat(format: string, validFormats: string[]): void {
+export function validateFormat(format: string, validFormats: string[]): void {
   if (!validFormats.includes(format)) {
     logger.error(`Invalid format: ${format}. Must be one of: ${validFormats.join(', ')}`);
     process.exit(1);

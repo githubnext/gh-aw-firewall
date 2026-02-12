@@ -1,19 +1,10 @@
-# Chroot Mode (`--enable-chroot`)
+# Chroot Mode
 
 ## Overview
 
-The `--enable-chroot` flag enables **transparent host binary execution** within the firewall's network isolation. When enabled, user commands run inside a `chroot /host` jail, making the host filesystem appear as the root filesystem. This allows commands to use host-installed binaries (Python, Node.js, Go, etc.) with their normal paths, while all network traffic remains controlled by the firewall.
+AWF always runs in **chroot mode**, providing **transparent host binary execution** within the firewall's network isolation. User commands run inside a `chroot /host` jail, making the host filesystem appear as the root filesystem. This allows commands to use host-installed binaries (Python, Node.js, Go, etc.) with their normal paths, while all network traffic remains controlled by the firewall.
 
 **Key insight**: Chroot changes the filesystem view, not network isolation. The agent sees the host filesystem as `/`, but iptables rules still redirect all HTTP/HTTPS traffic through Squid.
-
-## When to Use Chroot Mode
-
-| Scenario | Recommended Mode |
-|----------|------------------|
-| GitHub Actions runner with pre-installed tools | `--enable-chroot` |
-| Minimal container + host binaries | `--enable-chroot` |
-| Self-contained container with all tools | Default (no chroot) |
-| Need container-specific tool versions | Default (no chroot) |
 
 **Primary use case**: Running AI agents on GitHub Actions runners where Python, Node.js, Go, and other tools are pre-installed. Instead of bundling everything in the container, use the host's tooling directly.
 
@@ -94,6 +85,7 @@ As of v0.13.13, chroot mode mounts a fresh container-scoped procfs at `/host/pro
 2. This requires `CAP_SYS_ADMIN` capability, which is granted during container startup
 3. The procfs is container-scoped, showing only container processes (not host processes)
 4. `CAP_SYS_ADMIN` is dropped via capsh before executing user commands
+5. The command script writes the user command directly (not wrapped in an extra `bash -c` layer), ensuring runtimes see their own binary via `/proc/self/exe` instead of `/bin/bash`
 
 **Security implications:**
 - The mounted procfs only exposes container processes, not host processes
@@ -112,20 +104,20 @@ As of v0.13.13, chroot mode mounts a fresh container-scoped procfs at `/host/pro
 
 ```bash
 # Run a command using host binaries
-sudo awf --enable-chroot --allow-domains api.github.com \
+sudo awf --allow-domains api.github.com \
   -- python3 -c "import requests; print(requests.get('https://api.github.com').status_code)"
 
 # Run with environment variable passthrough
-sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+sudo awf --env-all --allow-domains api.github.com \
   -- curl https://api.github.com
 ```
 
 ### Combined with --env-all
 
-The `--env-all` flag complements `--enable-chroot` by passing host environment variables:
+The `--env-all` flag passes host environment variables:
 
 ```bash
-sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+sudo awf --env-all --allow-domains api.github.com \
   -- bash -c 'echo "Home: $HOME, User: $USER"'
 ```
 
@@ -167,7 +159,6 @@ For GitHub Actions workflows, ensure GOROOT is captured after `actions/setup-go`
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   run: |
     sudo -E npx awf \
-      --enable-chroot \
       --env-all \
       --allow-domains api.github.com,github.com \
       -- copilot -p "Review this PR" --allow-tool github
@@ -363,7 +354,7 @@ Chroot doesn't affect network isolation. If requests fail:
 ### Option A: Chroot Mode (Current)
 
 ```bash
-sudo awf --enable-chroot --allow-domains api.github.com \
+sudo awf --allow-domains api.github.com \
   -- python3 script.py
 ```
 

@@ -1,7 +1,7 @@
 /**
  * Chroot Language Tests
  *
- * These tests verify that the --enable-chroot feature correctly provides access
+ * These tests verify that the chroot mode correctly provides access
  * to host binaries for different programming languages. This is critical for
  * GitHub Actions runners where tools are installed on the host.
  *
@@ -33,7 +33,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -47,7 +46,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -62,7 +60,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -75,7 +72,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -89,7 +85,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -103,7 +98,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -118,7 +112,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -131,7 +124,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -143,7 +135,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -157,7 +148,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -169,7 +159,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -185,7 +174,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -202,7 +190,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 120000,
-          enableChroot: true,
         }
       );
 
@@ -229,7 +216,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 120000,
-          enableChroot: true,
         }
       );
 
@@ -247,7 +233,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -259,7 +244,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -277,7 +261,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['api.nuget.org', 'nuget.org', 'dotnetcli.azureedge.net'],
           logLevel: 'debug',
           timeout: 180000,
-          enableChroot: true,
         }
       );
 
@@ -296,7 +279,6 @@ describe('Chroot Language Support', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -308,7 +290,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -320,7 +301,6 @@ describe('Chroot Language Support', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();

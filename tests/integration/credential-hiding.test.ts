@@ -37,7 +37,7 @@ describe('Credential Hiding Security', () => {
     await cleanup(false);
   });
 
-  describe('Normal Mode (without --enable-chroot)', () => {
+  describe('Normal Mode', () => {
     test('Test 1: Docker config.json is hidden (empty file)', async () => {
       // Use the real home directory - if the file exists, it should be hidden
       const homeDir = os.homedir();
@@ -137,7 +137,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
   });
 
-  describe('Chroot Mode (with --enable-chroot)', () => {
+  describe('Chroot Mode', () => {
     test('Test 6: Chroot mode hides credentials at /host paths', async () => {
       const homeDir = os.homedir();
 
@@ -148,7 +148,6 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -170,7 +169,6 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -324,7 +322,6 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
