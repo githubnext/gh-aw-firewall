@@ -739,7 +739,9 @@ export function generateDockerCompose(
       `${userHome}/.azure`,        // Azure credentials
       `${userHome}/.config/gcloud`, // Google Cloud credentials
       `${userHome}/.config/gh`,    // GitHub CLI OAuth tokens
-      `${userHome}/.cargo/credentials`, // Rust crates.io tokens
+      // Note: ~/.cargo/credentials is NOT hidden here because ~/.cargo is mounted
+      // read-only as a volume, preventing tmpfs from creating a mountpoint inside it.
+      // The read-only mount already provides sufficient protection.
       `${userHome}/.composer`,     // PHP Composer tokens (auth.json)
     ];
 

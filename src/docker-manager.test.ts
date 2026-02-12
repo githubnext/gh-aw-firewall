@@ -672,8 +672,10 @@ describe('docker-manager', () => {
       const cargoVolumePattern = new RegExp(`${escapeRegExp(homeDir)}/\\.cargo:/host.*\\.cargo:ro`);
       expect(volumes.some((v: string) => cargoVolumePattern.test(v))).toBe(true);
 
-      // Should hide only .cargo/credentials via tmpfs (not the entire directory)
-      expect(tmpfs.some((t: string) => t.includes('.cargo/credentials'))).toBe(true);
+      // .cargo/credentials is NOT hidden via tmpfs in chroot mode because ~/.cargo
+      // is mounted read-only, which already prevents credential modification.
+      // Tmpfs cannot create mountpoints inside a read-only volume.
+      expect(tmpfs.some((t: string) => t.includes('.cargo'))).toBe(false);
     });
 
     it('should mount .cargo when enableChroot is true and allowFullFilesystemAccess is true', () => {
