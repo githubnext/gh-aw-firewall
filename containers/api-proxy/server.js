@@ -94,7 +94,7 @@ if (ANTHROPIC_API_KEY) {
     }
   }));
 
-  const anthropicServer = anthropicApp.listen(10001, '0.0.0.0', () => {
+  anthropicApp.listen(10001, '0.0.0.0', () => {
     console.log('[API Proxy] Anthropic proxy listening on port 10001');
     console.log('[API Proxy] Routing through Squid to api.anthropic.com');
   });
