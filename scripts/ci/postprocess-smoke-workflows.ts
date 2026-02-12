@@ -19,6 +19,22 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/build-test-deno.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-bun.lock.yml'),
   path.join(repoRoot, '.github/workflows/build-test-dotnet.lock.yml'),
+  // Agentic workflows (use --image-tag/--skip-pull which must be replaced
+  // with --build-local since chroot mode is now always-on and requires
+  // a container image built from the current source)
+  path.join(repoRoot, '.github/workflows/security-guard.lock.yml'),
+  path.join(repoRoot, '.github/workflows/security-review.lock.yml'),
+  path.join(repoRoot, '.github/workflows/ci-cd-gaps-assessment.lock.yml'),
+  path.join(repoRoot, '.github/workflows/ci-doctor.lock.yml'),
+  path.join(repoRoot, '.github/workflows/cli-flag-consistency-checker.lock.yml'),
+  path.join(repoRoot, '.github/workflows/dependency-security-monitor.lock.yml'),
+  path.join(repoRoot, '.github/workflows/doc-maintainer.lock.yml'),
+  path.join(repoRoot, '.github/workflows/issue-duplication-detector.lock.yml'),
+  path.join(repoRoot, '.github/workflows/issue-monster.lock.yml'),
+  path.join(repoRoot, '.github/workflows/pelis-agent-factory-advisor.lock.yml'),
+  path.join(repoRoot, '.github/workflows/plan.lock.yml'),
+  path.join(repoRoot, '.github/workflows/test-coverage-improver.lock.yml'),
+  path.join(repoRoot, '.github/workflows/update-release-notes.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:
