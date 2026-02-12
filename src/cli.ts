@@ -676,6 +676,13 @@ program
     '                                   Docker socket is hidden to prevent firewall bypass.',
     false
   )
+  .option(
+    '--enable-api-proxy',
+    'Enable API proxy sidecar for holding authentication credentials.\n' +
+    '                                   Deploys an Envoy proxy that injects API keys securely.\n' +
+    '                                   Supports OpenAI (Codex) and Anthropic (Claude) APIs.',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -938,6 +945,9 @@ program
       sslBump: options.sslBump,
       allowedUrls,
       enableChroot: options.enableChroot,
+      enableApiProxy: options.enableApiProxy,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     };
 
     // Warn if --env-all is used
@@ -968,6 +978,20 @@ program
         logger.warn('⚠️  Host access enabled with host.docker.internal in allowed domains');
         logger.warn('   Containers can access ANY service running on the host machine');
         logger.warn('   Only use this for trusted workloads (e.g., MCP gateways)');
+      }
+    }
+
+    // Warn if --enable-api-proxy is used without API keys
+    if (config.enableApiProxy) {
+      if (!config.openaiApiKey && !config.anthropicApiKey) {
+        logger.warn('⚠️  API proxy enabled but no API keys found in environment');
+        logger.warn('   Set OPENAI_API_KEY or ANTHROPIC_API_KEY to use the proxy');
+      }
+      if (config.openaiApiKey) {
+        logger.debug('OpenAI API key detected - will be held securely in sidecar');
+      }
+      if (config.anthropicApiKey) {
+        logger.debug('Anthropic API key detected - will be held securely in sidecar');
       }
     }
 

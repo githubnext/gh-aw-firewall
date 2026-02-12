@@ -229,7 +229,7 @@ export interface SslConfig {
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; agentIp: string },
+  networkConfig: { subnet: string; squidIp: string; agentIp: string; proxyIp?: string },
   sslConfig?: SslConfig
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
@@ -848,11 +848,87 @@ export function generateDockerCompose(
     agentService.image = agentImage;
   }
 
+  // API Proxy sidecar service (Envoy) - optionally deployed
+  const services: Record<string, any> = {
+    'squid-proxy': squidService,
+    'agent': agentService,
+  };
+
+  // Add Envoy API proxy sidecar if enabled
+  if (config.enableApiProxy && networkConfig.proxyIp) {
+    const proxyService: any = {
+      container_name: 'awf-api-proxy',
+      networks: {
+        'awf-net': {
+          ipv4_address: networkConfig.proxyIp,
+        },
+      },
+      environment: {
+        // Pass API keys securely to sidecar (not visible to agent)
+        ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
+        ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
+      },
+      healthcheck: {
+        test: ['CMD', 'curl', '-f', 'http://localhost:10000/'],
+        interval: '5s',
+        timeout: '3s',
+        retries: 5,
+        start_period: '5s',
+      },
+      // Security hardening: Drop all unnecessary capabilities
+      cap_drop: [
+        'NET_RAW',
+        'NET_ADMIN',
+        'SYS_ADMIN',
+        'SYS_PTRACE',
+        'SYS_MODULE',
+        'SYS_RAWIO',
+        'MKNOD',
+        'AUDIT_WRITE',
+        'SETFCAP',
+      ],
+      security_opt: [
+        'no-new-privileges:true',
+      ],
+      // Resource limits to prevent DoS attacks
+      mem_limit: '512m',
+      memswap_limit: '512m',
+      pids_limit: 100,
+      cpu_shares: 512,
+    };
+
+    // Use GHCR image or build locally
+    if (useGHCR) {
+      proxyService.image = `${registry}/envoy:${tag}`;
+    } else {
+      proxyService.build = {
+        context: path.join(projectRoot, 'containers/envoy'),
+        dockerfile: 'Dockerfile',
+      };
+    }
+
+    services['api-proxy'] = proxyService;
+
+    // Update agent dependencies to wait for api-proxy
+    agentService.depends_on['api-proxy'] = {
+      condition: 'service_healthy',
+    };
+
+    // Set environment variables in agent to use the proxy
+    if (config.openaiApiKey) {
+      environment.OPENAI_BASE_URL = `http://api-proxy:10000`;
+      logger.debug('OpenAI API will be proxied through sidecar at http://api-proxy:10000');
+    }
+    if (config.anthropicApiKey) {
+      environment.ANTHROPIC_BASE_URL = `http://api-proxy:10001`;
+      logger.debug('Anthropic API will be proxied through sidecar at http://api-proxy:10001');
+    }
+
+    logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
+  }
+
   return {
-    services: {
-      'squid-proxy': squidService,
-      'agent': agentService,
-    },
+    services,
     networks: {
       'awf-net': {
         external: true,
@@ -919,8 +995,10 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     subnet: '172.30.0.0/24',
     squidIp: '172.30.0.10',
     agentIp: '172.30.0.20',
+    proxyIp: '172.30.0.30',  // Envoy API proxy sidecar
   };
-  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp})`);
+  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp}, api-proxy: ${networkConfig.proxyIp})`);
+
 
   // Copy seccomp profile to work directory for container security
   const seccompSourcePath = path.join(__dirname, '..', 'containers', 'agent', 'seccomp-profile.json');
