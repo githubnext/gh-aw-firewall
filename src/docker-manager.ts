@@ -511,8 +511,11 @@ export function generateDockerCompose(
 
     // Mount ~/.cargo and ~/.rustup for Rust toolchain access
     // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
-    // These directories contain the Rust compiler, Cargo, and related tools - not credentials
-    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:ro`);
+    // ~/.cargo must be rw (not ro) because the credential-hiding code later mounts
+    // /dev/null over ~/.cargo/credentials, which requires a writable parent filesystem
+    // to create the mountpoint. The credentials file is protected by the /dev/null overlay.
+    // ~/.rustup is read-only since it only contains toolchain binaries.
+    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:rw`);
     agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:ro`);
 
     // Minimal /etc - only what's needed for runtime
