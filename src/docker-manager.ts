@@ -878,10 +878,18 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // Create /tmp/gh-aw/mcp-logs directory
   // This directory exists on the HOST for MCP gateway to write logs
   // Inside the AWF container, it's hidden via tmpfs mount (see generateDockerCompose)
+  // Uses mode 0o777 to allow GitHub Actions workflows and MCP gateway to create subdirectories
+  // even when AWF runs as root (e.g., sudo awf --enable-chroot)
   const mcpLogsDir = '/tmp/gh-aw/mcp-logs';
   if (!fs.existsSync(mcpLogsDir)) {
-    fs.mkdirSync(mcpLogsDir, { recursive: true, mode: 0o755 });
+    fs.mkdirSync(mcpLogsDir, { recursive: true, mode: 0o777 });
+    // Explicitly set permissions to 0o777 (not affected by umask)
+    fs.chmodSync(mcpLogsDir, 0o777);
     logger.debug(`MCP logs directory created at: ${mcpLogsDir}`);
+  } else {
+    // Fix permissions if directory already exists (e.g., created by a previous run)
+    fs.chmodSync(mcpLogsDir, 0o777);
+    logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
   }
 
   // Use fixed network configuration (network is created by host-iptables.ts)
