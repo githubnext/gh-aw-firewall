@@ -194,7 +194,7 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
+          // Chroot is always enabled (no flag needed)
         }
       );
 
@@ -216,7 +216,7 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
+          // Chroot is always enabled (no flag needed)
         }
       );
 
