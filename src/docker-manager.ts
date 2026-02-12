@@ -868,13 +868,17 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   }
   logger.debug(`Squid logs directory created at: ${squidLogsDir}`);
 
-  // Create /tmp/gh-aw/mcp-logs directory for hiding via /dev/null mount
-  // This directory must exist before Docker tries to mount /dev/null over it
-  // (selective mounting mode hides this directory to prevent MCP log exfiltration)
-  const mcpLogsDir = '/tmp/gh-aw/mcp-logs';
-  if (!fs.existsSync(mcpLogsDir)) {
-    fs.mkdirSync(mcpLogsDir, { recursive: true, mode: 0o755 });
-    logger.debug(`MCP logs directory created at: ${mcpLogsDir}`);
+  // Create /tmp/gh-aw/mcp-logs as a file for hiding via /dev/null mount
+  // This must be a FILE (not directory) so Docker can bind-mount /dev/null over it
+  // (selective mounting mode hides this path to prevent MCP log exfiltration)
+  const mcpLogsPath = '/tmp/gh-aw/mcp-logs';
+  const mcpLogsParentDir = path.dirname(mcpLogsPath);
+  if (!fs.existsSync(mcpLogsParentDir)) {
+    fs.mkdirSync(mcpLogsParentDir, { recursive: true, mode: 0o755 });
+  }
+  if (!fs.existsSync(mcpLogsPath)) {
+    fs.writeFileSync(mcpLogsPath, '', { mode: 0o644 });
+    logger.debug(`MCP logs file created at: ${mcpLogsPath}`);
   }
 
   // Use fixed network configuration (network is created by host-iptables.ts)
