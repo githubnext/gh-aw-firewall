@@ -501,6 +501,10 @@ export function generateDockerCompose(
     agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
     agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
 
+    // Mount ~/.anthropic for Claude Code state and configuration
+    // This is safe as ~/.anthropic contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.anthropic:/host${effectiveHome}/.anthropic:rw`);
+
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
     agentVolumes.push(
