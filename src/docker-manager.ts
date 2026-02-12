@@ -1323,7 +1323,7 @@ export async function stopContainers(workDir: string, keepContainers: boolean): 
           const { stdout } = await execa('docker', ['ps', '-aq', '-f', `name=^${name}$`]);
           if (stdout.trim()) {
             logger.debug(`Stopping container: ${name}`);
-            await execa('docker', ['rm', '-f', name], { stdio: ['ignore', 'ignore', 'inherit'] }); // Ignore stdout to prevent container names appearing in output
+            await execa('docker', ['rm', '-f', '-v', name], { stdio: ['ignore', 'ignore', 'inherit'] }); // Ignore stdout to prevent container names appearing in output
           }
         } catch (err) {
           logger.debug(`Could not stop container ${name}:`, err);

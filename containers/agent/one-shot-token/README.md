@@ -308,5 +308,4 @@ This library is one layer in AWF's security model:
 - `src/lib.rs` - Library source code (Rust)
 - `Cargo.toml` - Rust package configuration
 - `build.sh` - Local build script
-- `one-shot-token.c` - Legacy C implementation (for reference)
 - `README.md` - This documentation
