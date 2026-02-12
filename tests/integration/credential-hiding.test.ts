@@ -223,10 +223,9 @@ describe('Credential Hiding Security', () => {
       );
 
       expect(result).toSucceed();
+      // Output should be empty (no credential data leaked via direct home mount)
       const output = result.stdout.trim();
-      // Should be empty (no oauth_token visible via direct home mount)
-      expect(output).not.toContain('oauth_token');
-      expect(output).not.toContain('gho_');
+      expect(output).toBe('');
     }, 120000);
   });
 

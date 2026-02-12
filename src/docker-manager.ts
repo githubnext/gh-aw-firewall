@@ -688,24 +688,25 @@ export function generateDockerCompose(
   if (config.enableChroot && !config.allowFullFilesystemAccess) {
     logger.debug('Chroot mode: Also hiding credential files at /host paths');
 
-    const userHome = getRealUserHome();
+    // Note: In chroot mode, effectiveHome === getRealUserHome() (see line 433),
+    // so we reuse effectiveHome here instead of calling getRealUserHome() again.
     const chrootCredentialFiles = [
-      `/dev/null:/host${userHome}/.docker/config.json:ro`,
-      `/dev/null:/host${userHome}/.npmrc:ro`,
-      `/dev/null:/host${userHome}/.cargo/credentials:ro`,
-      `/dev/null:/host${userHome}/.composer/auth.json:ro`,
-      `/dev/null:/host${userHome}/.config/gh/hosts.yml:ro`,
+      `/dev/null:/host${effectiveHome}/.docker/config.json:ro`,
+      `/dev/null:/host${effectiveHome}/.npmrc:ro`,
+      `/dev/null:/host${effectiveHome}/.cargo/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.composer/auth.json:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gh/hosts.yml:ro`,
       // SSH private keys (CRITICAL - server access, git operations)
-      `/dev/null:/host${userHome}/.ssh/id_rsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ed25519:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ecdsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_dsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_rsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ed25519:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ecdsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_dsa:ro`,
       // Cloud provider credentials (CRITICAL - infrastructure access)
-      `/dev/null:/host${userHome}/.aws/credentials:ro`,
-      `/dev/null:/host${userHome}/.aws/config:ro`,
-      `/dev/null:/host${userHome}/.kube/config:ro`,
-      `/dev/null:/host${userHome}/.azure/credentials:ro`,
-      `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/config:ro`,
+      `/dev/null:/host${effectiveHome}/.kube/config:ro`,
+      `/dev/null:/host${effectiveHome}/.azure/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gcloud/credentials.db:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {
