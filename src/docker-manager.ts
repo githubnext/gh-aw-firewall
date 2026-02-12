@@ -480,12 +480,13 @@ export function generateDockerCompose(
     agentVolumes.push('/opt:/host/opt:ro');
 
     // Special filesystem mounts for chroot (needed for devices and runtime introspection)
-    // NOTE: /proc is NOT bind-mounted here. Instead, a fresh container-scoped procfs is
-    // mounted at /host/proc in entrypoint.sh via 'mount -t proc'. This provides:
-    //   - Dynamic /proc/self/exe (required by .NET CLR and other runtimes)
-    //   - /proc/cpuinfo, /proc/meminfo (required by JVM, .NET GC)
-    //   - Container-scoped only (does not expose host process info)
-    // The mount requires SYS_ADMIN capability, which is dropped before user code runs.
+    // SECURITY: /proc is NOT bind-mounted from host. Instead, a fresh container-scoped
+    // procfs is mounted at /host/proc in entrypoint.sh via 'mount -t proc'. This ensures:
+    //   - Container processes can access /proc/self/exe (required by .NET CLR, JVM)
+    //   - /proc/cpuinfo, /proc/meminfo available (required by JVM, .NET GC)
+    //   - ISOLATION: No process inside container can read host's /proc filesystem
+    //   - Container-scoped procfs only shows container processes, not host processes
+    //   - Mount requires SYS_ADMIN capability, which is dropped before user code runs
     agentVolumes.push(
       '/sys:/host/sys:ro',             // Read-only sysfs
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
