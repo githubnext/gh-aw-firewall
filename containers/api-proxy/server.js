@@ -101,7 +101,6 @@ if (ANTHROPIC_API_KEY) {
     target: 'https://api.anthropic.com',
     changeOrigin: true,
     secure: true,
-    agent: proxyAgent,
     onProxyReq: (proxyReq, req, res) => {
       // Inject Anthropic authentication headers
       proxyReq.setHeader('x-api-key', ANTHROPIC_API_KEY);
