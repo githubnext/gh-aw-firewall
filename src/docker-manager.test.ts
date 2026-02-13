@@ -1912,7 +1912,9 @@ describe('docker-manager', () => {
         const content = fs.readFileSync(squidConfPath, 'utf-8');
         expect(content).toContain('github.com');
         expect(content).toContain('api-proxy');
-        expect(content).toContain('172.30.0.30'); // api-proxy IP address
+        // IP should be in allowed_ips ACL (dst type), not in dstdomain
+        expect(content).toContain('acl allowed_ips dst 172.30.0.30');
+        expect(content).toContain('http_access allow allowed_ips');
       }
     });
 

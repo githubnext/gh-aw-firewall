@@ -525,6 +525,17 @@ export interface SquidConfig {
   urlPatterns?: string[];
 
   /**
+   * List of allowed IP addresses for proxy access
+   *
+   * IP addresses are converted to Squid 'dst' ACL rules (not 'dstdomain').
+   * This is used for accessing services by IP address, such as the api-proxy
+   * sidecar container at 172.30.0.30.
+   *
+   * @example ['172.30.0.30', '172.30.0.1']
+   */
+  allowedIPs?: string[];
+
+  /**
    * Whether to enable host access (allows non-standard ports)
    *
    * When true, Squid will allow connections to any port, not just

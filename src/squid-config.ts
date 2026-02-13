@@ -226,7 +226,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, allowedIPs } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -260,6 +260,14 @@ export function generateSquidConfig(config: SquidConfig): string {
   // Generate ACL entries
   const aclLines: string[] = [];
   const accessRules: string[] = [];
+
+  // === IP ADDRESSES (use dst ACL type, not dstdomain) ===
+  if (allowedIPs && allowedIPs.length > 0) {
+    aclLines.push('# ACL definitions for allowed IP addresses (HTTP and HTTPS)');
+    for (const ip of allowedIPs) {
+      aclLines.push(`acl allowed_ips dst ${ip}`);
+    }
+  }
 
   // === DOMAINS FOR BOTH PROTOCOLS (current behavior) ===
   if (domainsByProto.both.length > 0) {
@@ -341,6 +349,11 @@ export function generateSquidConfig(config: SquidConfig): string {
     } else {
       accessRules.push('http_access allow CONNECT allowed_https_only_regex');
     }
+  }
+
+  // Allow traffic to allowed IP addresses (both HTTP and HTTPS)
+  if (allowedIPs && allowedIPs.length > 0) {
+    accessRules.push('http_access allow allowed_ips');
   }
 
   // Build the deny rule based on configured domains and their protocols
