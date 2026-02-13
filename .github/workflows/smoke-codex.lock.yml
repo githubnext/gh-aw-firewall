@@ -1385,6 +1385,8 @@ jobs:
           GH_DEBUG: 1
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
           OPENAI_API_KEY: ${{ secrets.CODEX_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: http://api-proxy:10000
+          ANTHROPIC_BASE_URL: http://api-proxy:10001
           RUST_LOG: trace,hyper_util=info,mio=info,reqwest=info,os_info=info,codex_otel=warn,codex_core=debug,ocodex_exec=debug
       - name: Stop MCP gateway
         if: always()
