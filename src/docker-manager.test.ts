@@ -1596,6 +1596,23 @@ describe('docker-manager', () => {
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
         expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
       });
+
+      it('should set AWF_API_PROXY_IP in agent environment', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.AWF_API_PROXY_IP).toBe('172.30.0.30');
+      });
+
+      it('should set NO_PROXY to include api-proxy IP', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.no_proxy).toContain('172.30.0.30');
+      });
     });
   });
 

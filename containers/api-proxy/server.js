@@ -15,6 +15,33 @@ const https = require('https');
 const { URL } = require('url');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
+// Max request body size (10 MB) to prevent DoS via large payloads
+const MAX_BODY_SIZE = 10 * 1024 * 1024;
+
+// Headers that must never be forwarded from the client.
+// The proxy controls authentication — client-supplied auth/proxy headers are stripped.
+const STRIPPED_HEADERS = new Set([
+  'host',
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'forwarded',
+  'via',
+]);
+
+/** Returns true if the header name should be stripped (case-insensitive). */
+function shouldStripHeader(name) {
+  const lower = name.toLowerCase();
+  return STRIPPED_HEADERS.has(lower) || lower.startsWith('x-forwarded-');
+}
+
+/** Sanitize a string for safe logging (strip control chars, limit length). */
+function sanitizeForLog(str) {
+  if (typeof str !== 'string') return '';
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 200);
+}
+
 // Read API keys from environment (set by docker-compose)
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -41,18 +68,55 @@ if (!proxyAgent) {
  * Forward a request to the target API, injecting auth headers and routing through Squid.
  */
 function proxyRequest(req, res, targetHost, injectHeaders) {
+  // Validate that req.url is a relative path (prevent open-redirect / SSRF)
+  if (!req.url || !req.url.startsWith('/')) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad Request', message: 'URL must be a relative path' }));
+    return;
+  }
+
   // Build target URL
   const targetUrl = new URL(req.url, `https://${targetHost}`);
 
-  // Read the request body
+  // Handle client-side errors (e.g. aborted connections)
+  req.on('error', (err) => {
+    console.error(`[API Proxy] Client request error: ${sanitizeForLog(err.message)}`);
+    if (!res.headersSent) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+    }
+    res.end(JSON.stringify({ error: 'Client error', message: err.message }));
+  });
+
+  // Read the request body with size limit
   const chunks = [];
-  req.on('data', chunk => chunks.push(chunk));
+  let totalBytes = 0;
+  let rejected = false;
+
+  req.on('data', chunk => {
+    if (rejected) return;
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_BODY_SIZE) {
+      rejected = true;
+      if (!res.headersSent) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+      }
+      res.end(JSON.stringify({ error: 'Payload Too Large', message: 'Request body exceeds 10 MB limit' }));
+      return;
+    }
+    chunks.push(chunk);
+  });
+
   req.on('end', () => {
+    if (rejected) return;
     const body = Buffer.concat(chunks);
 
-    // Copy incoming headers, inject auth headers
-    const headers = { ...req.headers };
-    delete headers.host; // Replace with target host
+    // Copy incoming headers, stripping sensitive/proxy headers, then inject auth
+    const headers = {};
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (!shouldStripHeader(name)) {
+        headers[name] = value;
+      }
+    }
     Object.assign(headers, injectHeaders);
 
     const options = {
@@ -65,12 +129,21 @@ function proxyRequest(req, res, targetHost, injectHeaders) {
     };
 
     const proxyReq = https.request(options, (proxyRes) => {
+      // Handle response stream errors
+      proxyRes.on('error', (err) => {
+        console.error(`[API Proxy] Response stream error from ${targetHost}: ${sanitizeForLog(err.message)}`);
+        if (!res.headersSent) {
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ error: 'Response stream error', message: err.message }));
+      });
+
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(res);
     });
 
     proxyReq.on('error', (err) => {
-      console.error(`[API Proxy] Error proxying to ${targetHost}: ${err.message}`);
+      console.error(`[API Proxy] Error proxying to ${targetHost}: ${sanitizeForLog(err.message)}`);
       if (!res.headersSent) {
         res.writeHead(502, { 'Content-Type': 'application/json' });
       }
@@ -101,7 +174,7 @@ if (OPENAI_API_KEY) {
       return;
     }
 
-    console.log(`[OpenAI Proxy] ${req.method} ${req.url}`);
+    console.log(`[OpenAI Proxy] ${sanitizeForLog(req.method)} ${sanitizeForLog(req.url)}`);
     proxyRequest(req, res, 'api.openai.com', {
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
     });
@@ -142,7 +215,7 @@ if (ANTHROPIC_API_KEY) {
       return;
     }
 
-    console.log(`[Anthropic Proxy] ${req.method} ${req.url}`);
+    console.log(`[Anthropic Proxy] ${sanitizeForLog(req.method)} ${sanitizeForLog(req.url)}`);
     proxyRequest(req, res, 'api.anthropic.com', {
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',

@@ -11,7 +11,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (generates lockfile in container)
+# Install dependencies from lockfile
 RUN npm install --omit=dev
 
 # Copy application files
