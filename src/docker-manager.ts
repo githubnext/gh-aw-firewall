@@ -1148,14 +1148,21 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
-  // When API proxy is enabled and has API keys, add api-proxy hostname and IP to allowed domains so agent can communicate with it
-  // The IP address is necessary because some tools may bypass NO_PROXY settings or use the IP directly
-  const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)
-    ? [...config.allowedDomains, 'api-proxy', networkConfig.proxyIp]
+  // When API proxy is enabled and has API keys, add api-proxy hostname and IP to allowed domains/IPs so agent can communicate with it
+  // The IP address (172.30.0.30) must be separate from domains because Squid uses different ACL types:
+  // - domains use 'dstdomain' ACL (for DNS names like 'api-proxy')
+  // - IP addresses use 'dst' ACL (for IPs like '172.30.0.30')
+  const shouldAddApiProxyAccess = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey);
+  const domainsForSquid = shouldAddApiProxyAccess
+    ? [...config.allowedDomains, 'api-proxy']
     : config.allowedDomains;
+  const ipsForSquid = shouldAddApiProxyAccess && networkConfig.proxyIp
+    ? [networkConfig.proxyIp]
+    : undefined;
 
   const squidConfig = generateSquidConfig({
     domains: domainsForSquid,
+    allowedIPs: ipsForSquid,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
     sslBump: config.sslBump,

@@ -226,7 +226,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, enableApiProxy } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, enableApiProxy, allowedIPs } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -314,6 +314,17 @@ export function generateSquidConfig(config: SquidConfig): string {
     }
   }
 
+  // === IP ADDRESSES (BOTH PROTOCOLS) ===
+  // IP addresses must use 'dst' ACL type, not 'dstdomain'
+  // This is required for api-proxy and other container-to-container communication
+  if (allowedIPs && allowedIPs.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for allowed IP addresses (HTTP and HTTPS)');
+    for (const ip of allowedIPs) {
+      aclLines.push(`acl allowed_ips dst ${ip}`);
+    }
+  }
+
   // Build access rules
   // Order matters: allow rules come before deny rules
 
@@ -346,6 +357,7 @@ export function generateSquidConfig(config: SquidConfig): string {
   // Build the deny rule based on configured domains and their protocols
   const hasBothDomains = domainsByProto.both.length > 0;
   const hasBothPatterns = patternsByProto.both.length > 0;
+  const hasAllowedIPs = allowedIPs && allowedIPs.length > 0;
 
   // Process blocked domains (optional) - blocklist takes precedence over allowlist
   const blockedAclLines: string[] = [];
@@ -382,12 +394,20 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Build the deny rule based on configured domains and their protocols
   let denyRule: string;
-  if (hasBothDomains && hasBothPatterns) {
+  if (hasBothDomains && hasBothPatterns && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains !allowed_domains_regex !allowed_ips';
+  } else if (hasBothDomains && hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains !allowed_domains_regex';
+  } else if (hasBothDomains && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains !allowed_ips';
+  } else if (hasBothPatterns && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains_regex !allowed_ips';
   } else if (hasBothDomains) {
     denyRule = 'http_access deny !allowed_domains';
   } else if (hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains_regex';
+  } else if (hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_ips';
   } else if (hasHttpOnly || hasHttpsOnly) {
     // Only protocol-specific domains - deny all by default
     // The allow rules above will permit the specific traffic

@@ -556,6 +556,22 @@ export interface SquidConfig {
    * @default false
    */
   enableApiProxy?: boolean;
+
+  /**
+   * List of IP addresses to allow (in addition to domains)
+   *
+   * IP addresses must be specified separately from domains because
+   * Squid uses different ACL types:
+   * - domains use 'dstdomain' ACL type
+   * - IP addresses use 'dst' ACL type
+   *
+   * This is typically used for:
+   * - api-proxy sidecar (172.30.0.30)
+   * - Other container-to-container communication
+   *
+   * @example ['172.30.0.30', '10.0.0.5']
+   */
+  allowedIPs?: string[];
 }
 
 /**
