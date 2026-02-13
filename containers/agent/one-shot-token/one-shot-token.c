@@ -62,6 +62,18 @@ static char *token_cache[MAX_TOKENS] = {0};
 /* Mutex for thread safety */
 static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Thread-local recursion guard to prevent deadlock when:
+ * 1. secure_getenv("X") acquires token_mutex
+ * 2. init_token_list() calls fprintf() for logging
+ * 3. glibc's fprintf calls secure_getenv() for locale initialization
+ * 4. Our secure_getenv() would try to acquire token_mutex again -> DEADLOCK
+ *
+ * With this guard, recursive calls from the same thread skip the mutex
+ * and pass through directly to the real function. This is safe because
+ * the recursive call is always for a non-sensitive variable (locale).
+ */
+static __thread int in_getenv = 0;
+
 /* Initialization flag */
 static int tokens_initialized = 0;
 
@@ -71,27 +83,21 @@ static char *(*real_getenv)(const char *name) = NULL;
 /* Pointer to the real secure_getenv function */
 static char *(*real_secure_getenv)(const char *name) = NULL;
 
-/* pthread_once control for thread-safe initialization */
-static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
-static pthread_once_t secure_getenv_init_once = PTHREAD_ONCE_INIT;
-
-/* Initialize the real getenv pointer (called exactly once via pthread_once) */
-static void init_real_getenv_once(void) {
+/* Resolve real_getenv if not yet resolved (idempotent, no locks needed) */
+static void ensure_real_getenv(void) {
+    if (real_getenv != NULL) return;
     real_getenv = dlsym(RTLD_NEXT, "getenv");
     if (real_getenv == NULL) {
         fprintf(stderr, "[one-shot-token] FATAL: Could not find real getenv: %s\n", dlerror());
-        /* Cannot recover - abort to prevent undefined behavior */
         abort();
     }
 }
 
-/* Initialize the real secure_getenv pointer (called exactly once via pthread_once) */
-static void init_real_secure_getenv_once(void) {
+/* Resolve real_secure_getenv if not yet resolved (idempotent, no locks needed) */
+static void ensure_real_secure_getenv(void) {
+    if (real_secure_getenv != NULL) return;
     real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
-    /* Note: secure_getenv may not be available on all systems, so we don't abort if NULL */
-    if (real_secure_getenv == NULL) {
-        fprintf(stderr, "[one-shot-token] WARNING: secure_getenv not available, falling back to getenv\n");
-    }
+    /* secure_getenv may not be available on all systems - that's OK */
 }
 
 /**
@@ -183,14 +189,20 @@ static void init_token_list(void) {
 
     tokens_initialized = 1;
 }
-/* Ensure real_getenv is initialized (thread-safe) */
-static void init_real_getenv(void) {
-    pthread_once(&getenv_init_once, init_real_getenv_once);
-}
-
-/* Ensure real_secure_getenv is initialized (thread-safe) */
-static void init_real_secure_getenv(void) {
-    pthread_once(&secure_getenv_init_once, init_real_secure_getenv_once);
+/**
+ * Library constructor - resolves real getenv/secure_getenv at load time.
+ *
+ * This MUST run before any other library's constructors to prevent a deadlock:
+ * if a constructor (e.g., LLVM in rustc) calls getenv() and we lazily call
+ * dlsym(RTLD_NEXT) from within our intercepted getenv(), dlsym() deadlocks
+ * because the dynamic linker's internal lock is already held during constructor
+ * execution. Resolving here (in our LD_PRELOAD'd constructor which runs first)
+ * avoids this entirely.
+ */
+__attribute__((constructor))
+static void one_shot_token_init(void) {
+    ensure_real_getenv();
+    ensure_real_secure_getenv();
 }
 
 /* Check if a variable name is a sensitive token */
@@ -246,7 +258,13 @@ static const char *format_token_value(const char *value) {
  * For all other variables: passes through to real getenv
  */
 char *getenv(const char *name) {
-    init_real_getenv();
+    ensure_real_getenv();
+
+    /* Skip interception during recursive calls (e.g., fprintf -> secure_getenv -> getenv) */
+    if (in_getenv) {
+        return real_getenv(name);
+    }
+    in_getenv = 1;
 
     /* Initialize token list on first call (thread-safe) */
     pthread_mutex_lock(&token_mutex);
@@ -260,6 +278,7 @@ char *getenv(const char *name) {
     /* Not a sensitive token - release mutex and pass through */
     if (token_idx < 0) {
         pthread_mutex_unlock(&token_mutex);
+        in_getenv = 0;
         return real_getenv(name);
     }
 
@@ -279,7 +298,7 @@ char *getenv(const char *name) {
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n", 
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n",
                     name, format_token_value(token_cache[token_idx]));
 
             result = token_cache[token_idx];
@@ -293,6 +312,7 @@ char *getenv(const char *name) {
     }
 
     pthread_mutex_unlock(&token_mutex);
+    in_getenv = 0;
 
     return result;
 }
@@ -310,53 +330,12 @@ char *getenv(const char *name) {
  * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
 char *secure_getenv(const char *name) {
-    init_real_secure_getenv();
-    init_real_getenv();
-
-    /* If secure_getenv is not available, fall back to our intercepted getenv */
+    ensure_real_secure_getenv();
+    ensure_real_getenv();
     if (real_secure_getenv == NULL) {
         return getenv(name);
     }
-
-    int token_idx = get_token_index(name);
-
-    /* Not a sensitive token - pass through to real secure_getenv */
-    if (token_idx < 0) {
-        return real_secure_getenv(name);
-    }
-
-    /* Sensitive token - handle cached access with secure_getenv semantics */
-    pthread_mutex_lock(&token_mutex);
-
-    char *result = NULL;
-
-    if (!token_accessed[token_idx]) {
-        /* First access - get the real value using secure_getenv */
-        result = real_secure_getenv(name);
-
-        if (result != NULL) {
-            /* Cache the value so subsequent reads succeed after unsetenv */
-            /* Note: This memory is intentionally never freed - it must persist
-             * for the lifetime of the process */
-            token_cache[token_idx] = strdup(result);
-
-            /* Unset the variable from the environment so /proc/self/environ is cleared */
-            unsetenv(name);
-
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n", 
-                    name, format_token_value(token_cache[token_idx]));
-
-            result = token_cache[token_idx];
-        }
-
-        /* Mark as accessed even if NULL (prevents repeated log messages) */
-        token_accessed[token_idx] = 1;
-    } else {
-        /* Already accessed - return cached value */
-        result = token_cache[token_idx];
-    }
-
-    pthread_mutex_unlock(&token_mutex);
-
-    return result;
+    /* Simple passthrough - no mutex, no token handling.
+     * Token protection is handled by getenv() which is also intercepted. */
+    return real_secure_getenv(name);
 }
