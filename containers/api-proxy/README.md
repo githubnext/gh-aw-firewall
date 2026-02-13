@@ -6,7 +6,7 @@ Node.js-based API proxy that keeps LLM API credentials isolated from the agent c
 
 ```
 Agent Container (172.30.0.20)
-  ↓ HTTP request to api-proxy:10000
+  ↓ HTTP request to 172.30.0.30:10000
 API Proxy Sidecar (172.30.0.30)
   ↓ Injects Authorization header
   ↓ Routes via HTTP_PROXY (172.30.0.10:3128)
