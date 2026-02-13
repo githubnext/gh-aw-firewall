@@ -856,8 +856,9 @@ export function generateDockerCompose(
   }
 
   // Pass API proxy flag to agent for iptables configuration
-  // Only set when api-proxy will actually be deployed (i.e., at least one API key is provided)
-  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+  // Only set when api-proxy will actually be deployed (i.e., OpenAI API key is provided)
+  // Note: Anthropic (Claude) uses direct API key authentication, not the api-proxy
+  if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
     environment.AWF_ENABLE_API_PROXY = '1';
   }
 
@@ -915,9 +916,10 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Nginx API proxy sidecar if enabled and at least one API key is provided
-  // The api-proxy service handles both OpenAI and Anthropic API requests
-  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+  // Add Nginx API proxy sidecar if enabled and OpenAI API key is provided
+  // Note: The api-proxy service is only used for OpenAI requests.
+  // Anthropic (Claude) uses direct API key authentication via environment variables.
+  if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
     const proxyEnv: Record<string, string> = {
       // Route through Squid to respect domain whitelisting
       HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
@@ -925,11 +927,9 @@ export function generateDockerCompose(
     };
 
     // Pass API keys securely to sidecar (not visible to agent)
+    // Note: Only OpenAI uses the api-proxy. Anthropic keys are passed directly to agent.
     if (config.openaiApiKey) {
       proxyEnv.OPENAI_API_KEY = config.openaiApiKey;
-    }
-    if (config.anthropicApiKey) {
-      proxyEnv.ANTHROPIC_API_KEY = config.anthropicApiKey;
     }
 
     const proxyService: any = {
@@ -991,13 +991,10 @@ export function generateDockerCompose(
 
     // Set environment variables in agent to use the API proxy
     // Use IP address instead of hostname to avoid DNS resolution issues
+    // Note: Only OpenAI uses the api-proxy. Anthropic (Claude) uses the API key directly.
     if (config.openaiApiKey) {
       environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
       logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
-    }
-    if (config.anthropicApiKey) {
-      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
-      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
