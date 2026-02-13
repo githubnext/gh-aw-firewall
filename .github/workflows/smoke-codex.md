@@ -6,6 +6,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   reaction: "hooray"
+roles: all
 permissions:
   contents: read
   issues: read
