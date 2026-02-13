@@ -37,12 +37,14 @@ const DEFAULT_SENSITIVE_TOKENS: &[&str] = &[
     "GITHUB_API_TOKEN",
     "GITHUB_PAT",
     "GH_ACCESS_TOKEN",
+    "GITHUB_PERSONAL_ACCESS_TOKEN",
     // OpenAI tokens
     "OPENAI_API_KEY",
     "OPENAI_KEY",
     // Anthropic/Claude tokens
     "ANTHROPIC_API_KEY",
     "CLAUDE_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
     // Codex tokens
     "CODEX_API_KEY",
 ];
