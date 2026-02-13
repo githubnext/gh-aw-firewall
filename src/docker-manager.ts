@@ -965,7 +965,8 @@ export function generateDockerCompose(
 
     // Add api-proxy to NO_PROXY so agent traffic goes directly to the sidecar
     // instead of routing through Squid (which would block the "api-proxy" hostname)
-    const proxyNoProxy = `api-proxy,${networkConfig.proxyIp}`;
+    // Include localhost, the specific IP, and the network CIDR to ensure all tools can bypass Squid
+    const proxyNoProxy = `127.0.0.1,localhost,${networkConfig.proxyIp},172.30.0.0/16,api-proxy`;
     if (environment.NO_PROXY) {
       environment.NO_PROXY += `,${proxyNoProxy}`;
       environment.no_proxy = environment.NO_PROXY;

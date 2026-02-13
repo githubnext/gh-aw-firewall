@@ -1518,8 +1518,11 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
+        expect(env.NO_PROXY).toContain('127.0.0.1');
+        expect(env.NO_PROXY).toContain('localhost');
         expect(env.NO_PROXY).toContain('api-proxy');
         expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.NO_PROXY).toContain('172.30.0.0/16');
         expect(env.no_proxy).toBe(env.NO_PROXY);
       });
 
@@ -1529,10 +1532,12 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         // Should contain both the host access NO_PROXY entries and api-proxy
+        expect(env.NO_PROXY).toContain('127.0.0.1');
         expect(env.NO_PROXY).toContain('localhost');
         expect(env.NO_PROXY).toContain('host.docker.internal');
         expect(env.NO_PROXY).toContain('api-proxy');
         expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.NO_PROXY).toContain('172.30.0.0/16');
         expect(env.no_proxy).toBe(env.NO_PROXY);
       });
 
