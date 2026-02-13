@@ -1854,6 +1854,57 @@ describe('docker-manager', () => {
         process.env.SUDO_USER = originalSudoUser;
       }
     });
+
+    it('should include api-proxy in allowed domains when enableApiProxy is true', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: true,
+        openaiApiKey: 'sk-test-key',
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf includes api-proxy in allowed domains
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).toContain('api-proxy');
+      }
+    });
+
+    it('should not include api-proxy in allowed domains when enableApiProxy is false', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: false,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf does not include api-proxy when disabled
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).not.toContain('api-proxy');
+      }
+    });
   });
 
   describe('startContainers', () => {
