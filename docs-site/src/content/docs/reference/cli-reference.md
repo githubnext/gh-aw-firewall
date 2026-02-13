@@ -38,7 +38,11 @@ awf [options] -- <command>
 | `-v, --mount <host:container[:mode]>` | string | `[]` | Volume mount (repeatable) |
 | `--container-workdir <dir>` | string | User home | Working directory inside container |
 | `--dns-servers <servers>` | string | `8.8.8.8,8.8.4.4` | Trusted DNS servers (comma-separated) |
-| `--enable-chroot` | flag | `false` | Run command inside chroot to host filesystem |
+| `--proxy-logs-dir <path>` | string | — | Directory to save Squid proxy logs to |
+| `--enable-host-access` | flag | `false` | Enable access to host services via host.docker.internal |
+| `--allow-host-ports <ports>` | string | `80,443` | Ports to allow when using --enable-host-access |
+| `--agent-image <value>` | string | `default` | Agent container image (default, act, or custom) |
+| `--allow-full-filesystem-access` | flag | `false` | ⚠️ Mount entire host filesystem with read-write access |
 | `-V, --version` | flag | — | Display version |
 | `-h, --help` | flag | — | Display help |
 
@@ -266,43 +270,125 @@ Comma-separated list of trusted DNS servers. DNS traffic is **only** allowed to 
 Docker's embedded DNS (127.0.0.11) is always allowed for container name resolution, regardless of this setting.
 :::
 
-### `--enable-chroot`
+:::note[Chroot Mode]
+AWF always runs in chroot mode, making the host filesystem appear as the root filesystem inside the container. This provides transparent access to host-installed binaries (Python, Node.js, Go, etc.) while maintaining network isolation. See [Chroot Mode Documentation](/gh-aw-firewall/docs/chroot-mode/) for details.
+:::
 
-Run user commands inside a `chroot /host` jail, making the host filesystem appear as the root filesystem. This enables transparent access to host-installed binaries (Python, Node.js, Go, etc.) without needing to prefix paths with `/host`.
+### `--enable-host-access`
+
+Enable access to host services via `host.docker.internal`. This allows containers to connect to services running on the host machine (e.g., local development servers, MCP gateways).
 
 ```bash
-# Use host's Python directly
-sudo awf --enable-chroot --allow-domains pypi.org \
-  -- python3 -c "import requests; print(requests.__version__)"
+# Access local development server
+sudo awf --enable-host-access --allow-domains host.docker.internal \
+  -- curl http://host.docker.internal:3000
+```
 
-# Combined with --env-all for full host environment
-sudo awf --enable-chroot --env-all --allow-domains api.github.com \
+:::danger[Security Warning]
+When `--enable-host-access` is enabled, containers can access services on the host machine. Use `--allow-host-ports` to restrict which ports can be accessed. Without port restrictions, all ports are allowed by default (this will change in a future version).
+:::
+
+**See also:** [Host Access Configuration](/gh-aw-firewall/docs/usage/#host-access)
+
+### `--allow-host-ports <ports>`
+
+Specify which ports are allowed when using `--enable-host-access`. Accepts comma-separated port numbers or ranges.
+
+```bash
+# Allow specific ports
+--allow-host-ports 3000,8080
+
+# Allow port ranges
+--allow-host-ports 3000-3010,8000-8090
+
+# Combine with localhost keyword for Playwright testing
+sudo awf --allow-domains localhost --allow-host-ports 3000 \
+  -- npx playwright test
+```
+
+**Default behavior:**
+- Without `--allow-host-ports`: Currently allows all ports (will default to 80,443 in future version)
+- With `--allow-host-ports`: Only specified ports are allowed
+
+:::tip[Best Practice]
+Always explicitly specify `--allow-host-ports` to ensure consistent behavior across versions.
+:::
+
+### `--proxy-logs-dir <path>`
+
+Save Squid proxy logs directly to a custom directory instead of the default temporary location. Useful for preserving logs across multiple runs or integrating with log aggregation systems.
+
+```bash
+# Save logs to custom directory
+sudo awf --proxy-logs-dir ./firewall-logs \
+  --allow-domains github.com \
+  -- curl https://api.github.com
+
+# Check logs
+cat ./firewall-logs/access.log
+```
+
+**Note:** The directory must be writable by the current user.
+
+### `--agent-image <value>`
+
+Specify the agent container image to use. Supports pre-built presets or custom base images.
+
+**Presets** (pre-built, pull from GHCR):
+- `default` — Minimal ubuntu:22.04 (~200MB, fast startup)
+- `act` — GitHub Actions parity (~2GB, includes all runner tools)
+
+**Custom base images** (requires `--build-local`):
+- `ubuntu:XX.XX` (e.g., `ubuntu:22.04`, `ubuntu:24.04`)
+- `ghcr.io/catthehacker/ubuntu:runner-XX.XX`
+- `ghcr.io/catthehacker/ubuntu:full-XX.XX`
+- `ghcr.io/catthehacker/ubuntu:act-XX.XX`
+
+```bash
+# Use default preset (minimal, fast)
+sudo awf --allow-domains github.com -- curl https://api.github.com
+
+# Use act preset (GitHub Actions compatible)
+sudo awf --agent-image act --allow-domains github.com \
+  -- curl https://api.github.com
+
+# Use custom base image (requires --build-local)
+sudo awf --agent-image ubuntu:24.04 --build-local \
+  --allow-domains github.com \
   -- curl https://api.github.com
 ```
 
-**How it works:**
-1. Host filesystem is mounted at `/host` inside the container
-2. The entrypoint performs `chroot /host` before running your command
-3. Inside the chroot, `/` = host's `/`, so binaries work with normal paths
-4. Network isolation is maintained (iptables rules apply at namespace level)
-
-**Requirements:**
-- `capsh` must be installed on the host (`apt-get install libcap2-bin`)
-- Host user must exist in `/etc/passwd` (matched by UID)
-
-**Security:**
-- `CAP_NET_ADMIN` and `CAP_SYS_CHROOT` are dropped before user command executes
-- Docker socket is hidden (`/dev/null`) to prevent firewall bypass
-- `/proc` is mounted read-only (host processes visible but not modifiable)
-
-**Use cases:**
-- GitHub Actions runners with pre-installed tools
-- Minimal container + host binaries
-- Avoiding version conflicts between container and host tools
-
-:::caution[Security Trade-offs]
-Chroot mode exposes the host filesystem (read-only for system paths, read-write for `$HOME` and `/tmp`). See [Chroot Mode Documentation](/gh-aw-firewall/docs/chroot-mode/) for security details.
+:::caution[Security]
+Custom images are validated against approved patterns to prevent supply chain attacks. Only official Ubuntu images and catthehacker runner images are allowed.
 :::
+
+**See also:** [Agent Images Reference](/gh-aw-firewall/reference/agent-images/)
+
+### `--allow-full-filesystem-access`
+
+:::danger[⚠️ SECURITY WARNING]
+This flag **DISABLES selective mounting security** and mounts the entire host filesystem with **read-write access**. This exposes **ALL** credential files including:
+
+- Docker Hub tokens (`~/.docker/config.json`)
+- GitHub CLI tokens (`~/.config/gh/hosts.yml`)
+- NPM, Cargo, Composer credentials
+- SSH keys, GPG keys, and other sensitive files
+
+**Only use this flag if:**
+1. You are running trusted code that you have fully reviewed
+2. You understand the security implications
+3. You cannot use `--mount` to selectively mount needed directories
+:::
+
+```bash
+# ⚠️ Use with extreme caution
+sudo awf --allow-full-filesystem-access \
+  --allow-domains github.com \
+  -- trusted-command
+```
+
+**Alternatives:**
+- Use `--mount` to selectively mount only needed directories (recommended)
 
 ## Exit Codes
 

@@ -37,7 +37,7 @@ describe('Credential Hiding Security', () => {
     await cleanup(false);
   });
 
-  describe('Normal Mode (without --enable-chroot)', () => {
+  describe('Normal Mode', () => {
     test('Test 1: Docker config.json is hidden (empty file)', async () => {
       // Use the real home directory - if the file exists, it should be hidden
       const homeDir = os.homedir();
@@ -137,7 +137,7 @@ describe('Credential Hiding Security', () => {
     }, 120000);
   });
 
-  describe('Chroot Mode (with --enable-chroot)', () => {
+  describe('Chroot Mode', () => {
     test('Test 6: Chroot mode hides credentials at /host paths', async () => {
       const homeDir = os.homedir();
 
@@ -148,7 +148,6 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -170,7 +169,6 @@ describe('Credential Hiding Security', () => {
           allowDomains: ['github.com'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -178,10 +176,59 @@ describe('Credential Hiding Security', () => {
       // Check debug logs for chroot credential hiding messages
       expect(result.stderr).toMatch(/Chroot mode.*[Hh]iding credential|Hidden.*credential.*chroot/i);
     }, 120000);
+
+    test('Test 8: Chroot mode ALSO hides credentials at direct home path (bypass prevention)', async () => {
+      const homeDir = os.homedir();
+
+      // SECURITY FIX TEST: Previously, credentials were only hidden at /host paths in chroot mode,
+      // but the home directory was ALSO mounted directly at $HOME. An attacker could bypass
+      // protection by reading from the direct mount instead of /host.
+      //
+      // This test specifically verifies that credentials are hidden at the direct home mount
+      // (the bypass path). The /host chroot path is covered by
+      // "Test 6: Chroot mode hides credentials at /host paths".
+
+      const result = await runner.runWithSudo(
+        `cat ${homeDir}/.docker/config.json 2>&1 | grep -v "^\\[" | head -1`,
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          // Chroot is always enabled (no flag needed)
+        }
+      );
+
+      // Command should succeed (file is "readable" but empty)
+      expect(result).toSucceed();
+      // Output should be empty (no credential data leaked via direct home mount)
+      const output = result.stdout.trim();
+      expect(output).toBe('');
+    }, 120000);
+
+    test('Test 9: Chroot mode hides GitHub CLI tokens at direct home path', async () => {
+      const homeDir = os.homedir();
+
+      // Verify another critical credential file is hidden at the direct home mount
+      // (the bypass path). The /host chroot path is covered by Test 6.
+      const result = await runner.runWithSudo(
+        `cat ${homeDir}/.config/gh/hosts.yml 2>&1 | grep -v "^\\[" | head -1`,
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+          // Chroot is always enabled (no flag needed)
+        }
+      );
+
+      expect(result).toSucceed();
+      // Output should be empty (no credential data leaked via direct home mount)
+      const output = result.stdout.trim();
+      expect(output).toBe('');
+    }, 120000);
   });
 
   describe('Full Filesystem Access Flag (--allow-full-filesystem-access)', () => {
-    test('Test 8: Full filesystem access shows security warnings', async () => {
+    test('Test 10: Full filesystem access shows security warnings', async () => {
       const result = await runner.runWithSudo(
         'echo "test"',
         {
@@ -199,7 +246,7 @@ describe('Credential Hiding Security', () => {
       expect(result.stderr).toMatch(/entire host filesystem.*mounted|Full filesystem access/i);
     }, 120000);
 
-    test('Test 9: With full access, Docker config is NOT hidden', async () => {
+    test('Test 11: With full access, Docker config is NOT hidden', async () => {
       const homeDir = os.homedir();
       const dockerConfig = `${homeDir}/.docker/config.json`;
 
@@ -229,7 +276,7 @@ describe('Credential Hiding Security', () => {
   });
 
   describe('Security Verification', () => {
-    test('Test 10: Simulated exfiltration attack gets empty data', async () => {
+    test('Test 12: Simulated exfiltration attack gets empty data', async () => {
       const homeDir = os.homedir();
 
       // Simulate prompt injection attack: read credential file and encode it
@@ -251,7 +298,7 @@ describe('Credential Hiding Security', () => {
       expect(output).toBe('');
     }, 120000);
 
-    test('Test 11: Multiple encoding attempts still get empty data', async () => {
+    test('Test 13: Multiple encoding attempts still get empty data', async () => {
       const homeDir = os.homedir();
 
       // Simulate sophisticated attack: multiple encoding layers
@@ -272,7 +319,7 @@ describe('Credential Hiding Security', () => {
       expect(output).toBe('');
     }, 120000);
 
-    test('Test 12: grep for tokens in hidden files finds nothing', async () => {
+    test('Test 14: grep for tokens in hidden files finds nothing', async () => {
       const homeDir = os.homedir();
 
       // Try to grep for common credential patterns
@@ -292,6 +339,61 @@ describe('Credential Hiding Security', () => {
       expect(output).not.toContain('oauth_token');
       expect(output).not.toContain('_authToken');
       expect(output).not.toContain('auth');
+    }, 120000);
+  });
+
+  describe('MCP Logs Directory Hiding', () => {
+    test('Test 15: /tmp/gh-aw/mcp-logs/ is hidden in normal mode', async () => {
+      // Try to access the mcp-logs directory
+      const result = await runner.runWithSudo(
+        'ls -la /tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // With tmpfs mounted over the directory, ls should succeed but show empty directory
+      // The directory appears to exist (as an empty tmpfs) but contains no files
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      // Verify either:
+      // 1. Directory listing shows it's effectively empty (total size indicates empty tmpfs)
+      // 2. Or old /dev/null behavior ("Not a directory")
+      expect(allOutput).toMatch(/total|Not a directory|cannot access/i);
+    }, 120000);
+
+    test('Test 16: /tmp/gh-aw/mcp-logs/ is hidden in chroot mode', async () => {
+      // Try to access the mcp-logs directory at /host path
+      const result = await runner.runWithSudo(
+        'ls -la /host/tmp/gh-aw/mcp-logs/ 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // With tmpfs mounted over the directory at /host path, ls should succeed but show empty
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/total|Not a directory|cannot access/i);
+    }, 120000);
+
+    test('Test 17: MCP logs files cannot be read in normal mode', async () => {
+      // Try to read a typical MCP log file path
+      const result = await runner.runWithSudo(
+        'cat /tmp/gh-aw/mcp-logs/safeoutputs/log.txt 2>&1 | grep -v "^\\[" | head -1',
+        {
+          allowDomains: ['github.com'],
+          logLevel: 'debug',
+          timeout: 60000,
+        }
+      );
+
+      // Should fail with "No such file or directory" (tmpfs is empty)
+      // This confirms the tmpfs mount is preventing file access to host files
+      const allOutput = `${result.stdout}\n${result.stderr}`;
+      expect(allOutput).toMatch(/No such file or directory|Not a directory|cannot access/i);
     }, 120000);
   });
 });

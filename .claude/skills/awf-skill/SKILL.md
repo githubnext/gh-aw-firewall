@@ -96,7 +96,6 @@ Container Options:
 Advanced Options:
   --ssl-bump                      Enable HTTPS content inspection
   --allow-urls <urls>             URL patterns for SSL Bump (requires --ssl-bump)
-  --enable-chroot                 Enable chroot for host binaries
 
 Debugging Options:
   --log-level <level>             Log level: debug, info, warn, error
@@ -195,11 +194,11 @@ sudo awf --allow-domains github.com \
   -- cat /data/config.json
 ```
 
-### 6. Use Chroot Mode for Host Binaries
+### 6. Use Host Binaries (Chroot Mode is Always On)
 
 ```bash
-# Access host Python, Node, Go, etc.
-sudo awf --enable-chroot --allow-domains api.github.com \
+# Access host Python, Node, Go, etc. (chroot mode is the default)
+sudo awf --allow-domains api.github.com \
   -- python3 -c "import requests; print(requests.get('https://api.github.com').status_code)"
 ```
 

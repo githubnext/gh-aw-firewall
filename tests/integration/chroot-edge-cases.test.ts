@@ -2,7 +2,7 @@
  * Chroot Edge Cases and Error Handling Tests
  *
  * These tests verify edge cases, security features, and error handling
- * for the --enable-chroot feature.
+ * for chroot mode.
  *
  * NOTE: stdout may contain entrypoint debug logs in addition to command output.
  * Use toContain() instead of exact matches, or check the last line of output.
@@ -40,7 +40,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
         containerWorkDir: '/tmp',
       });
 
@@ -54,7 +53,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
         containerWorkDir: '/nonexistent/directory/path',
       });
 
@@ -71,7 +69,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -85,7 +82,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -101,7 +97,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
         env: {
           MY_CUSTOM_VAR: 'test_value_123',
         },
@@ -118,7 +113,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -130,7 +124,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -145,7 +138,6 @@ describe('Chroot Edge Cases', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -161,7 +153,6 @@ describe('Chroot Edge Cases', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -178,7 +169,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // Should fail due to lack of permissions
@@ -192,7 +182,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       // Should fail due to lack of CAP_SYS_CHROOT
@@ -206,7 +195,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toExitWithCode(0);
@@ -217,7 +205,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toExitWithCode(1);
@@ -228,7 +215,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toExitWithCode(1);
@@ -239,7 +225,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toExitWithCode(127);
@@ -252,7 +237,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['api.github.com'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -264,7 +248,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 30000,
-        enableChroot: true,
       });
 
       // Should fail or timeout
@@ -276,7 +259,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['github.com'],
         logLevel: 'debug',
         timeout: 30000,
-        enableChroot: true,
       });
 
       // Should fail or timeout
@@ -290,7 +272,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -304,7 +285,6 @@ describe('Chroot Edge Cases', () => {
           allowDomains: ['localhost'],
           logLevel: 'debug',
           timeout: 60000,
-          enableChroot: true,
         }
       );
 
@@ -317,7 +297,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -329,7 +308,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -345,7 +323,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();
@@ -360,7 +337,6 @@ describe('Chroot Edge Cases', () => {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
-        enableChroot: true,
       });
 
       expect(result).toSucceed();

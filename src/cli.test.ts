@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, processLocalhostKeyword, validateSkipPullWithBuildLocal } from './cli';
+import { parseEnvironmentVariables, parseDomains, parseDomainsFile, escapeShellArg, joinShellArgs, parseVolumeMounts, isValidIPv4, isValidIPv6, parseDnsServers, validateAgentImage, isAgentImagePreset, AGENT_IMAGE_PRESETS, processAgentImageOption, processLocalhostKeyword, validateSkipPullWithBuildLocal, validateFormat } from './cli';
 import { redactSecrets } from './redact-secrets';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1335,6 +1335,26 @@ describe('cli', () => {
       const result = validateSkipPullWithBuildLocal(undefined, true);
       expect(result.valid).toBe(true);
       expect(result.error).toBeUndefined();
+    });
+  });
+
+  describe('validateFormat', () => {
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+
+    afterAll(() => {
+      mockExit.mockRestore();
+    });
+
+    it('should not throw for valid formats', () => {
+      expect(() => validateFormat('json', ['json', 'markdown', 'pretty'])).not.toThrow();
+      expect(() => validateFormat('pretty', ['json', 'markdown', 'pretty'])).not.toThrow();
+      expect(() => validateFormat('markdown', ['json', 'markdown', 'pretty'])).not.toThrow();
+    });
+
+    it('should exit with error for invalid format', () => {
+      expect(() => validateFormat('xml', ['json', 'markdown', 'pretty'])).toThrow('process.exit called');
     });
   });
 });
