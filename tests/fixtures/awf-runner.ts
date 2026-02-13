@@ -141,8 +141,8 @@ export class AwfRunner {
     // Extract work directory from stderr logs
     const workDir = this.extractWorkDir(result.stderr || '');
 
-    // Normalize exit code (undefined/null becomes 0)
-    const exitCode = result.exitCode || 0;
+    // Normalize exit code to handle undefined (defaults to 0)
+    const exitCode = result.exitCode ?? 0;
 
     return {
       exitCode,
@@ -288,8 +288,8 @@ export class AwfRunner {
 
     const workDir = this.extractWorkDir(result.stderr || '');
 
-    // Normalize exit code (undefined/null becomes 0)
-    const exitCode = result.exitCode || 0;
+    // Normalize exit code to handle undefined (defaults to 0)
+    const exitCode = result.exitCode ?? 0;
 
     return {
       exitCode,

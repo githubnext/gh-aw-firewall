@@ -10,7 +10,12 @@
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
  *   If not set, uses built-in defaults
  *
- * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
+ * Build hardening:
+ *   Default token names are XOR-obfuscated to prevent cleartext extraction
+ *   via strings(1) or objdump. Internal symbols use hidden visibility.
+ *   Binary should be stripped after compilation (see build.sh / Dockerfile).
+ *
+ * Compile: gcc -shared -fPIC -fvisibility=hidden -o one-shot-token.so one-shot-token.c -ldl
  * Usage: LD_PRELOAD=/path/to/one-shot-token.so ./your-program
  */
 
@@ -22,25 +27,69 @@
 #include <stdio.h>
 #include <ctype.h>
 
-/* Default sensitive token environment variable names */
-static const char *DEFAULT_SENSITIVE_TOKENS[] = {
-    /* GitHub tokens */
-    "COPILOT_GITHUB_TOKEN",
-    "GITHUB_TOKEN",
-    "GH_TOKEN",
-    "GITHUB_API_TOKEN",
-    "GITHUB_PAT",
-    "GH_ACCESS_TOKEN",
-    /* OpenAI tokens */
-    "OPENAI_API_KEY",
-    "OPENAI_KEY",
-    /* Anthropic/Claude tokens */
-    "ANTHROPIC_API_KEY",
-    "CLAUDE_API_KEY",
-    /* Codex tokens */
-    "CODEX_API_KEY",
-    NULL
+/* --------------------------------------------------------------------------
+ * Obfuscated default token names
+ *
+ * Token names are XOR-encoded so they do not appear as cleartext in the
+ * .rodata section.  This is NOT cryptographic protection -- a determined
+ * attacker can reverse the XOR.  The goal is to prevent trivial discovery
+ * via `strings`, `objdump -s -j .rodata`, or similar reconnaissance.
+ *
+ * Re-generate with: containers/agent/one-shot-token/encode-tokens.sh
+ * -------------------------------------------------------------------------- */
+
+#define OBF_KEY 0x5A
+
+/* Entry in the obfuscated defaults table */
+struct obf_entry {
+    const unsigned char *data;
+    size_t len;
 };
+
+/* --- BEGIN GENERATED OBFUSCATED DEFAULTS (key=0x5A) --- */
+/* Re-generate with: containers/agent/one-shot-token/encode-tokens.sh */
+#define NUM_DEFAULT_TOKENS 11
+
+static const unsigned char OBF_0[] = { 0x19, 0x15, 0x0a, 0x13, 0x16, 0x15, 0x0e, 0x05, 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=20 */
+static const unsigned char OBF_1[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=12 */
+static const unsigned char OBF_2[] = { 0x1d, 0x12, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=8 */
+static const unsigned char OBF_3[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=16 */
+static const unsigned char OBF_4[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0a, 0x1b, 0x0e }; /* length=10 */
+static const unsigned char OBF_5[] = { 0x1d, 0x12, 0x05, 0x1b, 0x19, 0x19, 0x1f, 0x09, 0x09, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=15 */
+static const unsigned char OBF_6[] = { 0x15, 0x0a, 0x1f, 0x14, 0x1b, 0x13, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=14 */
+static const unsigned char OBF_7[] = { 0x15, 0x0a, 0x1f, 0x14, 0x1b, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=10 */
+static const unsigned char OBF_8[] = { 0x1b, 0x14, 0x0e, 0x12, 0x08, 0x15, 0x0a, 0x13, 0x19, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=17 */
+static const unsigned char OBF_9[] = { 0x19, 0x16, 0x1b, 0x0f, 0x1e, 0x1f, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=14 */
+static const unsigned char OBF_10[] = { 0x19, 0x15, 0x1e, 0x1f, 0x02, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=13 */
+
+static const struct obf_entry OBFUSCATED_DEFAULTS[11] = {
+    { OBF_0, sizeof(OBF_0) },
+    { OBF_1, sizeof(OBF_1) },
+    { OBF_2, sizeof(OBF_2) },
+    { OBF_3, sizeof(OBF_3) },
+    { OBF_4, sizeof(OBF_4) },
+    { OBF_5, sizeof(OBF_5) },
+    { OBF_6, sizeof(OBF_6) },
+    { OBF_7, sizeof(OBF_7) },
+    { OBF_8, sizeof(OBF_8) },
+    { OBF_9, sizeof(OBF_9) },
+    { OBF_10, sizeof(OBF_10) },
+};
+/* --- END GENERATED OBFUSCATED DEFAULTS --- */
+
+/**
+ * Decode an obfuscated entry into a newly allocated string.
+ * Returns NULL on allocation failure.
+ */
+static char *decode_obf(const struct obf_entry *entry) {
+    char *decoded = malloc(entry->len + 1);
+    if (decoded == NULL) return NULL;
+    for (size_t i = 0; i < entry->len; i++) {
+        decoded[i] = (char)(entry->data[i] ^ OBF_KEY);
+    }
+    decoded[entry->len] = '\0';
+    return decoded;
+}
 
 /* Maximum number of tokens we can track (for static allocation). This limit
  * balances memory usage with practical needs - 100 tokens should be more than
@@ -62,6 +111,18 @@ static char *token_cache[MAX_TOKENS] = {0};
 /* Mutex for thread safety */
 static pthread_mutex_t token_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Thread-local recursion guard to prevent deadlock when:
+ * 1. secure_getenv("X") acquires token_mutex
+ * 2. init_token_list() calls fprintf() for logging
+ * 3. glibc's fprintf calls secure_getenv() for locale initialization
+ * 4. Our secure_getenv() would try to acquire token_mutex again -> DEADLOCK
+ *
+ * With this guard, recursive calls from the same thread skip the mutex
+ * and pass through directly to the real function. This is safe because
+ * the recursive call is always for a non-sensitive variable (locale).
+ */
+static __thread int in_getenv = 0;
+
 /* Initialization flag */
 static int tokens_initialized = 0;
 
@@ -71,27 +132,21 @@ static char *(*real_getenv)(const char *name) = NULL;
 /* Pointer to the real secure_getenv function */
 static char *(*real_secure_getenv)(const char *name) = NULL;
 
-/* pthread_once control for thread-safe initialization */
-static pthread_once_t getenv_init_once = PTHREAD_ONCE_INIT;
-static pthread_once_t secure_getenv_init_once = PTHREAD_ONCE_INIT;
-
-/* Initialize the real getenv pointer (called exactly once via pthread_once) */
-static void init_real_getenv_once(void) {
+/* Resolve real_getenv if not yet resolved (idempotent, no locks needed) */
+static void ensure_real_getenv(void) {
+    if (real_getenv != NULL) return;
     real_getenv = dlsym(RTLD_NEXT, "getenv");
     if (real_getenv == NULL) {
         fprintf(stderr, "[one-shot-token] FATAL: Could not find real getenv: %s\n", dlerror());
-        /* Cannot recover - abort to prevent undefined behavior */
         abort();
     }
 }
 
-/* Initialize the real secure_getenv pointer (called exactly once via pthread_once) */
-static void init_real_secure_getenv_once(void) {
+/* Resolve real_secure_getenv if not yet resolved (idempotent, no locks needed) */
+static void ensure_real_secure_getenv(void) {
+    if (real_secure_getenv != NULL) return;
     real_secure_getenv = dlsym(RTLD_NEXT, "secure_getenv");
-    /* Note: secure_getenv may not be available on all systems, so we don't abort if NULL */
-    if (real_secure_getenv == NULL) {
-        fprintf(stderr, "[one-shot-token] WARNING: secure_getenv not available, falling back to getenv\n");
-    }
+    /* secure_getenv may not be available on all systems - that's OK */
 }
 
 /**
@@ -106,7 +161,7 @@ static void init_token_list(void) {
 
     /* Get the configuration from environment */
     const char *config = real_getenv("AWF_ONE_SHOT_TOKENS");
-    
+
     if (config != NULL && config[0] != '\0') {
         /* Parse comma-separated token list using strtok_r for thread safety */
         char *config_copy = strdup(config);
@@ -120,7 +175,7 @@ static void init_token_list(void) {
         while (token != NULL && num_tokens < MAX_TOKENS) {
             /* Trim leading whitespace */
             while (*token && isspace((unsigned char)*token)) token++;
-            
+
             /* Trim trailing whitespace (only if string is non-empty) */
             size_t token_len = strlen(token);
             if (token_len > 0) {
@@ -163,11 +218,11 @@ static void init_token_list(void) {
             return;
         }
     }
-    
+
     /* Use default token list (when AWF_ONE_SHOT_TOKENS is unset, empty, or parsed to zero tokens) */
-    /* Note: num_tokens should be 0 when we reach here */
-    for (int i = 0; DEFAULT_SENSITIVE_TOKENS[i] != NULL && num_tokens < MAX_TOKENS; i++) {
-        sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
+    /* Decode obfuscated defaults at runtime */
+    for (int i = 0; i < NUM_DEFAULT_TOKENS && num_tokens < MAX_TOKENS; i++) {
+        sensitive_tokens[num_tokens] = decode_obf(&OBFUSCATED_DEFAULTS[i]);
         if (sensitive_tokens[num_tokens] == NULL) {
             fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
             /* Clean up previously allocated tokens */
@@ -183,14 +238,20 @@ static void init_token_list(void) {
 
     tokens_initialized = 1;
 }
-/* Ensure real_getenv is initialized (thread-safe) */
-static void init_real_getenv(void) {
-    pthread_once(&getenv_init_once, init_real_getenv_once);
-}
-
-/* Ensure real_secure_getenv is initialized (thread-safe) */
-static void init_real_secure_getenv(void) {
-    pthread_once(&secure_getenv_init_once, init_real_secure_getenv_once);
+/**
+ * Library constructor - resolves real getenv/secure_getenv at load time.
+ *
+ * This MUST run before any other library's constructors to prevent a deadlock:
+ * if a constructor (e.g., LLVM in rustc) calls getenv() and we lazily call
+ * dlsym(RTLD_NEXT) from within our intercepted getenv(), dlsym() deadlocks
+ * because the dynamic linker's internal lock is already held during constructor
+ * execution. Resolving here (in our LD_PRELOAD'd constructor which runs first)
+ * avoids this entirely.
+ */
+__attribute__((constructor))
+static void one_shot_token_init(void) {
+    ensure_real_getenv();
+    ensure_real_secure_getenv();
 }
 
 /* Check if a variable name is a sensitive token */
@@ -212,16 +273,16 @@ static int get_token_index(const char *name) {
  */
 static const char *format_token_value(const char *value) {
     static char formatted[8]; /* "abcd..." + null terminator */
-    
+
     if (value == NULL) {
         return "NULL";
     }
-    
+
     size_t len = strlen(value);
     if (len == 0) {
         return "(empty)";
     }
-    
+
     if (len <= 4) {
         /* If 4 chars or less, just show it all with ... */
         snprintf(formatted, sizeof(formatted), "%s...", value);
@@ -229,7 +290,7 @@ static const char *format_token_value(const char *value) {
         /* Show first 4 chars + ... */
         snprintf(formatted, sizeof(formatted), "%.4s...", value);
     }
-    
+
     return formatted;
 }
 
@@ -245,8 +306,15 @@ static const char *format_token_value(const char *value) {
  *
  * For all other variables: passes through to real getenv
  */
+__attribute__((visibility("default")))
 char *getenv(const char *name) {
-    init_real_getenv();
+    ensure_real_getenv();
+
+    /* Skip interception during recursive calls (e.g., fprintf -> secure_getenv -> getenv) */
+    if (in_getenv) {
+        return real_getenv(name);
+    }
+    in_getenv = 1;
 
     /* Initialize token list on first call (thread-safe) */
     pthread_mutex_lock(&token_mutex);
@@ -260,6 +328,7 @@ char *getenv(const char *name) {
     /* Not a sensitive token - release mutex and pass through */
     if (token_idx < 0) {
         pthread_mutex_unlock(&token_mutex);
+        in_getenv = 0;
         return real_getenv(name);
     }
 
@@ -279,7 +348,7 @@ char *getenv(const char *name) {
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n", 
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n",
                     name, format_token_value(token_cache[token_idx]));
 
             result = token_cache[token_idx];
@@ -293,6 +362,7 @@ char *getenv(const char *name) {
     }
 
     pthread_mutex_unlock(&token_mutex);
+    in_getenv = 0;
 
     return result;
 }
@@ -309,11 +379,10 @@ char *getenv(const char *name) {
  *
  * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
+__attribute__((visibility("default")))
 char *secure_getenv(const char *name) {
-    init_real_secure_getenv();
-    init_real_getenv();
-
-    /* If secure_getenv is not available, fall back to our intercepted getenv */
+    ensure_real_secure_getenv();
+    ensure_real_getenv();
     if (real_secure_getenv == NULL) {
         return getenv(name);
     }
@@ -343,7 +412,7 @@ char *secure_getenv(const char *name) {
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n", 
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n",
                     name, format_token_value(token_cache[token_idx]));
 
             result = token_cache[token_idx];

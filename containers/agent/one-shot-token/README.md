@@ -158,11 +158,14 @@ In chroot mode, the library must be accessible from within the chroot (host file
 
 ### In Docker (automatic)
 
-The Dockerfile compiles the Rust library during image build:
+The Dockerfile compiles the library during image build with hardened flags:
 
 ```dockerfile
-RUN cargo build --release && \
-    cp target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so
+RUN gcc -shared -fPIC -fvisibility=hidden -O2 -Wall -s \
+    -o /usr/local/lib/one-shot-token.so \
+    /tmp/one-shot-token.c \
+    -ldl -lpthread && \
+    strip --strip-unneeded /usr/local/lib/one-shot-token.so
 ```
 
 ### Locally (for testing)
@@ -174,6 +177,24 @@ Requires Rust toolchain (install via [rustup](https://rustup.rs/)):
 ```
 
 This builds `target/release/libone_shot_token.so` and creates a symlink `one-shot-token.so` for backwards compatibility.
+
+### Binary Hardening
+
+The build applies several hardening measures to reduce reconnaissance value:
+
+- **XOR-obfuscated token names**: Default token names are stored as XOR-encoded byte arrays
+  and decoded at runtime. This prevents extraction via `strings` or `objdump -s -j .rodata`.
+- **Hidden symbol visibility**: `-fvisibility=hidden` hides all internal symbols by default.
+  Only `getenv` and `secure_getenv` are exported (required for LD_PRELOAD interposition).
+- **Stripped binary**: `-s` flag and `strip --strip-unneeded` remove the symbol table,
+  debug sections, and build metadata.
+
+To regenerate the obfuscated byte arrays after changing default token names:
+
+```bash
+./encode-tokens.sh
+# Paste the output into one-shot-token.c, replacing the OBFUSCATED_DEFAULTS section
+```
 
 ## Testing
 
@@ -305,7 +326,7 @@ This library is one layer in AWF's security model:
 
 ## Files
 
-- `src/lib.rs` - Library source code (Rust)
-- `Cargo.toml` - Rust package configuration
-- `build.sh` - Local build script
+- `one-shot-token.c` - Library source code (token names are XOR-obfuscated)
+- `build.sh` - Local build script (includes hardening flags and verification)
+- `encode-tokens.sh` - Generates XOR-encoded byte arrays for default token names
 - `README.md` - This documentation

@@ -4,7 +4,9 @@
 #   - ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions runner (~2-5GB)
 #   - ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions runner (~20GB compressed)
 # Use --build-arg BASE_IMAGE=<image> to customize
+# NOTE: ARG declared before first FROM is global and available in all FROM statements
 ARG BASE_IMAGE=ubuntu:22.04
+
 FROM ${BASE_IMAGE}
 
 # Install required packages and Node.js 22
@@ -66,23 +68,21 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
-# Build one-shot-token LD_PRELOAD library for single-use token access
+# Copy pre-built one-shot-token library from rust-builder stage
 # This prevents tokens from being read multiple times (e.g., by malicious code)
-COPY one-shot-token/Cargo.toml one-shot-token/src/ /tmp/one-shot-token/
-COPY one-shot-token/src/ /tmp/one-shot-token/src/
+# Build flags: -fvisibility=hidden hides internal symbols, -s strips at link time
+COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c
 RUN set -eux; \
+    BUILD_PKGS="gcc libc6-dev binutils"; \
     apt-get update && \
-    apt-get install -y --no-install-recommends curl build-essential && \
-    # Install Rust via rustup (minimal profile)
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
-    export PATH="/root/.cargo/bin:$PATH" && \
-    # Build the library
-    cd /tmp/one-shot-token && \
-    cargo build --release && \
-    cp target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so && \
-    # Clean up Rust and build artifacts
-    rm -rf /tmp/one-shot-token /root/.cargo /root/.rustup && \
-    apt-get remove -y build-essential && \
+    ( apt-get install -y --no-install-recommends $BUILD_PKGS || \
+      (rm -rf /var/lib/apt/lists/* && apt-get update && \
+       apt-get install -y --no-install-recommends $BUILD_PKGS) ) && \
+    gcc -shared -fPIC -fvisibility=hidden -O2 -Wall -s \
+        -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
+    strip --strip-unneeded /usr/local/lib/one-shot-token.so && \
+    rm /tmp/one-shot-token.c && \
+    apt-get remove -y $BUILD_PKGS && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 

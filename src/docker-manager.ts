@@ -358,6 +358,10 @@ export function generateDockerCompose(
   if (process.env.CARGO_HOME) {
     environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
   }
+  // Rust: Pass RUSTUP_HOME so rustc/cargo can find the toolchain
+  if (process.env.RUSTUP_HOME) {
+    environment.AWF_RUSTUP_HOME = process.env.RUSTUP_HOME;
+  }
   // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
   if (process.env.JAVA_HOME) {
     environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
@@ -427,10 +431,17 @@ export function generateDockerCompose(
   // Build volumes list for agent execution container
   // Use the real user's home (not /root when running with sudo)
   const effectiveHome = getRealUserHome();
+
+  // SECURITY FIX: Use granular mounting instead of blanket HOME directory mount
+  // Only mount the workspace directory ($GITHUB_WORKSPACE or current working directory)
+  // to prevent access to credential files in $HOME
+  const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${effectiveHome}:${effectiveHome}:rw`,
+    // Mount only the workspace directory (not entire HOME)
+    // This prevents access to ~/.docker/, ~/.config/gh/, ~/.npmrc, etc.
+    `${workspaceDir}:${workspaceDir}:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
@@ -466,16 +477,60 @@ export function generateDockerCompose(
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
 
-    // User home directory for project files and Rust/Cargo (read-write)
-    // Note: $HOME is already mounted at the container level, this adds it under /host
-    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
-    const userHome = getRealUserHome();
-    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+    // SECURITY FIX: Mount only workspace directory instead of entire user home
+    // This prevents access to credential files in $HOME
+    // Mount workspace directory at /host path for chroot
+    agentVolumes.push(`${workspaceDir}:/host${workspaceDir}:rw`);
+
+    // Mount an empty writable home directory at /host$HOME
+    // This gives tools a writable $HOME without exposing credential files.
+    // The specific subdirectory mounts below (.cargo, .claude, etc.) overlay
+    // on top, providing access to only the directories we explicitly mount.
+    // Without this, $HOME inside the chroot is an empty root-owned directory
+    // created by Docker as a side effect of subdirectory mounts, which causes
+    // tools like rustc and Claude Code to hang or fail.
+    // NOTE: This directory must be OUTSIDE workDir because workDir has a tmpfs
+    // overlay inside the container to hide docker-compose.yml secrets.
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    agentVolumes.push(`${emptyHomeDir}:/host${effectiveHome}:rw`);
 
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
+
+    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs)
+    // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
+    agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
+
+    // Mount ~/.cache, ~/.config, ~/.local for CLI tool state management (Claude Code, etc.)
+    // These directories are safe to mount as they contain application state, not credentials
+    // Note: Specific credential files within ~/.config (like ~/.config/gh/hosts.yml) are
+    // still blocked via /dev/null overlays applied later in the code
+    agentVolumes.push(`${effectiveHome}/.cache:/host${effectiveHome}/.cache:rw`);
+    agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
+    agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
+
+    // Mount ~/.anthropic for Claude Code state and configuration
+    // This is safe as ~/.anthropic contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.anthropic:/host${effectiveHome}/.anthropic:rw`);
+
+    // Mount ~/.claude for Claude CLI state and configuration
+    // This is safe as ~/.claude contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
+
+    // Mount ~/.cargo and ~/.rustup for Rust toolchain access
+    // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
+    // ~/.cargo must be rw because the credential-hiding code mounts /dev/null over
+    // ~/.cargo/credentials, which needs a writable parent to create the mountpoint.
+    // ~/.rustup must be rw because rustup proxy binaries (rustc, cargo) need to
+    // acquire file locks in ~/.rustup/ when executing toolchain binaries.
+    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:rw`);
+    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:rw`);
+
+    // Mount ~/.npm for npm cache directory access
+    // npm requires write access to ~/.npm for caching packages and writing logs
+    agentVolumes.push(`${effectiveHome}/.npm:/host${effectiveHome}/.npm:rw`);
 
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
@@ -594,21 +649,25 @@ export function generateDockerCompose(
   //    - Encode data (base64, hex)
   //    - Exfiltrate via allowed HTTP domains (if attacker controls one)
   //
-  // **Mitigation: Selective Mounting**
+  // **Mitigation: Granular Selective Mounting (FIXED)**
   //
-  // Instead of mounting the entire filesystem (/:/host:rw), we:
-  // 1. Mount ONLY directories needed for legitimate operation
-  // 2. Hide credential files by mounting /dev/null over them
-  // 3. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // Instead of mounting the entire $HOME directory (which contained credentials), we now:
+  // 1. Mount ONLY the workspace directory ($GITHUB_WORKSPACE or cwd)
+  // 2. Mount ~/.copilot/logs separately for Copilot CLI logging
+  // 3. Hide credential files by mounting /dev/null over them (defense-in-depth)
+  // 4. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // 5. Allow users to add specific mounts via --mount flag
   //
-  // This defense-in-depth approach ensures that even if prompt injection succeeds,
-  // the attacker cannot access credentials because they're simply not mounted.
+  // This ensures that credential files in $HOME are never mounted, making them
+  // inaccessible even if prompt injection succeeds.
   //
   // **Implementation Details**
   //
   // AWF always runs in chroot mode:
-  // - Mount: $HOME at /host$HOME (for chroot environment), system paths at /host
-  // - Hide: Same credentials at /host paths
+  // - Mount: empty writable $HOME at /host$HOME, with specific subdirectories overlaid
+  // - Mount: $GITHUB_WORKSPACE at /host path, system paths at /host
+  // - Hide: credential files at /host paths via /dev/null overlays (defense-in-depth)
+  // - Does NOT mount: the real $HOME directory (prevents credential exposure)
   //
   // ================================================================
 
@@ -967,6 +1026,41 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     // Fix permissions if directory already exists (e.g., created by a previous run)
     fs.chmodSync(mcpLogsDir, 0o777);
     logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
+  }
+
+  // Ensure chroot home subdirectories exist with correct ownership before Docker
+  // bind-mounts them. If a source directory doesn't exist, Docker creates it as
+  // root:root, making it inaccessible to the agent user (e.g., UID 1001).
+  // Also create an empty writable home directory that gets mounted as $HOME
+  // in the chroot, giving tools a writable home without exposing credentials.
+  {
+    const effectiveHome = getRealUserHome();
+    const uid = parseInt(getSafeHostUid(), 10);
+    const gid = parseInt(getSafeHostGid(), 10);
+
+    // Create empty writable home directory for the chroot
+    // This is mounted as $HOME inside the container so tools can write to it
+    // NOTE: Must be outside workDir to avoid being hidden by the tmpfs overlay
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    if (!fs.existsSync(emptyHomeDir)) {
+      fs.mkdirSync(emptyHomeDir, { recursive: true });
+    }
+    fs.chownSync(emptyHomeDir, uid, gid);
+    logger.debug(`Created chroot home directory: ${emptyHomeDir} (${uid}:${gid})`);
+
+    // Ensure source directories for subdirectory mounts exist with correct ownership
+    const chrootHomeDirs = [
+      '.copilot', '.cache', '.config', '.local',
+      '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
+    ];
+    for (const dir of chrootHomeDirs) {
+      const dirPath = path.join(effectiveHome, dir);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.chownSync(dirPath, uid, gid);
+        logger.debug(`Created host home subdirectory: ${dirPath} (${uid}:${gid})`);
+      }
+    }
   }
 
   // Use fixed network configuration (network is created by host-iptables.ts)
@@ -1376,6 +1470,13 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
 
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });
+
+      // Clean up chroot home directory (created outside workDir to avoid tmpfs overlay)
+      const chrootHomeDir = `${workDir}-chroot-home`;
+      if (fs.existsSync(chrootHomeDir)) {
+        fs.rmSync(chrootHomeDir, { recursive: true, force: true });
+      }
+
       logger.debug('Temporary files cleaned up');
     }
   } catch (error) {

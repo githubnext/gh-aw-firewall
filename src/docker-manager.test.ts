@@ -621,14 +621,31 @@ describe('docker-manager', () => {
       expect(volumes).toContain('/dev/null:/host/run/docker.sock:ro');
     });
 
-    it('should mount user home directory under /host', () => {
+    it('should mount workspace directory under /host', () => {
       const result = generateDockerCompose(mockConfig, mockNetworkConfig);
       const agent = result.services.agent;
       const volumes = agent.volumes as string[];
 
-      // Should mount home directory under /host for chroot access (read-write)
+      // SECURITY FIX: Should mount only workspace directory under /host (not entire HOME)
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      expect(volumes).toContain(`${workspaceDir}:/host${workspaceDir}:rw`);
+    });
+
+    it('should mount Rust toolchain, npm cache, and CLI state directories', () => {
+      const result = generateDockerCompose(mockConfig, mockNetworkConfig);
+      const agent = result.services.agent;
+      const volumes = agent.volumes as string[];
+
       const homeDir = process.env.HOME || '/root';
-      expect(volumes).toContain(`${homeDir}:/host${homeDir}:rw`);
+      // Rust toolchain directories
+      expect(volumes).toContain(`${homeDir}/.cargo:/host${homeDir}/.cargo:rw`);
+      expect(volumes).toContain(`${homeDir}/.rustup:/host${homeDir}/.rustup:rw`);
+      // npm cache
+      expect(volumes).toContain(`${homeDir}/.npm:/host${homeDir}/.npm:rw`);
+      // CLI state directories
+      expect(volumes).toContain(`${homeDir}/.claude:/host${homeDir}/.claude:rw`);
+      expect(volumes).toContain(`${homeDir}/.anthropic:/host${homeDir}/.anthropic:rw`);
+      expect(volumes).toContain(`${homeDir}/.copilot:/host${homeDir}/.copilot:rw`);
     });
 
     it('should add SYS_CHROOT and SYS_ADMIN capabilities', () => {
@@ -1798,6 +1815,45 @@ describe('docker-manager', () => {
       // Verify proxyLogsDir was created
       expect(fs.existsSync(proxyLogsDir)).toBe(true);
     });
+
+    it('should pre-create chroot home subdirectories with correct ownership', async () => {
+      // Use a temporary home directory to avoid modifying the real one
+      const fakeHome = path.join(testDir, 'fakehome');
+      fs.mkdirSync(fakeHome, { recursive: true });
+      const originalHome = process.env.HOME;
+      const originalSudoUser = process.env.SUDO_USER;
+      process.env.HOME = fakeHome;
+      // Clear SUDO_USER to make getRealUserHome() use process.env.HOME
+      delete process.env.SUDO_USER;
+
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify chroot home subdirectories were created
+      const expectedDirs = [
+        '.copilot', '.cache', '.config', '.local',
+        '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
+      ];
+      for (const dir of expectedDirs) {
+        expect(fs.existsSync(path.join(fakeHome, dir))).toBe(true);
+      }
+
+      process.env.HOME = originalHome;
+      if (originalSudoUser) {
+        process.env.SUDO_USER = originalSudoUser;
+      }
+    });
   });
 
   describe('startContainers', () => {
@@ -2120,6 +2176,18 @@ describe('docker-manager', () => {
       await cleanup(testDir, false);
 
       expect(fs.existsSync(testDir)).toBe(false);
+    });
+
+    it('should clean up chroot-home directory alongside workDir', async () => {
+      // Create chroot-home sibling directory (as writeConfigs does in chroot mode)
+      const chrootHomeDir = `${testDir}-chroot-home`;
+      fs.mkdirSync(chrootHomeDir, { recursive: true });
+
+      await cleanup(testDir, false);
+
+      // Both workDir and chroot-home should be removed
+      expect(fs.existsSync(testDir)).toBe(false);
+      expect(fs.existsSync(chrootHomeDir)).toBe(false);
     });
 
     it('should preserve agent logs when they exist', async () => {
