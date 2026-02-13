@@ -34,7 +34,6 @@ echo ""
 # - registry.npmjs.org: NPM package registry (for npx)
 sudo -E awf \
   --allow-domains github.com,api.github.com,api.enterprise.githubcopilot.com,registry.npmjs.org \
-  --build-local \
   -- 'npx @github/copilot --prompt "What is 2+2?" --no-mcp'
 
 echo ""

@@ -28,7 +28,6 @@ echo ""
 # Use --allow-domains-file to specify domains from a file
 sudo awf \
   --allow-domains-file "$DOMAINS_FILE" \
-  --build-local \
   -- curl -s https://api.github.com | head -10
 
 echo ""

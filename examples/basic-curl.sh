@@ -18,7 +18,6 @@ echo ""
 # Subdomains are automatically included (github.com includes api.github.com)
 sudo awf \
   --allow-domains github.com \
-  --build-local \
   -- curl -s https://api.github.com | head -20
 
 echo ""

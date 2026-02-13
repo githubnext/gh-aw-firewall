@@ -24,7 +24,6 @@ echo "Attempting to access api.github.com (should succeed):"
 sudo awf \
   --allow-domains github.com \
   --block-domains gist.github.com \
-  --build-local \
   -- curl -s -o /dev/null -w "%{http_code}" https://api.github.com && echo " - OK"
 
 echo ""
@@ -32,7 +31,6 @@ echo "Attempting to access gist.github.com (should be blocked):"
 sudo awf \
   --allow-domains github.com \
   --block-domains gist.github.com \
-  --build-local \
   -- curl -f --max-time 10 https://gist.github.com 2>&1 || echo " - Blocked (expected)"
 
 echo ""
@@ -46,7 +44,6 @@ echo "Blocking all internal-* subdomains while allowing example.com:"
 sudo awf \
   --allow-domains example.com \
   --block-domains 'internal-*.example.com' \
-  --build-local \
   -- 'echo "Firewall configured with wildcard blocklist"'
 
 echo ""
