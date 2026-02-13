@@ -12,6 +12,7 @@
 
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // Read API keys from environment (set by docker-compose)
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -20,6 +21,16 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // Squid proxy configuration (set via HTTP_PROXY/HTTPS_PROXY in docker-compose)
 const HTTP_PROXY = process.env.HTTP_PROXY;
 const HTTPS_PROXY = process.env.HTTPS_PROXY;
+
+// Create proxy agent to route outbound HTTPS through Squid
+// http-proxy-middleware doesn't use HTTP_PROXY env vars natively,
+// so we create an explicit agent that tunnels through Squid
+const proxyAgent = HTTPS_PROXY ? new HttpsProxyAgent(HTTPS_PROXY) : undefined;
+if (proxyAgent) {
+  console.log('[API Proxy] Using Squid proxy agent for outbound HTTPS connections');
+} else {
+  console.log('[API Proxy] WARNING: No HTTPS_PROXY configured, connections will be direct');
+}
 
 console.log('[API Proxy] Starting AWF API proxy sidecar...');
 console.log(`[API Proxy] HTTP_PROXY: ${HTTP_PROXY}`);
@@ -54,6 +65,7 @@ if (OPENAI_API_KEY) {
     target: 'https://api.openai.com',
     changeOrigin: true,
     secure: true,
+    agent: proxyAgent,
     onProxyReq: (proxyReq, req, res) => {
       // Inject Authorization header
       proxyReq.setHeader('Authorization', `Bearer ${OPENAI_API_KEY}`);
@@ -89,6 +101,7 @@ if (ANTHROPIC_API_KEY) {
     target: 'https://api.anthropic.com',
     changeOrigin: true,
     secure: true,
+    agent: proxyAgent,
     onProxyReq: (proxyReq, req, res) => {
       // Inject Anthropic authentication headers
       proxyReq.setHeader('x-api-key', ANTHROPIC_API_KEY);

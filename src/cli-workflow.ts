@@ -2,7 +2,7 @@ import { WrapperConfig } from './types';
 
 export interface WorkflowDependencies {
   ensureFirewallNetwork: () => Promise<{ squidIp: string; agentIp: string; proxyIp: string; subnet: string }>;
-  setupHostIptables: (squidIp: string, port: number, dnsServers: string[], apiProxyIp?: string) => Promise<void>;
+  setupHostIptables: (squidIp: string, port: number, dnsServers: string[]) => Promise<void>;
   writeConfigs: (config: WrapperConfig) => Promise<void>;
   startContainers: (workDir: string, allowedDomains: string[], proxyLogsDir?: string, skipPull?: boolean) => Promise<void>;
   runAgentCommand: (
@@ -43,9 +43,8 @@ export async function runMainWorkflow(
   logger.info('Setting up host-level firewall network and iptables rules...');
   const networkConfig = await dependencies.ensureFirewallNetwork();
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
-  // Pass api-proxy IP so host iptables allows its outbound traffic to external APIs
-  const apiProxyIp = config.enableApiProxy ? networkConfig.proxyIp : undefined;
-  await dependencies.setupHostIptables(networkConfig.squidIp, 3128, dnsServers, apiProxyIp);
+  // API proxy routes through Squid via https-proxy-agent, no firewall exemption needed
+  await dependencies.setupHostIptables(networkConfig.squidIp, 3128, dnsServers);
   onHostIptablesSetup?.();
 
   // Step 1: Write configuration files

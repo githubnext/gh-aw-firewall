@@ -160,7 +160,7 @@ async function setupIpv6Chain(bridgeName: string): Promise<void> {
  * @param squidPort - Port number of the Squid proxy
  * @param dnsServers - Array of trusted DNS server IP addresses (DNS traffic is ONLY allowed to these servers)
  */
-export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[], apiProxyIp?: string): Promise<void> {
+export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[]): Promise<void> {
   logger.info('Setting up host-level iptables rules...');
 
   // Get the bridge interface name
@@ -247,18 +247,10 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     '-j', 'ACCEPT',
   ]);
 
-  // 1b. Allow all traffic FROM the API proxy sidecar (it needs to reach external APIs)
-  // The api-proxy holds API keys and forwards requests to api.openai.com/api.anthropic.com.
-  // http-proxy-middleware connects directly to targets (doesn't use HTTP_PROXY env vars),
-  // so the api-proxy needs unrestricted outbound access like Squid.
-  if (apiProxyIp) {
-    logger.debug(`Allowing outbound traffic from API proxy sidecar (${apiProxyIp})...`);
-    await execa('iptables', [
-      '-t', 'filter', '-A', CHAIN_NAME,
-      '-s', apiProxyIp,
-      '-j', 'ACCEPT',
-    ]);
-  }
+  // Note: API proxy sidecar does NOT get a firewall exemption.
+  // It routes through Squid via https-proxy-agent, ensuring domain whitelisting
+  // is enforced by Squid ACLs. The api-proxy only needs to reach Squid (allowed
+  // by the Squid proxy rule below) for its outbound HTTPS connections.
 
   // 2. Allow established and related connections (return traffic)
   await execa('iptables', [
