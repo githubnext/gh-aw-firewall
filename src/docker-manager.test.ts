@@ -1523,6 +1523,27 @@ describe('docker-manager', () => {
         expect(env.no_proxy).toBe(env.NO_PROXY);
       });
 
+      it('should append api-proxy to existing NO_PROXY when host access is enabled', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', enableHostAccess: true };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        // Should contain both the host access NO_PROXY entries and api-proxy
+        expect(env.NO_PROXY).toContain('localhost');
+        expect(env.NO_PROXY).toContain('host.docker.internal');
+        expect(env.NO_PROXY).toContain('api-proxy');
+        expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.no_proxy).toBe(env.NO_PROXY);
+      });
+
+      it('should pass AWF_API_PROXY_IP to agent environment', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.AWF_API_PROXY_IP).toBe('172.30.0.30');
+      });
+
       it('should configure healthcheck for api-proxy', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
