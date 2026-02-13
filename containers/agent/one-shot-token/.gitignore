@@ -7,3 +7,8 @@ Cargo.lock
 
 # C build artifacts (legacy)
 *.o
+
+# Test binaries
+test_environ_array
+test_proc_environ
+test_proc_environ_fork
