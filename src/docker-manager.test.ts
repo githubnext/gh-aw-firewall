@@ -1613,6 +1613,28 @@ describe('docker-manager', () => {
         expect(env.NO_PROXY).toContain('172.30.0.30');
         expect(env.no_proxy).toContain('172.30.0.30');
       });
+
+      it('should not leak ANTHROPIC_API_KEY to agent when api-proxy is enabled', () => {
+        // Simulate the key being in process.env (as it would be in real usage)
+        const origKey = process.env.ANTHROPIC_API_KEY;
+        process.env.ANTHROPIC_API_KEY = 'sk-ant-secret-key';
+        try {
+          const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-secret-key' };
+          const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+          const agent = result.services.agent;
+          const env = agent.environment as Record<string, string>;
+          // Agent should NOT have the raw API key — only the sidecar gets it
+          expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+          // Agent should have the BASE_URL to reach the sidecar instead
+          expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        } finally {
+          if (origKey !== undefined) {
+            process.env.ANTHROPIC_API_KEY = origKey;
+          } else {
+            delete process.env.ANTHROPIC_API_KEY;
+          }
+        }
+      });
     });
   });
 

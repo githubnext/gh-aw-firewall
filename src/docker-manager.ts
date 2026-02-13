@@ -400,8 +400,9 @@ export function generateDockerCompose(
     if (process.env.GITHUB_TOKEN) environment.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
-    // Anthropic API key for Claude Code
-    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    // Anthropic API key for Claude Code — skip when api-proxy is enabled
+    // (the sidecar holds the key; the agent uses ANTHROPIC_BASE_URL instead)
+    if (process.env.ANTHROPIC_API_KEY && !config.enableApiProxy) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;

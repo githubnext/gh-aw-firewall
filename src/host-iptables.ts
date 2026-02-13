@@ -442,13 +442,13 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
   ]);
 
   // 5b. Allow traffic to API proxy sidecar (when enabled)
-  // The agent needs to reach the sidecar on ports 10000/10001 for LLM API proxying.
+  // Only allow ports 10000 (OpenAI) and 10001 (Anthropic) — nothing else.
   // The sidecar itself routes through Squid, so domain whitelisting is still enforced.
   if (apiProxyIp) {
-    logger.debug(`Allowing traffic to API proxy sidecar at ${apiProxyIp}`);
+    logger.debug(`Allowing traffic to API proxy sidecar at ${apiProxyIp}:10000-10001`);
     await execa('iptables', [
       '-t', 'filter', '-A', CHAIN_NAME,
-      '-p', 'tcp', '-d', apiProxyIp,
+      '-p', 'tcp', '-d', apiProxyIp, '--dport', '10000:10001',
       '-j', 'ACCEPT',
     ]);
   }

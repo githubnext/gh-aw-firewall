@@ -216,10 +216,12 @@ if (ANTHROPIC_API_KEY) {
     }
 
     console.log(`[Anthropic Proxy] ${sanitizeForLog(req.method)} ${sanitizeForLog(req.url)}`);
-    proxyRequest(req, res, 'api.anthropic.com', {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    });
+    // Only set anthropic-version as default; preserve agent-provided version
+    const anthropicHeaders = { 'x-api-key': ANTHROPIC_API_KEY };
+    if (!req.headers['anthropic-version']) {
+      anthropicHeaders['anthropic-version'] = '2023-06-01';
+    }
+    proxyRequest(req, res, 'api.anthropic.com', anthropicHeaders);
   });
 
   server.listen(10001, '0.0.0.0', () => {
