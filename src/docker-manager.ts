@@ -320,6 +320,14 @@ export function generateDockerCompose(
     'SUDO_GID',       // Sudo metadata
   ]);
 
+  // When api-proxy is enabled, exclude API keys from agent environment
+  // The keys are passed to the api-proxy sidecar only (not to the agent)
+  const willUseApiProxy = config.enableApiProxy && (config.openaiApiKey || config.anthropicApiKey);
+  if (willUseApiProxy) {
+    EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
+    EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+  }
+
   // Start with required/overridden environment variables
   // Use the real user's home (not /root when running with sudo)
   const homeDir = getRealUserHome();
@@ -386,7 +394,11 @@ export function generateDockerCompose(
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
     // Anthropic API key for Claude Code
-    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    // Only pass ANTHROPIC_API_KEY to agent when api-proxy is NOT enabled
+    // When api-proxy IS enabled, the key goes to the sidecar only (not to agent)
+    if (process.env.ANTHROPIC_API_KEY && !willUseApiProxy) {
+      environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    }
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
