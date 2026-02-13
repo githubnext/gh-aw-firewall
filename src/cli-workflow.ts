@@ -43,8 +43,10 @@ export async function runMainWorkflow(
   logger.info('Setting up host-level firewall network and iptables rules...');
   const networkConfig = await dependencies.ensureFirewallNetwork();
   const dnsServers = config.dnsServers || ['8.8.8.8', '8.8.4.4'];
-  // API proxy (when enabled) does NOT get a firewall exemption - it routes through Squid
-  await dependencies.setupHostIptables(networkConfig.squidIp, 3128, dnsServers);
+  // When API proxy is enabled, allow agent→sidecar traffic at the host level.
+  // The sidecar itself routes through Squid, so domain whitelisting is still enforced.
+  const apiProxyIp = config.enableApiProxy ? networkConfig.proxyIp : undefined;
+  await dependencies.setupHostIptables(networkConfig.squidIp, 3128, dnsServers, apiProxyIp);
   onHostIptablesSetup?.();
 
   // Step 1: Write configuration files

@@ -18,6 +18,7 @@ export interface AwfOptions {
   dnsServers?: string[]; // DNS servers to use (e.g., ['8.8.8.8', '2001:4860:4860::8888'])
   allowHostPorts?: string; // Ports or port ranges to allow for host access (e.g., '3000' or '3000-8000')
   allowFullFilesystemAccess?: boolean; // Allow full filesystem access (disables selective mounting security)
+  enableApiProxy?: boolean; // Enable API proxy sidecar for LLM credential management
 }
 
 export interface AwfResult {
@@ -102,6 +103,11 @@ export class AwfRunner {
     // Add allow-full-filesystem-access flag
     if (options.allowFullFilesystemAccess) {
       args.push('--allow-full-filesystem-access');
+    }
+
+    // Add enable-api-proxy flag
+    if (options.enableApiProxy) {
+      args.push('--enable-api-proxy');
     }
 
     // Add -- separator before command
@@ -251,6 +257,11 @@ export class AwfRunner {
     // Add allow-full-filesystem-access flag
     if (options.allowFullFilesystemAccess) {
       args.push('--allow-full-filesystem-access');
+    }
+
+    // Add enable-api-proxy flag
+    if (options.enableApiProxy) {
+      args.push('--enable-api-proxy');
     }
 
     // Add -- separator before command
