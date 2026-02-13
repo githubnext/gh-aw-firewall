@@ -446,6 +446,16 @@ AWFEOF
     LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
   fi
 
+  # Setup signal handler to forward signals to agent process and perform cleanup
+  cleanup_and_exit() {
+    if [ -n "$AGENT_PID" ]; then
+      kill -TERM "$AGENT_PID" 2>/dev/null || true
+      wait "$AGENT_PID" 2>/dev/null || true
+    fi
+    exit 143  # Standard exit code for SIGTERM
+  }
+  trap cleanup_and_exit TERM INT
+
   # SECURITY: Run agent command in background, then unset tokens from parent shell
   # This prevents tokens from being accessible via /proc/1/environ after agent starts
   # The one-shot-token library caches tokens in the agent process, so agent can still read them
@@ -465,7 +475,9 @@ AWFEOF
 
   # Wait for agent command to complete and capture its exit code
   wait $AGENT_PID
-  exit $?
+  EXIT_CODE=$?
+  trap - TERM INT
+  exit $EXIT_CODE
 else
   # Original behavior - run in container filesystem
   # Drop capabilities and privileges, then execute the user command
@@ -481,6 +493,16 @@ else
   # unset from the environment so /proc/self/environ is cleared
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
 
+  # Setup signal handler to forward signals to agent process and perform cleanup
+  cleanup_and_exit() {
+    if [ -n "$AGENT_PID" ]; then
+      kill -TERM "$AGENT_PID" 2>/dev/null || true
+      wait "$AGENT_PID" 2>/dev/null || true
+    fi
+    exit 143  # Standard exit code for SIGTERM
+  }
+  trap cleanup_and_exit TERM INT
+
   # SECURITY: Run agent command in background, then unset tokens from parent shell
   # This prevents tokens from being accessible via /proc/1/environ after agent starts
   # The one-shot-token library caches tokens in the agent process, so agent can still read them
@@ -495,5 +517,7 @@ else
 
   # Wait for agent command to complete and capture its exit code
   wait $AGENT_PID
-  exit $?
+  EXIT_CODE=$?
+  trap - TERM INT
+  exit $EXIT_CODE
 fi
