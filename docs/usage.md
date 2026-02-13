@@ -20,6 +20,9 @@ Options:
   --ssl-bump                   Enable SSL Bump for HTTPS content inspection
   --allow-urls <urls>          Comma-separated list of allowed URL patterns (requires --ssl-bump)
                                Example: https://github.com/myorg/*
+  --enable-api-proxy           Enable API proxy sidecar for secure credential management
+                               Supports OpenAI (Codex) and Anthropic (Claude) APIs
+                               (see docs/api-proxy-sidecar.md for details)
   --log-level <level>          Log level: debug, info, warn, error (default: info)
   --keep-containers            Keep containers running after command exits
   --work-dir <dir>             Working directory for temporary files
@@ -29,6 +32,8 @@ Options:
   -e, --env <KEY=VALUE>        Additional environment variables (can repeat)
   --env-all                    Pass all host environment variables to container
   -v, --mount <path:path>      Volume mount (host_path:container_path[:ro|rw])
+  --allow-full-filesystem-access  ⚠️ SECURITY WARNING: Mount entire host filesystem
+                                  with read-write access. See docs/selective-mounting.md
   --tty                        Allocate a pseudo-TTY for interactive tools
   --build-local                Build containers locally instead of using GHCR images
   --agent-image <value>        Agent container image (default: "default")
@@ -576,12 +581,8 @@ sudo awf --skip-pull --allow-domains github.com -- your-command
 **Using Specific Versions:**
 ```bash
 # Pre-download specific version
-docker pull ghcr.io/github/gh-aw-firewall/squid:v0.13.0
-docker pull ghcr.io/github/gh-aw-firewall/agent:v0.13.0
-
-# Tag as latest for awf to use
-docker tag ghcr.io/github/gh-aw-firewall/squid:v0.13.0 ghcr.io/github/gh-aw-firewall/squid:latest
-docker tag ghcr.io/github/gh-aw-firewall/agent:v0.13.0 ghcr.io/github/gh-aw-firewall/agent:latest
+docker pull ghcr.io/github/gh-aw-firewall/squid:latest
+docker pull ghcr.io/github/gh-aw-firewall/agent:latest
 
 # Use with --skip-pull
 sudo awf --skip-pull --allow-domains github.com -- your-command
