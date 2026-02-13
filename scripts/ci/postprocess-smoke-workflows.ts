@@ -35,6 +35,10 @@ const workflowPaths = [
   path.join(repoRoot, '.github/workflows/plan.lock.yml'),
   path.join(repoRoot, '.github/workflows/test-coverage-improver.lock.yml'),
   path.join(repoRoot, '.github/workflows/update-release-notes.lock.yml'),
+  // Secret digger workflows (red team security research)
+  path.join(repoRoot, '.github/workflows/secret-digger-copilot.lock.yml'),
+  path.join(repoRoot, '.github/workflows/secret-digger-codex.lock.yml'),
+  path.join(repoRoot, '.github/workflows/secret-digger-claude.lock.yml'),
 ];
 
 // Matches the install step with captured indentation:
