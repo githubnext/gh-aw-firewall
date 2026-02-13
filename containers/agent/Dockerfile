@@ -4,7 +4,24 @@
 #   - ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions runner (~2-5GB)
 #   - ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions runner (~20GB compressed)
 # Use --build-arg BASE_IMAGE=<image> to customize
+# NOTE: ARG declared before first FROM is global and available in all FROM statements
 ARG BASE_IMAGE=ubuntu:22.04
+
+# Multi-stage build: Use official Rust image to build one-shot-token library
+# SECURITY: Using official rust:1.77-slim image prevents executing unverified
+# scripts from the internet during build time (supply chain attack mitigation)
+# NOTE: Rust 1.77+ required for C string literal syntax (c"...") used in src/lib.rs
+FROM rust:1.77-slim AS rust-builder
+
+# Copy one-shot-token source files
+COPY one-shot-token/Cargo.toml /tmp/one-shot-token/Cargo.toml
+COPY one-shot-token/src/ /tmp/one-shot-token/src/
+
+# Build the one-shot-token library
+WORKDIR /tmp/one-shot-token
+RUN cargo build --release
+
+# Main stage
 FROM ${BASE_IMAGE}
 
 # Install required packages and Node.js 22
@@ -66,25 +83,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
-# Build one-shot-token LD_PRELOAD library for single-use token access
+# Copy pre-built one-shot-token library from rust-builder stage
 # This prevents tokens from being read multiple times (e.g., by malicious code)
-COPY one-shot-token/Cargo.toml one-shot-token/src/ /tmp/one-shot-token/
-COPY one-shot-token/src/ /tmp/one-shot-token/src/
-RUN set -eux; \
-    apt-get update && \
-    apt-get install -y --no-install-recommends curl build-essential && \
-    # Install Rust via rustup (minimal profile)
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
-    export PATH="/root/.cargo/bin:$PATH" && \
-    # Build the library
-    cd /tmp/one-shot-token && \
-    cargo build --release && \
-    cp target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so && \
-    # Clean up Rust and build artifacts
-    rm -rf /tmp/one-shot-token /root/.cargo /root/.rustup && \
-    apt-get remove -y build-essential && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
+# SECURITY: Using multi-stage build with official Rust image avoids executing
+# unverified scripts from the internet during build time
+COPY --from=rust-builder /tmp/one-shot-token/target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so
 
 # Install Docker stub script that shows helpful error message
 # Docker-in-Docker support was removed in v0.9.1
