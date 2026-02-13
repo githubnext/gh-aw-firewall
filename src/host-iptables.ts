@@ -160,7 +160,7 @@ async function setupIpv6Chain(bridgeName: string): Promise<void> {
  * @param squidPort - Port number of the Squid proxy
  * @param dnsServers - Array of trusted DNS server IP addresses (DNS traffic is ONLY allowed to these servers)
  */
-export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[]): Promise<void> {
+export async function setupHostIptables(squidIp: string, squidPort: number, dnsServers: string[], apiProxyIp?: string): Promise<void> {
   logger.info('Setting up host-level iptables rules...');
 
   // Get the bridge interface name
@@ -440,6 +440,18 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     '-p', 'tcp', '-d', squidIp, '--dport', squidPort.toString(),
     '-j', 'ACCEPT',
   ]);
+
+  // 5b. Allow traffic to API proxy sidecar (when enabled)
+  // Only allow ports 10000 (OpenAI) and 10001 (Anthropic) — nothing else.
+  // The sidecar itself routes through Squid, so domain whitelisting is still enforced.
+  if (apiProxyIp) {
+    logger.debug(`Allowing traffic to API proxy sidecar at ${apiProxyIp}:10000-10001`);
+    await execa('iptables', [
+      '-t', 'filter', '-A', CHAIN_NAME,
+      '-p', 'tcp', '-d', apiProxyIp, '--dport', '10000:10001',
+      '-j', 'ACCEPT',
+    ]);
+  }
 
   // 6. Block multicast and link-local traffic
   await execa('iptables', [
