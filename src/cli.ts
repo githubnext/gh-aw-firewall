@@ -718,9 +718,9 @@ program
   )
   .option(
     '--enable-api-proxy',
-    'Enable API proxy sidecar for holding authentication credentials.\n' +
-    '                                   Deploys a Node.js proxy that injects API keys securely.\n' +
-    '                                   Supports OpenAI (Codex) and Anthropic (Claude) APIs.',
+    'Enable Kong API Gateway sidecar for holding authentication credentials.\n' +
+    '                                   Deploys Kong Gateway that injects API keys securely.\n' +
+    '                                   Currently supports OpenAI (Codex) API only.',
     true
   )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
