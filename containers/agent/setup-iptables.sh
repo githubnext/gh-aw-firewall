@@ -127,6 +127,13 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
+# Allow direct traffic to API proxy sidecar (bypasses Squid)
+# The api-proxy container holds API keys and proxies to LLM APIs through Squid
+if [ -n "$AWF_API_PROXY_IP" ]; then
+  echo "[iptables] Allow direct traffic to API proxy sidecar (${AWF_API_PROXY_IP})..."
+  iptables -t nat -A OUTPUT -d "$AWF_API_PROXY_IP" -j RETURN
+fi
+
 # Bypass Squid for host.docker.internal when host access is enabled.
 # MCP gateway traffic to host.docker.internal gets DNAT'd to Squid,
 # where Squid fails with "Invalid URL" because rmcp sends relative URLs.
@@ -262,6 +269,11 @@ iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
 
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
+
+# Allow traffic to API proxy sidecar (ports 10000/10001)
+if [ -n "$AWF_API_PROXY_IP" ]; then
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" -j ACCEPT
+fi
 
 # Drop all other TCP traffic (default deny policy)
 # This ensures that only explicitly allowed ports can be accessed
