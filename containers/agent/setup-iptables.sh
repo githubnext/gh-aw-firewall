@@ -127,6 +127,26 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
+# Bypass Squid for api-proxy when API proxy is enabled.
+# The agent needs to connect directly to api-proxy (not through Squid).
+# The api-proxy then routes outbound traffic through Squid to enforce domain whitelisting.
+# Architecture: agent -> api-proxy (direct) -> Squid -> internet
+if [ -n "$AWF_ENABLE_API_PROXY" ]; then
+  API_PROXY_IP=$(getent hosts api-proxy | awk 'NR==1 { print $1 }')
+  if [ -n "$API_PROXY_IP" ] && is_valid_ipv4 "$API_PROXY_IP"; then
+    echo "[iptables] Allow direct traffic to api-proxy (${API_PROXY_IP}) - bypassing Squid..."
+    # NAT: skip DNAT to Squid for all traffic to api-proxy
+    iptables -t nat -A OUTPUT -d "$API_PROXY_IP" -j RETURN
+    # FILTER: allow traffic to api-proxy ports (10000 for OpenAI, 10001 for Anthropic)
+    iptables -A OUTPUT -p tcp -d "$API_PROXY_IP" --dport 10000 -j ACCEPT
+    iptables -A OUTPUT -p tcp -d "$API_PROXY_IP" --dport 10001 -j ACCEPT
+  elif [ -n "$API_PROXY_IP" ]; then
+    echo "[iptables] WARNING: api-proxy resolved to invalid IP '${API_PROXY_IP}', skipping api-proxy bypass"
+  else
+    echo "[iptables] WARNING: api-proxy could not be resolved, skipping api-proxy bypass"
+  fi
+fi
+
 # Bypass Squid for host.docker.internal when host access is enabled.
 # MCP gateway traffic to host.docker.internal gets DNAT'd to Squid,
 # where Squid fails with "Invalid URL" because rmcp sends relative URLs.

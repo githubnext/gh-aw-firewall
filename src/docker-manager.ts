@@ -840,6 +840,11 @@ export function generateDockerCompose(
     environment.AWF_ENABLE_HOST_ACCESS = '1';
   }
 
+  // Pass API proxy flag to agent for iptables configuration
+  if (config.enableApiProxy) {
+    environment.AWF_ENABLE_API_PROXY = '1';
+  }
+
   // Use GHCR image or build locally
   // Priority: GHCR preset images > local build (when requested) > custom images
   // For presets ('default', 'act'), use GHCR images
