@@ -1513,6 +1513,16 @@ describe('docker-manager', () => {
         expect(proxy.image).toBeUndefined();
       });
 
+      it('should add api-proxy to NO_PROXY so agent traffic bypasses Squid', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.NO_PROXY).toContain('api-proxy');
+        expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.no_proxy).toBe(env.NO_PROXY);
+      });
+
       it('should configure healthcheck for api-proxy', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);

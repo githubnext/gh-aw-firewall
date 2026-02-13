@@ -283,6 +283,11 @@ iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
 
+# Allow traffic to API proxy sidecar (ports 10000/10001)
+if [ -n "$AWF_API_PROXY_IP" ]; then
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" -j ACCEPT
+fi
+
 # Drop all other TCP traffic (default deny policy)
 # This ensures that only explicitly allowed ports can be accessed
 echo "[iptables] Drop all non-redirected TCP traffic (default deny)..."

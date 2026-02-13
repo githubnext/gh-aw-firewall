@@ -951,6 +951,21 @@ export function generateDockerCompose(
       condition: 'service_healthy',
     };
 
+    // Add api-proxy to NO_PROXY so agent traffic goes directly to the sidecar
+    // instead of routing through Squid (which would block the "api-proxy" hostname)
+    const proxyNoProxy = `api-proxy,${networkConfig.proxyIp}`;
+    if (environment.NO_PROXY) {
+      environment.NO_PROXY += `,${proxyNoProxy}`;
+      environment.no_proxy = environment.NO_PROXY;
+    } else {
+      environment.NO_PROXY = proxyNoProxy;
+      environment.no_proxy = proxyNoProxy;
+    }
+
+    // Pass api-proxy IP to iptables setup so it can allow direct traffic
+    // Without this, the final DROP rule in setup-iptables.sh blocks port 10000/10001
+    environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
+
     // Set environment variables in agent to use the proxy
     if (config.openaiApiKey) {
       environment.OPENAI_BASE_URL = `http://api-proxy:10000`;
