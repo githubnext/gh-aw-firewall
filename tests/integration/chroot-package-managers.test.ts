@@ -7,6 +7,9 @@
  *
  * IMPORTANT: These tests require the corresponding tools to be installed
  * on the host system. GitHub Actions runners have most of these pre-installed.
+ *
+ * OPTIMIZATION: Commands sharing the same allowDomains are batched into
+ * single AWF invocations. Reduces ~23 invocations to ~12.
  */
 
 /// <reference path="../jest-custom-matchers.d.ts" />
@@ -14,6 +17,7 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
+import { runBatch, BatchResults } from '../fixtures/batch-runner';
 
 describe('Chroot Package Manager Support', () => {
   let runner: AwfRunner;
@@ -27,18 +31,34 @@ describe('Chroot Package Manager Support', () => {
     await cleanup(false);
   });
 
+  // ---------- pip (Python) ----------
   describe('pip (Python)', () => {
-    test('should list installed packages', async () => {
-      const result = await runner.runWithSudo('pip3 list --format=columns | head -5', {
+    // Batch: pypi domain tests
+    let pypiResults: BatchResults;
+
+    beforeAll(async () => {
+      pypiResults = await runBatch(runner, [
+        { name: 'pip_list', command: 'pip3 list --format=columns | head -5' },
+        { name: 'pip_index', command: 'pip3 index versions requests 2>&1 | head -3' },
+      ], {
         allowDomains: ['pypi.org', 'files.pythonhosted.org'],
         logLevel: 'debug',
-        timeout: 60000,
+        timeout: 90000,
       });
+    }, 150000);
 
-      expect(result).toSucceed();
-      expect(result.stdout).toContain('Package');
-    }, 120000);
+    test('should list installed packages', () => {
+      const r = pypiResults.get('pip_list');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('Package');
+    });
 
+    test('should search PyPI with network access', () => {
+      const r = pypiResults.get('pip_index');
+      expect(r.exitCode).toBeLessThanOrEqual(1);
+    });
+
+    // Individual: localhost-only test
     test('should show package info without network', async () => {
       const result = await runner.runWithSudo('pip3 show pip', {
         allowDomains: ['localhost'],
@@ -49,42 +69,35 @@ describe('Chroot Package Manager Support', () => {
       expect(result).toSucceed();
       expect(result.stdout).toContain('Name: pip');
     }, 120000);
-
-    test('should search PyPI with network access', async () => {
-      const result = await runner.runWithSudo('pip3 index versions requests 2>&1 | head -3', {
-        allowDomains: ['pypi.org'],
-        logLevel: 'debug',
-        timeout: 90000,
-      });
-
-      // pip index versions should work or show available versions
-      // Even if command structure changes, we should get some output
-      expect(result.exitCode).toBeLessThanOrEqual(1); // May fail if pypi not reachable but should not crash
-    }, 150000);
   });
 
+  // ---------- npm (Node.js) ----------
   describe('npm (Node.js)', () => {
-    test('should show npm configuration', async () => {
-      const result = await runner.runWithSudo('npm config list', {
-        allowDomains: ['registry.npmjs.org'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
+    // Batch: registry domain tests
+    let npmResults: BatchResults;
 
-      expect(result).toSucceed();
-    }, 120000);
-
-    test('should view package info from npm registry', async () => {
-      const result = await runner.runWithSudo('npm view chalk version', {
+    beforeAll(async () => {
+      npmResults = await runBatch(runner, [
+        { name: 'npm_config', command: 'npm config list' },
+        { name: 'npm_view', command: 'npm view chalk version' },
+      ], {
         allowDomains: ['registry.npmjs.org'],
         logLevel: 'debug',
         timeout: 90000,
       });
-
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/\d+\.\d+\.\d+/);
     }, 150000);
 
+    test('should show npm configuration', () => {
+      expect(npmResults.get('npm_config').exitCode).toBe(0);
+    });
+
+    test('should view package info from npm registry', () => {
+      const r = npmResults.get('npm_view');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/\d+\.\d+\.\d+/);
+    });
+
+    // Individual: blocking test (different domain)
     test('should be blocked from npm registry without domain', async () => {
       const result = await runner.runWithSudo('npm view chalk version 2>&1', {
         allowDomains: ['localhost'],
@@ -92,23 +105,40 @@ describe('Chroot Package Manager Support', () => {
         timeout: 60000,
       });
 
-      // Should fail because registry is not allowed
       expect(result).toFail();
     }, 120000);
   });
 
+  // ---------- Rust (cargo) ----------
   describe('Rust (cargo)', () => {
-    test('should execute cargo from host via chroot', async () => {
-      const result = await runner.runWithSudo('cargo --version', {
-        allowDomains: ['crates.io', 'static.crates.io'],
+    // Batch: crates.io domain tests
+    let cargoResults: BatchResults;
+
+    beforeAll(async () => {
+      cargoResults = await runBatch(runner, [
+        { name: 'cargo_version', command: 'cargo --version' },
+        { name: 'cargo_search', command: 'cargo search serde --limit 1 2>&1' },
+      ], {
+        allowDomains: ['crates.io', 'static.crates.io', 'index.crates.io'],
         logLevel: 'debug',
-        timeout: 60000,
+        timeout: 120000,
       });
+    }, 180000);
 
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/cargo \d+\.\d+/);
-    }, 120000);
+    test('should execute cargo from host via chroot', () => {
+      const r = cargoResults.get('cargo_version');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/cargo \d+\.\d+/);
+    });
 
+    test('should search crates.io with network access', () => {
+      const r = cargoResults.get('cargo_search');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toContain('serde');
+      }
+    });
+
+    // Individual: localhost test
     test('should execute rustc from host via chroot', async () => {
       const result = await runner.runWithSudo('rustc --version', {
         allowDomains: ['localhost'],
@@ -119,46 +149,38 @@ describe('Chroot Package Manager Support', () => {
       expect(result).toSucceed();
       expect(result.stdout).toMatch(/rustc \d+\.\d+/);
     }, 120000);
-
-    test('should search crates.io with network access', async () => {
-      const result = await runner.runWithSudo('cargo search serde --limit 1 2>&1', {
-        allowDomains: ['crates.io', 'static.crates.io', 'index.crates.io'],
-        logLevel: 'debug',
-        timeout: 120000,
-      });
-
-      // Should succeed or fail gracefully - the key is it attempts network access
-      if (result.success) {
-        expect(result.stdout).toContain('serde');
-      }
-    }, 180000);
   });
 
+  // ---------- Java (maven) ----------
   describe('Java (maven)', () => {
-    test('should execute java from host via chroot', async () => {
-      const result = await runner.runWithSudo('java --version 2>&1 || java -version 2>&1', {
+    // Batch: localhost tests
+    let javaResults: BatchResults;
+
+    beforeAll(async () => {
+      javaResults = await runBatch(runner, [
+        { name: 'java_version', command: 'java --version 2>&1 || java -version 2>&1' },
+        { name: 'javac_version', command: 'javac --version 2>&1 || javac -version 2>&1' },
+      ], {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
       });
-
-      expect(result).toSucceed();
-      expect(result.stdout + result.stderr).toMatch(/java|openjdk|version/i);
     }, 120000);
 
-    test('should execute javac from host via chroot', async () => {
-      const result = await runner.runWithSudo('javac --version 2>&1 || javac -version 2>&1', {
-        allowDomains: ['localhost'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
+    test('should execute java from host via chroot', () => {
+      const r = javaResults.get('java_version');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/java|openjdk|version/i);
+    });
 
-      // javac might not always be available, but Java should be
-      if (result.success) {
-        expect(result.stdout + result.stderr).toMatch(/javac|version/i);
+    test('should execute javac from host via chroot', () => {
+      const r = javaResults.get('javac_version');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toMatch(/javac|version/i);
       }
-    }, 120000);
+    });
 
+    // Individual: maven (different domain)
     test('should execute maven from host via chroot', async () => {
       const result = await runner.runWithSudo('mvn --version 2>&1', {
         allowDomains: ['repo.maven.apache.org', 'repo1.maven.org'],
@@ -166,38 +188,42 @@ describe('Chroot Package Manager Support', () => {
         timeout: 60000,
       });
 
-      // Maven might not be installed, that's OK
       if (result.success) {
         expect(result.stdout + result.stderr).toMatch(/Apache Maven|mvn/i);
       }
     }, 120000);
   });
 
+  // ---------- .NET (dotnet/nuget) ----------
   describe('.NET (dotnet/nuget)', () => {
-    test('should list installed .NET SDKs (offline)', async () => {
-      const result = await runner.runWithSudo('dotnet --list-sdks', {
+    // Batch: localhost tests
+    let dotnetResults: BatchResults;
+
+    beforeAll(async () => {
+      dotnetResults = await runBatch(runner, [
+        { name: 'list_sdks', command: 'dotnet --list-sdks' },
+        { name: 'list_runtimes', command: 'dotnet --list-runtimes' },
+      ], {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
       });
-
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/\d+\.\d+\.\d+/);
     }, 120000);
 
-    test('should list installed .NET runtimes (offline)', async () => {
-      const result = await runner.runWithSudo('dotnet --list-runtimes', {
-        allowDomains: ['localhost'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
+    test('should list installed .NET SDKs (offline)', () => {
+      const r = dotnetResults.get('list_sdks');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/\d+\.\d+\.\d+/);
+    });
 
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/Microsoft\.\w+/);
-    }, 120000);
+    test('should list installed .NET runtimes (offline)', () => {
+      const r = dotnetResults.get('list_runtimes');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/Microsoft\.\w+/);
+    });
 
+    // Individual: NuGet restore (different domains, long timeout)
     test('should create and build a .NET project with NuGet restore', async () => {
-      // Tests NuGet package restore through the firewall
       const result = await runner.runWithSudo(
         'TESTDIR=$(mktemp -d) && cd $TESTDIR && ' +
         'dotnet new console -o buildtest --no-restore && ' +
@@ -215,9 +241,8 @@ describe('Chroot Package Manager Support', () => {
       }
     }, 240000);
 
+    // Individual: blocking test (localhost only)
     test('should be blocked from NuGet without domain whitelisting', async () => {
-      // A bare 'dotnet restore' on a default console project may succeed from
-      // the local SDK cache. Adding an external package forces a network fetch.
       const result = await runner.runWithSudo(
         'TESTDIR=$(mktemp -d) && cd $TESTDIR && ' +
         'dotnet new console -o blocktest --no-restore 2>&1 && ' +
@@ -232,71 +257,73 @@ describe('Chroot Package Manager Support', () => {
         }
       );
 
-      // dotnet restore should fail because NuGet API is not allowed
       expect(result).toFail();
     }, 150000);
   });
 
+  // ---------- Ruby (gem/bundler) ----------
   describe('Ruby (gem/bundler)', () => {
-    test('should execute ruby from host via chroot', async () => {
-      const result = await runner.runWithSudo('ruby --version', {
+    // Batch: localhost tests
+    let rubyLocalResults: BatchResults;
+
+    beforeAll(async () => {
+      rubyLocalResults = await runBatch(runner, [
+        { name: 'ruby_version', command: 'ruby --version' },
+        { name: 'gem_list', command: 'gem list --local | head -5' },
+      ], {
         allowDomains: ['localhost'],
         logLevel: 'debug',
         timeout: 60000,
       });
-
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/ruby \d+\.\d+/);
     }, 120000);
 
-    test('should execute gem from host via chroot', async () => {
-      const result = await runner.runWithSudo('gem --version', {
-        allowDomains: ['rubygems.org'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
+    test('should execute ruby from host via chroot', () => {
+      const r = rubyLocalResults.get('ruby_version');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/ruby \d+\.\d+/);
+    });
 
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/\d+\.\d+/);
-    }, 120000);
+    test('should list installed gems', () => {
+      expect(rubyLocalResults.get('gem_list').exitCode).toBe(0);
+    });
 
-    test('should list installed gems', async () => {
-      const result = await runner.runWithSudo('gem list --local | head -5', {
-        allowDomains: ['localhost'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
+    // Batch: rubygems.org domain tests
+    let rubyNetResults: BatchResults;
 
-      expect(result).toSucceed();
-    }, 120000);
-
-    test('should execute bundler from host via chroot', async () => {
-      const result = await runner.runWithSudo('bundle --version', {
-        allowDomains: ['rubygems.org'],
-        logLevel: 'debug',
-        timeout: 60000,
-      });
-
-      // Bundler might not be installed
-      if (result.success) {
-        expect(result.stdout).toMatch(/Bundler version \d+\.\d+/);
-      }
-    }, 120000);
-
-    test('should search rubygems with network access', async () => {
-      const result = await runner.runWithSudo('gem search rails --remote --no-verbose 2>&1 | head -3', {
+    beforeAll(async () => {
+      rubyNetResults = await runBatch(runner, [
+        { name: 'gem_version', command: 'gem --version' },
+        { name: 'bundler_version', command: 'bundle --version' },
+        { name: 'gem_search', command: 'gem search rails --remote --no-verbose 2>&1 | head -3' },
+      ], {
         allowDomains: ['rubygems.org', 'index.rubygems.org'],
         logLevel: 'debug',
         timeout: 120000,
       });
-
-      // Should attempt network access
-      if (result.success) {
-        expect(result.stdout).toContain('rails');
-      }
     }, 180000);
+
+    test('should execute gem from host via chroot', () => {
+      const r = rubyNetResults.get('gem_version');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/\d+\.\d+/);
+    });
+
+    test('should execute bundler from host via chroot', () => {
+      const r = rubyNetResults.get('bundler_version');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toMatch(/Bundler version \d+\.\d+/);
+      }
+    });
+
+    test('should search rubygems with network access', () => {
+      const r = rubyNetResults.get('gem_search');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toContain('rails');
+      }
+    });
   });
 
+  // ---------- Go modules ----------
   describe('Go modules', () => {
     test('should show go env', async () => {
       const result = await runner.runWithSudo('go env GOPATH GOPROXY', {
@@ -309,7 +336,6 @@ describe('Chroot Package Manager Support', () => {
     }, 120000);
 
     test('should list go modules (no network needed for empty list)', async () => {
-      // Create a temp dir and check go mod functionality
       const result = await runner.runWithSudo(
         'cd /tmp && mkdir -p gotest && cd gotest && go mod init test 2>&1 && go mod tidy 2>&1 && cat go.mod',
         {

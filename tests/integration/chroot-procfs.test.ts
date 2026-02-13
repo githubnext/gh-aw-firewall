@@ -10,6 +10,9 @@
  * - .NET CLR fails with "Cannot execute dotnet when renamed to bash"
  * - JVM misreads /proc/self/exe and /proc/cpuinfo
  * - Rustup proxy binaries appear as bash
+ *
+ * OPTIMIZATION: Quick /proc checks are batched into a single AWF invocation,
+ * and both Java /proc tests share one invocation. Reduces ~8 invocations to 2.
  */
 
 /// <reference path="../jest-custom-matchers.d.ts" />
@@ -17,6 +20,7 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { createRunner, AwfRunner } from '../fixtures/awf-runner';
 import { cleanup } from '../fixtures/cleanup';
+import { runBatch, BatchResults } from '../fixtures/batch-runner';
 
 describe('Chroot /proc Filesystem Correctness', () => {
   let runner: AwfRunner;
@@ -30,154 +34,128 @@ describe('Chroot /proc Filesystem Correctness', () => {
     await cleanup(false);
   });
 
-  describe('/proc/self/exe resolution', () => {
-    test('should resolve /proc/self/exe to a real path', async () => {
-      const result = await runner.runWithSudo(
-        'readlink /proc/self/exe',
+  // ---------- Batch 1: quick /proc checks (single AWF invocation) ----------
+  describe('/proc checks (batched)', () => {
+    let batch: BatchResults;
+
+    beforeAll(async () => {
+      batch = await runBatch(runner, [
+        { name: 'readlink_exe', command: 'readlink /proc/self/exe' },
         {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 60000,
-        }
-      );
+          name: 'diff_binaries',
+          command: 'bash -c "readlink /proc/self/exe" && python3 -c "import os; print(os.readlink(\'/proc/self/exe\'))"',
+        },
+        { name: 'cpuinfo', command: 'cat /proc/cpuinfo | head -10' },
+        { name: 'meminfo', command: 'cat /proc/meminfo | head -5' },
+        { name: 'self_status', command: 'cat /proc/self/status | head -5' },
+      ], {
+        allowDomains: ['localhost'],
+        logLevel: 'debug',
+        timeout: 120000,
+      });
+    }, 180000);
 
-      expect(result).toSucceed();
-      // Should contain an absolute path (stdout may include debug log lines)
-      expect(result.stdout).toMatch(/\/usr\/bin\/|\/bin\/|\/usr\/sbin\//);
-    }, 120000);
+    test('should resolve /proc/self/exe to a real path', () => {
+      const r = batch.get('readlink_exe');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/\/usr\/bin\/|\/bin\/|\/usr\/sbin\//);
+    });
 
-    test('should resolve differently for different binaries', async () => {
-      // The key property of the dynamic procfs mount: each process sees
-      // its own /proc/self/exe. With the old static bind mount, all
-      // processes would see the parent bash process.
-      const result = await runner.runWithSudo(
-        'bash -c "readlink /proc/self/exe" && python3 -c "import os; print(os.readlink(\'/proc/self/exe\'))"',
-        {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 60000,
-        }
-      );
-
-      expect(result).toSucceed();
-      const lines = result.stdout.trim().split('\n').filter(l => l.startsWith('/'));
-      // bash and python should resolve to different binaries
+    test('should resolve differently for different binaries', () => {
+      const r = batch.get('diff_binaries');
+      expect(r.exitCode).toBe(0);
+      const lines = r.stdout.trim().split('\n').filter(l => l.startsWith('/'));
       if (lines.length >= 2) {
         expect(lines[0]).not.toEqual(lines[lines.length - 1]);
       }
-    }, 120000);
+    });
+
+    test('should have /proc/cpuinfo accessible', () => {
+      const r = batch.get('cpuinfo');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/processor|model name|cpu|vendor/i);
+    });
+
+    test('should have /proc/meminfo accessible', () => {
+      const r = batch.get('meminfo');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/MemTotal/);
+    });
+
+    test('should have /proc/self/status accessible', () => {
+      const r = batch.get('self_status');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/Name:/);
+    });
   });
 
-  describe('/proc filesystem entries', () => {
-    test('should have /proc/cpuinfo accessible', async () => {
-      // JVM reads /proc/cpuinfo for hardware detection
-      const result = await runner.runWithSudo(
-        'cat /proc/cpuinfo | head -10',
+  // ---------- Batch 2: Java /proc tests (single AWF invocation with both Java programs) ----------
+  describe('Java /proc/self/exe verification (batched)', () => {
+    let batch: BatchResults;
+
+    beforeAll(async () => {
+      batch = await runBatch(runner, [
         {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 60000,
-        }
-      );
-
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/processor|model name|cpu|vendor/i);
-    }, 120000);
-
-    test('should have /proc/meminfo accessible', async () => {
-      // JVM uses /proc/meminfo for memory detection and heap sizing
-      const result = await runner.runWithSudo(
-        'cat /proc/meminfo | head -5',
+          name: 'java_proc_self',
+          command:
+            'TESTDIR=$(mktemp -d) && ' +
+            "cat > $TESTDIR/ProcSelf.java << 'JAVAEOF'\n" +
+            'import java.nio.file.Files;\n' +
+            'import java.nio.file.Paths;\n' +
+            'public class ProcSelf {\n' +
+            '  public static void main(String[] args) throws Exception {\n' +
+            '    String exe = Files.readSymbolicLink(Paths.get("/proc/self/exe")).toString();\n' +
+            '    System.out.println("proc_self_exe=" + exe);\n' +
+            '    if (exe.contains("java")) {\n' +
+            '      System.out.println("CORRECT: /proc/self/exe points to java");\n' +
+            '    } else {\n' +
+            '      System.out.println("UNEXPECTED: /proc/self/exe points to " + exe);\n' +
+            '    }\n' +
+            '  }\n' +
+            '}\n' +
+            'JAVAEOF\n' +
+            'cd $TESTDIR && javac ProcSelf.java && java ProcSelf && rm -rf $TESTDIR',
+        },
         {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 60000,
-        }
-      );
+          name: 'java_processors',
+          command:
+            'TESTDIR=$(mktemp -d) && ' +
+            "cat > $TESTDIR/MemInfo.java << 'JAVAEOF'\n" +
+            'public class MemInfo {\n' +
+            '  public static void main(String[] args) {\n' +
+            '    Runtime rt = Runtime.getRuntime();\n' +
+            '    System.out.println("availableProcessors=" + rt.availableProcessors());\n' +
+            '    System.out.println("maxMemory=" + rt.maxMemory());\n' +
+            '  }\n' +
+            '}\n' +
+            'JAVAEOF\n' +
+            'cd $TESTDIR && javac MemInfo.java && java MemInfo && rm -rf $TESTDIR',
+        },
+      ], {
+        allowDomains: ['localhost'],
+        logLevel: 'debug',
+        timeout: 180000,
+      });
+    }, 240000);
 
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/MemTotal/);
-    }, 120000);
-
-    test('should have /proc/self/status accessible', async () => {
-      const result = await runner.runWithSudo(
-        'cat /proc/self/status | head -5',
-        {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 60000,
-        }
-      );
-
-      expect(result).toSucceed();
-      expect(result.stdout).toMatch(/Name:/);
-    }, 120000);
-  });
-
-  describe('Java /proc/self/exe verification', () => {
-    test('should read /proc/self/exe as java binary from JVM code', async () => {
-      // Java program directly reads /proc/self/exe and verifies it
-      // contains "java" not "bash" - the exact bug the procfs fix addresses
-      const result = await runner.runWithSudo(
-        'TESTDIR=$(mktemp -d) && ' +
-        'cat > $TESTDIR/ProcSelf.java << \'EOF\'\n' +
-        'import java.nio.file.Files;\n' +
-        'import java.nio.file.Paths;\n' +
-        'public class ProcSelf {\n' +
-        '  public static void main(String[] args) throws Exception {\n' +
-        '    String exe = Files.readSymbolicLink(Paths.get("/proc/self/exe")).toString();\n' +
-        '    System.out.println("proc_self_exe=" + exe);\n' +
-        '    if (exe.contains("java")) {\n' +
-        '      System.out.println("CORRECT: /proc/self/exe points to java");\n' +
-        '    } else {\n' +
-        '      System.out.println("UNEXPECTED: /proc/self/exe points to " + exe);\n' +
-        '    }\n' +
-        '  }\n' +
-        '}\n' +
-        'EOF\n' +
-        'cd $TESTDIR && javac ProcSelf.java && java ProcSelf && rm -rf $TESTDIR',
-        {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 120000,
-        }
-      );
-
-      if (result.success) {
-        expect(result.stdout).toContain('proc_self_exe=');
-        expect(result.stdout).toContain('CORRECT: /proc/self/exe points to java');
+    test('should read /proc/self/exe as java binary from JVM code', () => {
+      const r = batch.get('java_proc_self');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toContain('proc_self_exe=');
+        expect(r.stdout).toContain('CORRECT: /proc/self/exe points to java');
       }
-    }, 180000);
+    });
 
-    test('should report correct available processors from JVM', async () => {
-      // JVM Runtime.availableProcessors() uses /proc/cpuinfo internally
-      const result = await runner.runWithSudo(
-        'TESTDIR=$(mktemp -d) && ' +
-        'cat > $TESTDIR/MemInfo.java << \'EOF\'\n' +
-        'public class MemInfo {\n' +
-        '  public static void main(String[] args) {\n' +
-        '    Runtime rt = Runtime.getRuntime();\n' +
-        '    System.out.println("availableProcessors=" + rt.availableProcessors());\n' +
-        '    System.out.println("maxMemory=" + rt.maxMemory());\n' +
-        '  }\n' +
-        '}\n' +
-        'EOF\n' +
-        'cd $TESTDIR && javac MemInfo.java && java MemInfo && rm -rf $TESTDIR',
-        {
-          allowDomains: ['localhost'],
-          logLevel: 'debug',
-          timeout: 120000,
-        }
-      );
-
-      if (result.success) {
-        expect(result.stdout).toMatch(/availableProcessors=\d+/);
-        expect(result.stdout).toMatch(/maxMemory=\d+/);
-        const match = result.stdout.match(/availableProcessors=(\d+)/);
+    test('should report correct available processors from JVM', () => {
+      const r = batch.get('java_processors');
+      if (r.exitCode === 0) {
+        expect(r.stdout).toMatch(/availableProcessors=\d+/);
+        expect(r.stdout).toMatch(/maxMemory=\d+/);
+        const match = r.stdout.match(/availableProcessors=(\d+)/);
         if (match) {
           expect(parseInt(match[1])).toBeGreaterThanOrEqual(1);
         }
       }
-    }, 180000);
+    });
   });
 });
