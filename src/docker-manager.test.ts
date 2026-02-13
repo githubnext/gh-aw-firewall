@@ -1550,7 +1550,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
       });
 
       it('should configure HTTP_PROXY and HTTPS_PROXY in api-proxy to route through Squid', () => {
@@ -1567,7 +1567,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
       });
 
       it('should set both BASE_URL variables when both keys are provided', () => {
@@ -1575,8 +1575,8 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
       });
 
       it('should not set OPENAI_BASE_URL in agent when only Anthropic key is provided', () => {
@@ -1585,7 +1585,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBeUndefined();
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://api-proxy:10001');
+        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
       });
 
       it('should not set ANTHROPIC_BASE_URL in agent when only OpenAI key is provided', () => {
@@ -1594,7 +1594,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
-        expect(env.OPENAI_BASE_URL).toBe('http://api-proxy:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
       });
     });
   });

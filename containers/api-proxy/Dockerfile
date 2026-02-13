@@ -11,8 +11,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (generates lockfile in container)
+RUN npm install --omit=dev
 
 # Copy application files
 COPY server.js ./

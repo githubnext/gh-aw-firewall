@@ -344,6 +344,17 @@ export function generateDockerCompose(
     environment.no_proxy = environment.NO_PROXY;
   }
 
+  // When API proxy is enabled, bypass HTTP_PROXY for the api-proxy IP
+  // so the agent can reach the sidecar directly without going through Squid
+  if (config.enableApiProxy && networkConfig.proxyIp) {
+    if (environment.NO_PROXY) {
+      environment.NO_PROXY += `,${networkConfig.proxyIp}`;
+    } else {
+      environment.NO_PROXY = `localhost,127.0.0.1,${networkConfig.proxyIp}`;
+    }
+    environment.no_proxy = environment.NO_PROXY;
+  }
+
   // Pass the host's actual PATH and tool directories so the entrypoint can use them
   // This ensures toolcache paths (Python, Node, Go, Rust, Java) are correctly resolved
   if (process.env.PATH) {
@@ -952,13 +963,17 @@ export function generateDockerCompose(
     };
 
     // Set environment variables in agent to use the proxy
+    // AWF_API_PROXY_IP is used by setup-iptables.sh to allow agent→api-proxy traffic
+    // Use IP address instead of hostname for BASE_URLs since Docker DNS may not resolve
+    // container names in chroot mode
+    environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
     if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://api-proxy:10000`;
-      logger.debug('OpenAI API will be proxied through sidecar at http://api-proxy:10000');
+      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
+      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
     }
     if (config.anthropicApiKey) {
-      environment.ANTHROPIC_BASE_URL = `http://api-proxy:10001`;
-      logger.debug('Anthropic API will be proxied through sidecar at http://api-proxy:10001');
+      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
+      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
