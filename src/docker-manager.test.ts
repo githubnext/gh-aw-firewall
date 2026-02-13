@@ -1486,7 +1486,7 @@ describe('docker-manager', () => {
         expect(env.OPENAI_API_KEY).toBeUndefined();
       });
 
-      it('should always build api-proxy locally (not published to GHCR yet)', () => {
+      it('should always build api-proxy locally (GHCR image not yet published)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
@@ -1504,7 +1504,7 @@ describe('docker-manager', () => {
         expect(proxy.image).toBeUndefined();
       });
 
-      it('should always build api-proxy locally even with custom registry and tag', () => {
+      it('should always build api-proxy locally regardless of registry/tag settings', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false, imageRegistry: 'my-registry.com', imageTag: 'v1.0.0' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
@@ -1886,6 +1886,58 @@ describe('docker-manager', () => {
       process.env.HOME = originalHome;
       if (originalSudoUser) {
         process.env.SUDO_USER = originalSudoUser;
+      }
+    });
+
+    it('should include api-proxy in allowed domains when enableApiProxy is true', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: true,
+        openaiApiKey: 'sk-test-key',
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf includes api-proxy hostname and IP in allowed domains
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).toContain('api-proxy');
+        expect(content).toContain('172.30.0.30'); // api-proxy IP address
+      }
+    });
+
+    it('should not include api-proxy in allowed domains when enableApiProxy is false', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: false,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf does not include api-proxy when disabled
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).not.toContain('api-proxy');
       }
     });
   });

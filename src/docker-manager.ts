@@ -320,6 +320,14 @@ export function generateDockerCompose(
     'SUDO_GID',       // Sudo metadata
   ]);
 
+  // When api-proxy is enabled, exclude API keys from agent environment
+  // The keys are passed to the api-proxy sidecar only (not to the agent)
+  const willUseApiProxy = config.enableApiProxy && (config.openaiApiKey || config.anthropicApiKey);
+  if (willUseApiProxy) {
+    EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
+    EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+  }
+
   // Start with required/overridden environment variables
   // Use the real user's home (not /root when running with sudo)
   const homeDir = getRealUserHome();
@@ -386,7 +394,11 @@ export function generateDockerCompose(
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
     // Anthropic API key for Claude Code
-    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    // Only pass ANTHROPIC_API_KEY to agent when api-proxy is NOT enabled
+    // When api-proxy IS enabled, the key goes to the sidecar only (not to agent)
+    if (process.env.ANTHROPIC_API_KEY && !willUseApiProxy) {
+      environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    }
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
@@ -840,6 +852,12 @@ export function generateDockerCompose(
     environment.AWF_ENABLE_HOST_ACCESS = '1';
   }
 
+  // Pass API proxy flag to agent for iptables configuration
+  // Only set when api-proxy will actually be deployed (i.e., at least one API key is provided)
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+    environment.AWF_ENABLE_API_PROXY = '1';
+  }
+
   // Use GHCR image or build locally
   // Priority: GHCR preset images > local build (when requested) > custom images
   // For presets ('default', 'act'), use GHCR images
@@ -894,8 +912,9 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled
-  if (config.enableApiProxy && networkConfig.proxyIp) {
+  // Add Node.js API proxy sidecar if enabled and at least one API key is provided
+  // The api-proxy service is only useful when there are API keys to proxy
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
     const proxyService: any = {
       container_name: 'awf-api-proxy',
       networks: {
@@ -960,7 +979,7 @@ export function generateDockerCompose(
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
     // Set environment variables in agent to use the proxy
-    // Use IP address instead of hostname to avoid DNS resolution issues in chroot mode
+    // Use IP address instead of hostname to avoid DNS resolution issues
     if (config.openaiApiKey) {
       environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
       logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
@@ -1128,8 +1147,14 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
+  // When API proxy is enabled and has API keys, add api-proxy hostname and IP to allowed domains so agent can communicate with it
+  // The IP address is necessary because some tools may bypass NO_PROXY settings or use the IP directly
+  const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)
+    ? [...config.allowedDomains, 'api-proxy', networkConfig.proxyIp]
+    : config.allowedDomains;
+
   const squidConfig = generateSquidConfig({
-    domains: config.allowedDomains,
+    domains: domainsForSquid,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
     sslBump: config.sslBump,
@@ -1150,6 +1175,19 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
   fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
+
+  // Log BASE_URL environment variables for debugging
+  const agentEnv = dockerCompose.services['awf-agent']?.environment || {};
+  if (agentEnv.ANTHROPIC_BASE_URL) {
+    logger.info(`Agent ANTHROPIC_BASE_URL set to: ${agentEnv.ANTHROPIC_BASE_URL}`);
+  } else {
+    logger.info('Agent ANTHROPIC_BASE_URL: not set (using default)');
+  }
+  if (agentEnv.OPENAI_BASE_URL) {
+    logger.info(`Agent OPENAI_BASE_URL set to: ${agentEnv.OPENAI_BASE_URL}`);
+  } else {
+    logger.info('Agent OPENAI_BASE_URL: not set (using default)');
+  }
 }
 
 /**

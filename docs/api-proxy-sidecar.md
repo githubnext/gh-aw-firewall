@@ -26,9 +26,9 @@ When enabled, the API proxy sidecar:
 │         │  │      Agent Container         │    │
 │         │  │      172.30.0.20             │    │
 │         │  │  OPENAI_BASE_URL=            │    │
-│         │  │    http://api-proxy:10000    │────┘
+│         │  │    http://172.30.0.30:10000  │────┘
 │         │  │  ANTHROPIC_BASE_URL=         │
-│         │  │    http://api-proxy:10001    │
+│         │  │    http://172.30.0.30:10001  │
 │         │  └──────────────────────────────┘
 │         │
 └─────────┼─────────────────────────────────────┘
@@ -38,7 +38,7 @@ When enabled, the API proxy sidecar:
 ```
 
 **Traffic Flow:**
-1. Agent makes request to `api-proxy:10000` or `api-proxy:10001`
+1. Agent makes request to `172.30.0.30:10000` or `172.30.0.30:10001`
 2. API proxy injects authentication headers
 3. API proxy routes through Squid via HTTP_PROXY/HTTPS_PROXY
 4. Squid enforces domain whitelist (only allowed domains pass)
@@ -82,7 +82,7 @@ awf --enable-api-proxy \
   -- npx @openai/codex -p "write a hello world function"
 ```
 
-The agent container will automatically use `http://api-proxy:10000` as the base URL.
+The agent container will automatically use `http://172.30.0.30:10000` as the base URL.
 
 ### Claude Code Example
 
@@ -94,7 +94,7 @@ awf --enable-api-proxy \
   -- claude-code "write a hello world function"
 ```
 
-The agent container will automatically use `http://api-proxy:10001` as the base URL.
+The agent container will automatically use `http://172.30.0.30:10001` as the base URL.
 
 ### Both Providers
 
@@ -113,8 +113,8 @@ When API keys are provided, the sidecar sets these environment variables in the 
 
 | Variable | Value | When Set | Description |
 |----------|-------|----------|-------------|
-| `OPENAI_BASE_URL` | `http://api-proxy:10000` | When `OPENAI_API_KEY` is provided | OpenAI API proxy endpoint |
-| `ANTHROPIC_BASE_URL` | `http://api-proxy:10001` | When `ANTHROPIC_API_KEY` is provided | Anthropic API proxy endpoint |
+| `OPENAI_BASE_URL` | `http://172.30.0.30:10000` | When `OPENAI_API_KEY` is provided | OpenAI API proxy endpoint |
+| `ANTHROPIC_BASE_URL` | `http://172.30.0.30:10001` | When `ANTHROPIC_API_KEY` is provided | Anthropic API proxy endpoint |
 
 These are standard environment variables recognized by:
 - OpenAI Python SDK
@@ -164,7 +164,7 @@ When API keys are present (or `--enable-api-proxy` is explicitly set):
 
 ```
 Agent Code
-  ↓ (makes HTTP request to api-proxy:10000)
+  ↓ (makes HTTP request to 172.30.0.30:10000)
 Node.js API Proxy
   ↓ (injects Authorization: Bearer $OPENAI_API_KEY)
   ↓ (routes via HTTP_PROXY to Squid)

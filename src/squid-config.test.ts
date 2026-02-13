@@ -129,6 +129,46 @@ describe('generateSquidConfig', () => {
     });
   });
 
+  describe('Bare Hostname Handling', () => {
+    it('should handle bare hostnames without adding leading dot', () => {
+      // Bare hostnames (no dots) like Docker container names should not get a leading dot
+      // because they have no subdomains to match
+      const config: SquidConfig = {
+        domains: ['api-proxy', 'localhost'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain api-proxy');
+      expect(result).toContain('acl allowed_domains dstdomain localhost');
+      expect(result).not.toContain('.api-proxy');
+      expect(result).not.toContain('.localhost');
+    });
+
+    it('should handle mixed bare hostnames and FQDNs', () => {
+      const config: SquidConfig = {
+        domains: ['api-proxy', 'github.com', 'localhost', 'example.org'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Bare hostnames without leading dot
+      expect(result).toContain('acl allowed_domains dstdomain api-proxy');
+      expect(result).toContain('acl allowed_domains dstdomain localhost');
+      // FQDNs with leading dot
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('acl allowed_domains dstdomain .example.org');
+    });
+
+    it('should handle bare hostnames with protocol prefixes', () => {
+      const config: SquidConfig = {
+        domains: ['http://api-proxy'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_http_only dstdomain api-proxy');
+      expect(result).not.toContain('.api-proxy');
+    });
+  });
+
   describe('Redundant Subdomain Removal', () => {
     it('should remove subdomain when parent domain is present', () => {
       const config: SquidConfig = {
@@ -293,12 +333,14 @@ describe('generateSquidConfig', () => {
     });
 
     it('should handle TLD-only domain (edge case)', () => {
+      // TLD-only (e.g., 'com') is a bare hostname with no dots, so no leading dot
       const config: SquidConfig = {
         domains: ['com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .com');
+      expect(result).toContain('acl allowed_domains dstdomain com');
+      expect(result).not.toContain('.com');
     });
   });
 
