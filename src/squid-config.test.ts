@@ -1536,3 +1536,52 @@ describe('Empty Domain List', () => {
     expect(result).not.toContain('acl allowed_https_only');
   });
 });
+
+describe('API Proxy Port Configuration', () => {
+  it('should add ports 10000 and 10001 to Safe_ports when enableApiProxy is true', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl Safe_ports port 10000       # API proxy - OpenAI');
+    expect(result).toContain('acl Safe_ports port 10001       # API proxy - Anthropic');
+  });
+
+  it('should NOT add ports 10000 and 10001 when enableApiProxy is false', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: false,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('acl Safe_ports port 10000');
+    expect(result).not.toContain('acl Safe_ports port 10001');
+  });
+
+  it('should NOT add ports 10000 and 10001 when enableApiProxy is undefined', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('acl Safe_ports port 10000');
+    expect(result).not.toContain('acl Safe_ports port 10001');
+  });
+
+  it('should add api-proxy ports along with user-specified ports', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: true,
+      enableHostAccess: true,
+      allowHostPorts: '3000,8080',
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl Safe_ports port 10000       # API proxy - OpenAI');
+    expect(result).toContain('acl Safe_ports port 10001       # API proxy - Anthropic');
+    expect(result).toContain('acl Safe_ports port 3000      # User-specified via --allow-host-ports');
+    expect(result).toContain('acl Safe_ports port 8080      # User-specified via --allow-host-ports');
+  });
+});

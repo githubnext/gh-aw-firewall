@@ -546,6 +546,16 @@ export interface SquidConfig {
    * @example "3000-3010,8000-8090"
    */
   allowHostPorts?: string;
+
+  /**
+   * Whether api-proxy sidecar is enabled
+   *
+   * When true, adds ports 10000 (OpenAI) and 10001 (Anthropic) to Safe_ports ACL
+   * to allow traffic to the api-proxy sidecar container.
+   *
+   * @default false
+   */
+  enableApiProxy?: boolean;
 }
 
 /**

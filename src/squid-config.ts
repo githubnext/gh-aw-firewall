@@ -226,7 +226,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, enableApiProxy } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -457,6 +457,12 @@ export function generateSquidConfig(config: SquidConfig): string {
 acl SSL_ports port 443
 acl Safe_ports port 80          # HTTP
 acl Safe_ports port 443         # HTTPS`;
+
+  // Add api-proxy ports when enabled (ports 10000 for OpenAI, 10001 for Anthropic)
+  if (enableApiProxy) {
+    portAclsSection += `\nacl Safe_ports port 10000       # API proxy - OpenAI`;
+    portAclsSection += `\nacl Safe_ports port 10001       # API proxy - Anthropic`;
+  }
 
   // Add user-specified ports if --allow-host-ports was provided
   if (enableHostAccess && allowHostPorts) {
