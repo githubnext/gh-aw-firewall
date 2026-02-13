@@ -285,8 +285,9 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 
 ### What This Protects Against
 
-- **Token leakage via environment inspection**: `/proc/self/environ` and tools like `printenv` (in the same process) will not show the token after first access — the environment variable is unset
-- **Token exfiltration via /proc**: Other processes reading `/proc/<pid>/environ` cannot see the token
+- **Token leakage via getenv() inspection**: After first access, subsequent `getenv()` calls return the cached value, but tools like `printenv` (which read `environ` directly) will not show the token
+- **Token exfiltration via environ pointer**: The `extern char **environ` pointer is cleared, preventing direct reading of the environment array
+- **Runtime-added tokens in /proc**: If tokens are added at runtime via `setenv()`, they never appear in `/proc/self/environ` (kernel limitation - see below)
 
 ### What This Does NOT Protect Against
 
@@ -295,7 +296,7 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 - **In-process getenv() calls**: Since values are cached, any code in the same process can still call `getenv()` and get the cached token
 - **Static linking**: Programs statically linked with libc bypass LD_PRELOAD
 - **Direct syscalls**: Code that reads `/proc/self/environ` directly (without getenv) bypasses this protection
-- **Task-level /proc exposure**: `/proc/PID/task/TID/environ` may still expose tokens even after `unsetenv()`. The library checks and logs warnings about this exposure.
+- **Initial environment tokens in /proc**: If tokens are present in the **initial** environment when the process starts, they remain visible in `/proc/self/environ` indefinitely (kernel limitation - see "Understanding /proc/self/environ" below)
 
 ### Environment Verification
 
@@ -309,6 +310,27 @@ After calling `unsetenv()` to clear tokens, the library automatically verifies w
 This verification runs automatically after `unsetenv()` on first access to each sensitive token and helps identify potential security issues with environment exposure.
 
 **Note on chroot mode:** The verification uses the process's `environ` pointer directly rather than reading from `/proc/self/environ`. This is necessary because in chroot mode, `/proc` may be bind-mounted from the host and show stale environment data.
+
+### Understanding /proc/self/environ
+
+**IMPORTANT**: `/proc/self/environ` is a **kernel snapshot** of the initial environment when the process starts. It does NOT update when the process calls `setenv()` or `unsetenv()` at runtime.
+
+**Why this matters:**
+- If a token is present when the process starts (e.g., `GITHUB_TOKEN=...` in the initial environment), it will remain visible in `/proc/self/environ` even after `unsetenv()` is called
+- If a token is set at runtime via `setenv()`, it will NOT appear in `/proc/self/environ`
+- There is no documented userspace API to update `/proc/self/environ` after process start (would require `CAP_SYS_RESOURCE` and dangerous `prctl(PR_SET_MM)` calls)
+
+**Security implications:**
+1. **Best practice**: Do NOT pass sensitive tokens in the initial environment. Instead, read them from files or other secure sources and set them at runtime.
+2. **AWF deployment**: The agent container starts with minimal environment variables. Tokens are injected at runtime, so they never appear in `/proc/self/environ`.
+3. **Clearing verification**: This library verifies tokens are cleared from the `environ` pointer (which affects `getenv()` calls), not from `/proc/self/environ` (which is immutable).
+
+**What we clear:**
+- ✅ The `environ` global pointer (affects all `getenv()` calls)
+- ✅ The process's environment array (verified by checking `environ` directly)
+- ❌ The kernel's `/proc/self/environ` snapshot (not possible without re-exec)
+
+**Bottom line**: If tokens are present in the initial environment when the process starts, they will remain visible in `/proc/self/environ` indefinitely. This is a fundamental Linux kernel limitation. The solution is to ensure sensitive tokens are **not** in the initial environment.
 
 ### Defense in Depth
 
