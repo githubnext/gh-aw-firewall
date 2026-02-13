@@ -930,15 +930,12 @@ export function generateDockerCompose(
       cpu_shares: 512,
     };
 
-    // Use GHCR image or build locally
-    if (useGHCR) {
-      proxyService.image = `${registry}/api-proxy:${tag}`;
-    } else {
-      proxyService.build = {
-        context: path.join(projectRoot, 'containers/api-proxy'),
-        dockerfile: 'Dockerfile',
-      };
-    }
+    // Always build api-proxy locally since it's not published to GHCR yet
+    // TODO: Once api-proxy image is published to GHCR, change this to use useGHCR like other containers
+    proxyService.build = {
+      context: path.join(projectRoot, 'containers/api-proxy'),
+      dockerfile: 'Dockerfile',
+    };
 
     services['api-proxy'] = proxyService;
 
