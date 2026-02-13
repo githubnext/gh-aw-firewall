@@ -48,12 +48,13 @@ function generateScript(commands: BatchCommand[]): string {
   return commands.map(cmd => {
     // Each command runs in a subshell so failures don't abort the batch.
     // stdout and stderr are merged (2>&1) so we capture everything.
-    // A blank echo before the EXIT marker ensures a newline separator.
+    // IMPORTANT: capture $? immediately into _EC before echo resets it.
     return [
       `echo "${START}${cmd.name}${DELIM_END}"`,
       `(${cmd.command}) 2>&1`,
+      `_EC=$?`,
       `echo ""`,
-      `echo "${EXIT}${cmd.name}:$?${DELIM_END}"`,
+      `echo "${EXIT}${cmd.name}:$_EC${DELIM_END}"`,
     ].join('; ');
   }).join('; ');
 }
