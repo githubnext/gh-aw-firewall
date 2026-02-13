@@ -1,6 +1,6 @@
 # API Proxy Sidecar for Credential Management
 
-The AWF firewall supports an optional Node.js-based API proxy sidecar that securely holds LLM API credentials and automatically injects authentication headers while routing all traffic through Squid to respect domain whitelisting.
+The AWF firewall includes a Node.js-based API proxy sidecar (enabled by default) that securely holds LLM API credentials and automatically injects authentication headers while routing all traffic through Squid to respect domain whitelisting.
 
 ## Overview
 
@@ -48,14 +48,27 @@ When enabled, the API proxy sidecar:
 
 ### Basic Usage
 
+The API proxy is **enabled by default** and automatically deploys when API keys are present:
+
 ```bash
 # Set API keys in environment
 export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 
-# Enable API proxy sidecar
+# API proxy automatically enabled (no flag needed)
+awf --allow-domains api.openai.com,api.anthropic.com \
+  -- your-command
+
+# Explicitly enable if needed (same as default)
 awf --enable-api-proxy \
   --allow-domains api.openai.com,api.anthropic.com \
+  -- your-command
+```
+
+To disable the API proxy when not needed:
+```bash
+awf --no-enable-api-proxy \
+  --allow-domains github.com \
   -- your-command
 ```
 
@@ -141,7 +154,7 @@ The sidecar has strict resource constraints:
 
 ### 1. Container Startup
 
-When `--enable-api-proxy` is set:
+When API keys are present (or `--enable-api-proxy` is explicitly set):
 1. Node.js API proxy starts at 172.30.0.30
 2. API keys passed via environment variables
 3. HTTP_PROXY/HTTPS_PROXY configured to route through Squid
@@ -172,10 +185,14 @@ The Node.js proxy automatically adds:
 ### CLI Options
 
 ```bash
-awf --enable-api-proxy [OPTIONS] -- COMMAND
+awf [OPTIONS] -- COMMAND
 ```
 
-**Required environment variables** (at least one):
+**API Proxy behavior** (enabled by default):
+- Automatically deploys when `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is present
+- Use `--no-enable-api-proxy` to disable explicitly
+
+**Environment variables** (at least one needed for deployment):
 - `OPENAI_API_KEY` - OpenAI API key
 - `ANTHROPIC_API_KEY` - Anthropic API key
 
