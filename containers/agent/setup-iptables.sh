@@ -131,20 +131,17 @@ iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 # The agent needs to connect directly to api-proxy (not through Squid).
 # The api-proxy then routes outbound traffic through Squid to enforce domain whitelisting.
 # Architecture: agent -> api-proxy (direct) -> Squid -> internet
-if [ -n "$AWF_ENABLE_API_PROXY" ]; then
-  API_PROXY_IP=$(getent hosts api-proxy | awk 'NR==1 { print $1 }')
-  if [ -n "$API_PROXY_IP" ] && is_valid_ipv4 "$API_PROXY_IP"; then
-    echo "[iptables] Allow direct traffic to api-proxy (${API_PROXY_IP}) - bypassing Squid..."
+# Use AWF_API_PROXY_IP environment variable set by docker-manager (172.30.0.30)
+if [ -n "$AWF_ENABLE_API_PROXY" ] && [ -n "$AWF_API_PROXY_IP" ]; then
+  if is_valid_ipv4 "$AWF_API_PROXY_IP"; then
+    echo "[iptables] Allow direct traffic to api-proxy (${AWF_API_PROXY_IP}) - bypassing Squid..."
     # NAT: skip DNAT to Squid for all traffic to api-proxy
-    iptables -t nat -A OUTPUT -d "$API_PROXY_IP" -j RETURN
-    # FILTER: allow traffic to api-proxy ports (10000 for OpenAI, 10001 for Anthropic)
-    iptables -A OUTPUT -p tcp -d "$API_PROXY_IP" --dport 10000 -j ACCEPT
-    iptables -A OUTPUT -p tcp -d "$API_PROXY_IP" --dport 10001 -j ACCEPT
-  elif [ -n "$API_PROXY_IP" ]; then
-    echo "[iptables] WARNING: api-proxy resolved to invalid IP '${API_PROXY_IP}', skipping api-proxy bypass"
+    iptables -t nat -A OUTPUT -d "$AWF_API_PROXY_IP" -j RETURN
   else
-    echo "[iptables] WARNING: api-proxy could not be resolved, skipping api-proxy bypass"
+    echo "[iptables] WARNING: AWF_API_PROXY_IP has invalid format '${AWF_API_PROXY_IP}', skipping api-proxy bypass"
   fi
+elif [ -n "$AWF_ENABLE_API_PROXY" ]; then
+  echo "[iptables] WARNING: AWF_ENABLE_API_PROXY is set but AWF_API_PROXY_IP is not set"
 fi
 
 # Bypass Squid for host.docker.internal when host access is enabled.
@@ -283,9 +280,12 @@ iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
 
-# Allow traffic to API proxy sidecar (ports 10000/10001)
+# Allow traffic to API proxy sidecar (ports 10000 for OpenAI, 10001 for Anthropic)
+# Must be added before the final DROP rule
 if [ -n "$AWF_API_PROXY_IP" ]; then
-  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" -j ACCEPT
+  echo "[iptables] Allow traffic to api-proxy (${AWF_API_PROXY_IP}) ports 10000, 10001..."
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 10000 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 10001 -j ACCEPT
 fi
 
 # Drop all other TCP traffic (default deny policy)
