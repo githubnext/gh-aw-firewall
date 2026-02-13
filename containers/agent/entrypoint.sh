@@ -166,11 +166,11 @@ unset_sensitive_tokens() {
     "CODEX_API_KEY"
   )
 
-  echo "[entrypoint] Unsetting sensitive tokens from parent shell environment..."
+  echo "[entrypoint] Unsetting sensitive tokens from parent shell environment..." >&2
   for token in "${SENSITIVE_TOKENS[@]}"; do
     if [ -n "${!token}" ]; then
       unset "$token"
-      echo "[entrypoint] Unset $token from /proc/1/environ"
+      echo "[entrypoint] Unset $token from /proc/1/environ" >&2
     fi
   done
 }
