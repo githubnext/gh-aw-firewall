@@ -75,7 +75,7 @@ The agent's legitimate tools (Read, Bash) become attack vectors when credentials
 
 ### Selective Mounting
 
-AWF always runs in chroot mode with selective path mounts. Only the workspace directory is mounted (not entire `$HOME`). Credential files are hidden at the `/host` paths as defense-in-depth:
+AWF uses chroot mode with granular selective mounting. Instead of mounting the entire `$HOME`, an empty writable home directory is mounted with only specific subdirectories (`.cargo`, `.claude`, `.config`, etc.) overlaid on top. Credential files are hidden via `/dev/null` overlays as defense-in-depth:
 
 **What gets mounted:**
 
@@ -91,7 +91,8 @@ const chrootVolumes = [
   '/sys:/host/sys:ro',                        // System information
   '/dev:/host/dev:ro',                        // Device nodes
   '/tmp:/host/tmp:rw',                        // Temporary files
-  `${GITHUB_WORKSPACE}:/host${GITHUB_WORKSPACE}:rw`,  // Workspace only (not entire HOME)
+  `${HOME}:/host${HOME}:rw`,                  // User home at /host path
+  `${HOME}:${HOME}:rw`,                       // User home at direct path (for container env)
 
   // Minimal /etc (no /etc/shadow)
   '/etc/ssl:/host/etc/ssl:ro',
@@ -106,7 +107,28 @@ const chrootVolumes = [
 **What gets hidden:**
 
 ```typescript
-// Credentials hidden at /host paths (defense-in-depth, since $HOME is not mounted)
+// IMPORTANT: Home directory is mounted at TWO locations in chroot mode
+// Credentials MUST be hidden at BOTH paths to prevent bypass attacks
+
+// 1. Direct home mount (for container environment)
+const directHomeCredentials = [
+  '/dev/null:${HOME}/.docker/config.json:ro',
+  '/dev/null:${HOME}/.npmrc:ro',
+  '/dev/null:${HOME}/.cargo/credentials:ro',
+  '/dev/null:${HOME}/.composer/auth.json:ro',
+  '/dev/null:${HOME}/.config/gh/hosts.yml:ro',
+  '/dev/null:${HOME}/.ssh/id_rsa:ro',
+  '/dev/null:${HOME}/.ssh/id_ed25519:ro',
+  '/dev/null:${HOME}/.ssh/id_ecdsa:ro',
+  '/dev/null:${HOME}/.ssh/id_dsa:ro',
+  '/dev/null:${HOME}/.aws/credentials:ro',
+  '/dev/null:${HOME}/.aws/config:ro',
+  '/dev/null:${HOME}/.kube/config:ro',
+  '/dev/null:${HOME}/.azure/credentials:ro',
+  '/dev/null:${HOME}/.config/gcloud/credentials.db:ro',
+];
+
+// 2. Chroot /host mount (for chroot operations)
 const chrootHiddenCredentials = [
   '/dev/null:/host${HOME}/.docker/config.json:ro',
   '/dev/null:/host${HOME}/.npmrc:ro',
@@ -128,7 +150,7 @@ const chrootHiddenCredentials = [
 **Additional security:**
 - Docker socket hidden: `/dev/null:/host/var/run/docker.sock:ro`
 - Prevents `docker run` firewall bypass
-- Primary security: `$HOME` is not mounted; only workspace directory is available
+- **Dual-mount protection**: Credentials hidden at both `$HOME` and `/host$HOME` paths
 
 ## Usage Examples
 

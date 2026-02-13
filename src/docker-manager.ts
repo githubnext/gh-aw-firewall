@@ -478,14 +478,55 @@ export function generateDockerCompose(
     // Mount workspace directory at /host path for chroot
     agentVolumes.push(`${workspaceDir}:/host${workspaceDir}:rw`);
 
+    // Mount an empty writable home directory at /host$HOME
+    // This gives tools a writable $HOME without exposing credential files.
+    // The specific subdirectory mounts below (.cargo, .claude, etc.) overlay
+    // on top, providing access to only the directories we explicitly mount.
+    // Without this, $HOME inside the chroot is an empty root-owned directory
+    // created by Docker as a side effect of subdirectory mounts, which causes
+    // tools like rustc and Claude Code to hang or fail.
+    // NOTE: This directory must be OUTSIDE workDir because workDir has a tmpfs
+    // overlay inside the container to hide docker-compose.yml secrets.
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    agentVolumes.push(`${emptyHomeDir}:/host${effectiveHome}:rw`);
+
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
 
-    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs, session state)
-    // Note: ~/.copilot may contain potentially sensitive data; treat it like credentials in logs and backups
+    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs)
+    // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
     agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
+
+    // Mount ~/.cache, ~/.config, ~/.local for CLI tool state management (Claude Code, etc.)
+    // These directories are safe to mount as they contain application state, not credentials
+    // Note: Specific credential files within ~/.config (like ~/.config/gh/hosts.yml) are
+    // still blocked via /dev/null overlays applied later in the code
+    agentVolumes.push(`${effectiveHome}/.cache:/host${effectiveHome}/.cache:rw`);
+    agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
+    agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
+
+    // Mount ~/.anthropic for Claude Code state and configuration
+    // This is safe as ~/.anthropic contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.anthropic:/host${effectiveHome}/.anthropic:rw`);
+
+    // Mount ~/.claude for Claude CLI state and configuration
+    // This is safe as ~/.claude contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
+
+    // Mount ~/.cargo and ~/.rustup for Rust toolchain access
+    // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
+    // ~/.cargo must be rw because the credential-hiding code mounts /dev/null over
+    // ~/.cargo/credentials, which needs a writable parent to create the mountpoint.
+    // ~/.rustup must be rw because rustup proxy binaries (rustc, cargo) need to
+    // acquire file locks in ~/.rustup/ when executing toolchain binaries.
+    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:rw`);
+    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:rw`);
+
+    // Mount ~/.npm for npm cache directory access
+    // npm requires write access to ~/.npm for caching packages and writing logs
+    agentVolumes.push(`${effectiveHome}/.npm:/host${effectiveHome}/.npm:rw`);
 
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
@@ -619,20 +660,10 @@ export function generateDockerCompose(
   // **Implementation Details**
   //
   // AWF always runs in chroot mode:
-  // - Mount: $GITHUB_WORKSPACE (or cwd) at /host path, system paths at /host
-  // - Hide: credential files via /dev/null overlays (defense-in-depth)
-  // - Does NOT mount: entire /host$HOME directory
-  //
-  // **Previous Vulnerability (FIXED)**
-  //
-  // The previous implementation mounted the entire $HOME directory and relied solely
-  // on /dev/null overlays to hide credentials. This had several problems:
-  // - Overlays only work if the credential file exists on the host
-  // - Non-standard credential locations were not protected
-  // - Any new credential files would be accessible by default
-  // - Subdirectories with credentials were fully accessible
-  //
-  // The fix eliminates the root cause by never mounting $HOME at all.
+  // - Mount: empty writable $HOME at /host$HOME, with specific subdirectories overlaid
+  // - Mount: $GITHUB_WORKSPACE at /host path, system paths at /host
+  // - Hide: credential files at /host paths via /dev/null overlays (defense-in-depth)
+  // - Does NOT mount: the real $HOME directory (prevents credential exposure)
   //
   // ================================================================
 
@@ -921,6 +952,41 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     // Fix permissions if directory already exists (e.g., created by a previous run)
     fs.chmodSync(mcpLogsDir, 0o777);
     logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
+  }
+
+  // Ensure chroot home subdirectories exist with correct ownership before Docker
+  // bind-mounts them. If a source directory doesn't exist, Docker creates it as
+  // root:root, making it inaccessible to the agent user (e.g., UID 1001).
+  // Also create an empty writable home directory that gets mounted as $HOME
+  // in the chroot, giving tools a writable home without exposing credentials.
+  {
+    const effectiveHome = getRealUserHome();
+    const uid = parseInt(getSafeHostUid(), 10);
+    const gid = parseInt(getSafeHostGid(), 10);
+
+    // Create empty writable home directory for the chroot
+    // This is mounted as $HOME inside the container so tools can write to it
+    // NOTE: Must be outside workDir to avoid being hidden by the tmpfs overlay
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    if (!fs.existsSync(emptyHomeDir)) {
+      fs.mkdirSync(emptyHomeDir, { recursive: true });
+    }
+    fs.chownSync(emptyHomeDir, uid, gid);
+    logger.debug(`Created chroot home directory: ${emptyHomeDir} (${uid}:${gid})`);
+
+    // Ensure source directories for subdirectory mounts exist with correct ownership
+    const chrootHomeDirs = [
+      '.copilot', '.cache', '.config', '.local',
+      '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
+    ];
+    for (const dir of chrootHomeDirs) {
+      const dirPath = path.join(effectiveHome, dir);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.chownSync(dirPath, uid, gid);
+        logger.debug(`Created host home subdirectory: ${dirPath} (${uid}:${gid})`);
+      }
+    }
   }
 
   // Use fixed network configuration (network is created by host-iptables.ts)
@@ -1328,6 +1394,13 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
 
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });
+
+      // Clean up chroot home directory (created outside workDir to avoid tmpfs overlay)
+      const chrootHomeDir = `${workDir}-chroot-home`;
+      if (fs.existsSync(chrootHomeDir)) {
+        fs.rmSync(chrootHomeDir, { recursive: true, force: true });
+      }
+
       logger.debug('Temporary files cleaned up');
     }
   } catch (error) {
