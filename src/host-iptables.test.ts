@@ -226,6 +226,34 @@ describe('host-iptables', () => {
       ]);
     });
 
+    it('should add api-proxy ACCEPT rule when apiProxyIp is provided', async () => {
+      mockedExeca.mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      // Mock chain existence check to return "not exists" (exitCode: 1)
+      mockedExeca
+        // Mock getNetworkBridgeName
+        .mockResolvedValueOnce({ stdout: 'fw-bridge', stderr: '', exitCode: 0 } as any)
+        // Mock iptables -L DOCKER-USER (permission check)
+        .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 } as any)
+        // Mock chain existence check (does not exist)
+        .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 1 } as any)
+        // All subsequent calls succeed with default mock
+        .mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 } as any);
+
+      await setupHostIptables('172.30.0.10', 3128, ['8.8.8.8', '8.8.4.4'], '172.30.0.30');
+
+      // Verify api-proxy ACCEPT rule was created
+      expect(mockedExeca).toHaveBeenCalledWith('iptables', [
+        '-t', 'filter', '-A', 'FW_WRAPPER',
+        '-s', '172.30.0.30',
+        '-j', 'ACCEPT',
+      ]);
+    });
+
     it('should cleanup existing chain before creating new one', async () => {
       mockedExeca
         // Mock getNetworkBridgeName
