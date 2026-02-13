@@ -68,16 +68,21 @@ RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/
 
 # Build one-shot-token LD_PRELOAD library for single-use token access
 # This prevents tokens from being read multiple times (e.g., by malicious code)
-COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c
+COPY one-shot-token/Cargo.toml one-shot-token/src/ /tmp/one-shot-token/
+COPY one-shot-token/src/ /tmp/one-shot-token/src/
 RUN set -eux; \
-    BUILD_PKGS="gcc libc6-dev"; \
     apt-get update && \
-    ( apt-get install -y --no-install-recommends $BUILD_PKGS || \
-      (rm -rf /var/lib/apt/lists/* && apt-get update && \
-       apt-get install -y --no-install-recommends $BUILD_PKGS) ) && \
-    gcc -shared -fPIC -O2 -Wall -o /usr/local/lib/one-shot-token.so /tmp/one-shot-token.c -ldl -lpthread && \
-    rm /tmp/one-shot-token.c && \
-    apt-get remove -y $BUILD_PKGS && \
+    apt-get install -y --no-install-recommends curl build-essential && \
+    # Install Rust via rustup (minimal profile)
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
+    export PATH="/root/.cargo/bin:$PATH" && \
+    # Build the library
+    cd /tmp/one-shot-token && \
+    cargo build --release && \
+    cp target/release/libone_shot_token.so /usr/local/lib/one-shot-token.so && \
+    # Clean up Rust and build artifacts
+    rm -rf /tmp/one-shot-token /root/.cargo /root/.rustup && \
+    apt-get remove -y build-essential && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
