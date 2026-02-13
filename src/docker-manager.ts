@@ -967,13 +967,14 @@ export function generateDockerCompose(
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
     // Set environment variables in agent to use the proxy
+    // Use IP address instead of hostname to avoid DNS resolution issues
     if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://api-proxy:10000`;
-      logger.debug('OpenAI API will be proxied through sidecar at http://api-proxy:10000');
+      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
+      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
     }
     if (config.anthropicApiKey) {
-      environment.ANTHROPIC_BASE_URL = `http://api-proxy:10001`;
-      logger.debug('Anthropic API will be proxied through sidecar at http://api-proxy:10001');
+      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
+      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
