@@ -320,11 +320,11 @@ export function generateDockerCompose(
     'SUDO_GID',       // Sudo metadata
   ]);
 
-  // When api-proxy is enabled, exclude API keys from agent environment
-  // The keys are passed to the api-proxy sidecar only (not to the agent)
-  const willUseApiProxy = config.enableApiProxy && (config.openaiApiKey || config.anthropicApiKey);
+  // When api-proxy is enabled, exclude OpenAI API key from agent environment
+  // The key is passed to the api-proxy sidecar only (not to the agent)
+  // Note: ANTHROPIC_API_KEY is NOT excluded - Claude uses it directly in the agent container
+  const willUseApiProxy = config.enableApiProxy && config.openaiApiKey;
   if (willUseApiProxy) {
-    EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
     EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
   }
 
@@ -394,9 +394,8 @@ export function generateDockerCompose(
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
     // Anthropic API key for Claude Code
-    // Only pass ANTHROPIC_API_KEY to agent when api-proxy is NOT enabled
-    // When api-proxy IS enabled, the key goes to the sidecar only (not to agent)
-    if (process.env.ANTHROPIC_API_KEY && !willUseApiProxy) {
+    // Claude always uses the key directly in the agent container (not via api-proxy)
+    if (process.env.ANTHROPIC_API_KEY) {
       environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     }
     if (process.env.USER) environment.USER = process.env.USER;
@@ -912,9 +911,9 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled and at least one API key is provided
-  // The api-proxy service is only useful when there are API keys to proxy
-  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+  // Add Node.js API proxy sidecar if enabled and OpenAI API key is provided
+  // The api-proxy service is only used for OpenAI/Codex (Claude uses ANTHROPIC_API_KEY directly in agent)
+  if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
     const proxyService: any = {
       container_name: 'awf-api-proxy',
       networks: {
@@ -923,9 +922,8 @@ export function generateDockerCompose(
         },
       },
       environment: {
-        // Pass API keys securely to sidecar (not visible to agent)
-        ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
-        ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
+        // Pass OpenAI API key securely to sidecar (not visible to agent)
+        OPENAI_API_KEY: config.openaiApiKey,
         // Route through Squid to respect domain whitelisting
         HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
         HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
@@ -979,18 +977,15 @@ export function generateDockerCompose(
     // Without this, the final DROP rule in setup-iptables.sh blocks port 10000/10001
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
-    // Set environment variables in agent to use the proxy
+    // Set environment variables in agent to use the OpenAI proxy
     // Use IP address instead of hostname to avoid DNS resolution issues
+    // Note: ANTHROPIC_BASE_URL is NOT set - Claude uses ANTHROPIC_API_KEY directly
     if (config.openaiApiKey) {
       environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
       logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
     }
-    if (config.anthropicApiKey) {
-      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
-      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
-    }
 
-    logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
+    logger.info('API proxy sidecar enabled for OpenAI/Codex - key will be held securely in sidecar container');
     logger.info('API proxy will route through Squid to respect domain whitelisting');
   }
 
@@ -1152,7 +1147,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   // The IP address (172.30.0.30) must be separate from domains because Squid uses different ACL types:
   // - domains use 'dstdomain' ACL (for DNS names like 'api-proxy')
   // - IP addresses use 'dst' ACL (for IPs like '172.30.0.30')
-  const shouldAddApiProxyAccess = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey);
+  const shouldAddApiProxyAccess = config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey;
   const domainsForSquid = shouldAddApiProxyAccess
     ? [...config.allowedDomains, 'api-proxy']
     : config.allowedDomains;
