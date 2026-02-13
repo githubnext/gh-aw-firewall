@@ -358,6 +358,10 @@ export function generateDockerCompose(
   if (process.env.CARGO_HOME) {
     environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
   }
+  // Rust: Pass RUSTUP_HOME so rustc/cargo can find the toolchain
+  if (process.env.RUSTUP_HOME) {
+    environment.AWF_RUSTUP_HOME = process.env.RUSTUP_HOME;
+  }
   // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
   if (process.env.JAVA_HOME) {
     environment.AWF_JAVA_HOME = process.env.JAVA_HOME;

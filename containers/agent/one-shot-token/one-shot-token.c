@@ -10,7 +10,12 @@
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
  *   If not set, uses built-in defaults
  *
- * Compile: gcc -shared -fPIC -o one-shot-token.so one-shot-token.c -ldl
+ * Build hardening:
+ *   Default token names are XOR-obfuscated to prevent cleartext extraction
+ *   via strings(1) or objdump. Internal symbols use hidden visibility.
+ *   Binary should be stripped after compilation (see build.sh / Dockerfile).
+ *
+ * Compile: gcc -shared -fPIC -fvisibility=hidden -o one-shot-token.so one-shot-token.c -ldl
  * Usage: LD_PRELOAD=/path/to/one-shot-token.so ./your-program
  */
 
@@ -22,25 +27,69 @@
 #include <stdio.h>
 #include <ctype.h>
 
-/* Default sensitive token environment variable names */
-static const char *DEFAULT_SENSITIVE_TOKENS[] = {
-    /* GitHub tokens */
-    "COPILOT_GITHUB_TOKEN",
-    "GITHUB_TOKEN",
-    "GH_TOKEN",
-    "GITHUB_API_TOKEN",
-    "GITHUB_PAT",
-    "GH_ACCESS_TOKEN",
-    /* OpenAI tokens */
-    "OPENAI_API_KEY",
-    "OPENAI_KEY",
-    /* Anthropic/Claude tokens */
-    "ANTHROPIC_API_KEY",
-    "CLAUDE_API_KEY",
-    /* Codex tokens */
-    "CODEX_API_KEY",
-    NULL
+/* --------------------------------------------------------------------------
+ * Obfuscated default token names
+ *
+ * Token names are XOR-encoded so they do not appear as cleartext in the
+ * .rodata section.  This is NOT cryptographic protection -- a determined
+ * attacker can reverse the XOR.  The goal is to prevent trivial discovery
+ * via `strings`, `objdump -s -j .rodata`, or similar reconnaissance.
+ *
+ * Re-generate with: containers/agent/one-shot-token/encode-tokens.sh
+ * -------------------------------------------------------------------------- */
+
+#define OBF_KEY 0x5A
+
+/* Entry in the obfuscated defaults table */
+struct obf_entry {
+    const unsigned char *data;
+    size_t len;
 };
+
+/* --- BEGIN GENERATED OBFUSCATED DEFAULTS (key=0x5A) --- */
+/* Re-generate with: containers/agent/one-shot-token/encode-tokens.sh */
+#define NUM_DEFAULT_TOKENS 11
+
+static const unsigned char OBF_0[] = { 0x19, 0x15, 0x0a, 0x13, 0x16, 0x15, 0x0e, 0x05, 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=20 */
+static const unsigned char OBF_1[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=12 */
+static const unsigned char OBF_2[] = { 0x1d, 0x12, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=8 */
+static const unsigned char OBF_3[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=16 */
+static const unsigned char OBF_4[] = { 0x1d, 0x13, 0x0e, 0x12, 0x0f, 0x18, 0x05, 0x0a, 0x1b, 0x0e }; /* length=10 */
+static const unsigned char OBF_5[] = { 0x1d, 0x12, 0x05, 0x1b, 0x19, 0x19, 0x1f, 0x09, 0x09, 0x05, 0x0e, 0x15, 0x11, 0x1f, 0x14 }; /* length=15 */
+static const unsigned char OBF_6[] = { 0x15, 0x0a, 0x1f, 0x14, 0x1b, 0x13, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=14 */
+static const unsigned char OBF_7[] = { 0x15, 0x0a, 0x1f, 0x14, 0x1b, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=10 */
+static const unsigned char OBF_8[] = { 0x1b, 0x14, 0x0e, 0x12, 0x08, 0x15, 0x0a, 0x13, 0x19, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=17 */
+static const unsigned char OBF_9[] = { 0x19, 0x16, 0x1b, 0x0f, 0x1e, 0x1f, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=14 */
+static const unsigned char OBF_10[] = { 0x19, 0x15, 0x1e, 0x1f, 0x02, 0x05, 0x1b, 0x0a, 0x13, 0x05, 0x11, 0x1f, 0x03 }; /* length=13 */
+
+static const struct obf_entry OBFUSCATED_DEFAULTS[11] = {
+    { OBF_0, sizeof(OBF_0) },
+    { OBF_1, sizeof(OBF_1) },
+    { OBF_2, sizeof(OBF_2) },
+    { OBF_3, sizeof(OBF_3) },
+    { OBF_4, sizeof(OBF_4) },
+    { OBF_5, sizeof(OBF_5) },
+    { OBF_6, sizeof(OBF_6) },
+    { OBF_7, sizeof(OBF_7) },
+    { OBF_8, sizeof(OBF_8) },
+    { OBF_9, sizeof(OBF_9) },
+    { OBF_10, sizeof(OBF_10) },
+};
+/* --- END GENERATED OBFUSCATED DEFAULTS --- */
+
+/**
+ * Decode an obfuscated entry into a newly allocated string.
+ * Returns NULL on allocation failure.
+ */
+static char *decode_obf(const struct obf_entry *entry) {
+    char *decoded = malloc(entry->len + 1);
+    if (decoded == NULL) return NULL;
+    for (size_t i = 0; i < entry->len; i++) {
+        decoded[i] = (char)(entry->data[i] ^ OBF_KEY);
+    }
+    decoded[entry->len] = '\0';
+    return decoded;
+}
 
 /* Maximum number of tokens we can track (for static allocation). This limit
  * balances memory usage with practical needs - 100 tokens should be more than
@@ -112,7 +161,7 @@ static void init_token_list(void) {
 
     /* Get the configuration from environment */
     const char *config = real_getenv("AWF_ONE_SHOT_TOKENS");
-    
+
     if (config != NULL && config[0] != '\0') {
         /* Parse comma-separated token list using strtok_r for thread safety */
         char *config_copy = strdup(config);
@@ -126,7 +175,7 @@ static void init_token_list(void) {
         while (token != NULL && num_tokens < MAX_TOKENS) {
             /* Trim leading whitespace */
             while (*token && isspace((unsigned char)*token)) token++;
-            
+
             /* Trim trailing whitespace (only if string is non-empty) */
             size_t token_len = strlen(token);
             if (token_len > 0) {
@@ -169,11 +218,11 @@ static void init_token_list(void) {
             return;
         }
     }
-    
+
     /* Use default token list (when AWF_ONE_SHOT_TOKENS is unset, empty, or parsed to zero tokens) */
-    /* Note: num_tokens should be 0 when we reach here */
-    for (int i = 0; DEFAULT_SENSITIVE_TOKENS[i] != NULL && num_tokens < MAX_TOKENS; i++) {
-        sensitive_tokens[num_tokens] = strdup(DEFAULT_SENSITIVE_TOKENS[i]);
+    /* Decode obfuscated defaults at runtime */
+    for (int i = 0; i < NUM_DEFAULT_TOKENS && num_tokens < MAX_TOKENS; i++) {
+        sensitive_tokens[num_tokens] = decode_obf(&OBFUSCATED_DEFAULTS[i]);
         if (sensitive_tokens[num_tokens] == NULL) {
             fprintf(stderr, "[one-shot-token] ERROR: Failed to allocate memory for default token name\n");
             /* Clean up previously allocated tokens */
@@ -224,16 +273,16 @@ static int get_token_index(const char *name) {
  */
 static const char *format_token_value(const char *value) {
     static char formatted[8]; /* "abcd..." + null terminator */
-    
+
     if (value == NULL) {
         return "NULL";
     }
-    
+
     size_t len = strlen(value);
     if (len == 0) {
         return "(empty)";
     }
-    
+
     if (len <= 4) {
         /* If 4 chars or less, just show it all with ... */
         snprintf(formatted, sizeof(formatted), "%s...", value);
@@ -241,7 +290,7 @@ static const char *format_token_value(const char *value) {
         /* Show first 4 chars + ... */
         snprintf(formatted, sizeof(formatted), "%.4s...", value);
     }
-    
+
     return formatted;
 }
 
@@ -257,6 +306,7 @@ static const char *format_token_value(const char *value) {
  *
  * For all other variables: passes through to real getenv
  */
+__attribute__((visibility("default")))
 char *getenv(const char *name) {
     ensure_real_getenv();
 
@@ -329,13 +379,53 @@ char *getenv(const char *name) {
  *
  * For all other variables: passes through to real secure_getenv (or getenv if unavailable)
  */
+__attribute__((visibility("default")))
 char *secure_getenv(const char *name) {
     ensure_real_secure_getenv();
     ensure_real_getenv();
     if (real_secure_getenv == NULL) {
         return getenv(name);
     }
-    /* Simple passthrough - no mutex, no token handling.
-     * Token protection is handled by getenv() which is also intercepted. */
-    return real_secure_getenv(name);
+
+    int token_idx = get_token_index(name);
+
+    /* Not a sensitive token - pass through to real secure_getenv */
+    if (token_idx < 0) {
+        return real_secure_getenv(name);
+    }
+
+    /* Sensitive token - handle cached access with secure_getenv semantics */
+    pthread_mutex_lock(&token_mutex);
+
+    char *result = NULL;
+
+    if (!token_accessed[token_idx]) {
+        /* First access - get the real value using secure_getenv */
+        result = real_secure_getenv(name);
+
+        if (result != NULL) {
+            /* Cache the value so subsequent reads succeed after unsetenv */
+            /* Note: This memory is intentionally never freed - it must persist
+             * for the lifetime of the process */
+            token_cache[token_idx] = strdup(result);
+
+            /* Unset the variable from the environment so /proc/self/environ is cleared */
+            unsetenv(name);
+
+            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n",
+                    name, format_token_value(token_cache[token_idx]));
+
+            result = token_cache[token_idx];
+        }
+
+        /* Mark as accessed even if NULL (prevents repeated log messages) */
+        token_accessed[token_idx] = 1;
+    } else {
+        /* Already accessed - return cached value */
+        result = token_cache[token_idx];
+    }
+
+    pthread_mutex_unlock(&token_mutex);
+
+    return result;
 }

@@ -142,6 +142,39 @@ else
   echo "[entrypoint] Dropping CAP_NET_ADMIN capability"
 fi
 
+# Function to unset sensitive tokens from the entrypoint's environment
+# This prevents tokens from being accessible via /proc/1/environ after the agent has started
+unset_sensitive_tokens() {
+  # List of sensitive token environment variables (matches one-shot-token library defaults)
+  local SENSITIVE_TOKENS=(
+    # GitHub tokens
+    "COPILOT_GITHUB_TOKEN"
+    "GITHUB_TOKEN"
+    "GH_TOKEN"
+    "GITHUB_API_TOKEN"
+    "GITHUB_PAT"
+    "GH_ACCESS_TOKEN"
+    "GITHUB_PERSONAL_ACCESS_TOKEN"
+    # OpenAI tokens
+    "OPENAI_API_KEY"
+    "OPENAI_KEY"
+    # Anthropic/Claude tokens
+    "ANTHROPIC_API_KEY"
+    "CLAUDE_API_KEY"
+    "CLAUDE_CODE_OAUTH_TOKEN"
+    # Codex tokens
+    "CODEX_API_KEY"
+  )
+
+  echo "[entrypoint] Unsetting sensitive tokens from parent shell environment..." >&2
+  for token in "${SENSITIVE_TOKENS[@]}"; do
+    if [ -n "${!token}" ]; then
+      unset "$token"
+      echo "[entrypoint] Unset $token from /proc/1/environ" >&2
+    fi
+  done
+}
+
 echo "[entrypoint] Switching to awfuser (UID: $(id -u awfuser), GID: $(id -g awfuser))"
 echo "[entrypoint] Executing command: $@"
 echo ""
@@ -292,6 +325,16 @@ AWFEOF
       echo "[entrypoint] Adding CARGO_HOME/bin to PATH: ${AWF_CARGO_HOME}/bin"
       echo "export PATH=\"${AWF_CARGO_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export CARGO_HOME=\"${AWF_CARGO_HOME}\"" >> "/host${SCRIPT_FILE}"
+      # Also set RUSTUP_HOME if provided (needed for rustc to find toolchain)
+      if [ -n "${AWF_RUSTUP_HOME}" ]; then
+        echo "[entrypoint] Setting RUSTUP_HOME: ${AWF_RUSTUP_HOME}"
+        echo "export RUSTUP_HOME=\"${AWF_RUSTUP_HOME}\"" >> "/host${SCRIPT_FILE}"
+      fi
+    else
+      # Fallback: detect Cargo from default location if CARGO_HOME not provided
+      # This ensures Rust binaries work even when CARGO_HOME env var is not set
+      echo "# Add Cargo bin for Rust if it exists (fallback when CARGO_HOME not provided)" >> "/host${SCRIPT_FILE}"
+      echo "[ -d \"\$HOME/.cargo/bin\" ] && export PATH=\"\$HOME/.cargo/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
     fi
     # Add JAVA_HOME/bin to PATH if provided (for Java on GitHub Actions)
     # Also set LD_LIBRARY_PATH to include Java's lib directory for libjli.so
@@ -403,12 +446,38 @@ AWFEOF
     LD_PRELOAD_CMD="export LD_PRELOAD=${ONE_SHOT_TOKEN_LIB};"
   fi
 
-  exec chroot /host /bin/bash -c "
+  # Setup signal handler to forward signals to agent process and perform cleanup
+  cleanup_and_exit() {
+    if [ -n "$AGENT_PID" ]; then
+      kill -TERM "$AGENT_PID" 2>/dev/null || true
+      wait "$AGENT_PID" 2>/dev/null || true
+    fi
+    exit 143  # Standard exit code for SIGTERM
+  }
+  trap cleanup_and_exit TERM INT
+
+  # SECURITY: Run agent command in background, then unset tokens from parent shell
+  # This prevents tokens from being accessible via /proc/1/environ after agent starts
+  # The one-shot-token library caches tokens in the agent process, so agent can still read them
+  chroot /host /bin/bash -c "
     cd '${CHROOT_WORKDIR}' 2>/dev/null || cd /
     trap '${CLEANUP_CMD}' EXIT
     ${LD_PRELOAD_CMD}
     exec capsh --drop=${CAPS_TO_DROP} --user=${HOST_USER} -- -c 'exec ${SCRIPT_FILE}'
-  "
+  " &
+  AGENT_PID=$!
+
+  # Wait for agent to initialize and cache tokens (5 seconds)
+  sleep 5
+
+  # Unset all sensitive tokens from parent shell environment
+  unset_sensitive_tokens
+
+  # Wait for agent command to complete and capture its exit code
+  wait $AGENT_PID
+  EXIT_CODE=$?
+  trap - TERM INT
+  exit $EXIT_CODE
 else
   # Original behavior - run in container filesystem
   # Drop capabilities and privileges, then execute the user command
@@ -418,10 +487,37 @@ else
   # The order of operations:
   # 1. capsh drops capabilities from the bounding set (cannot be regained)
   # 2. gosu switches to awfuser (drops root privileges)
-  # 3. exec replaces the current process with the user command
+  # 3. Execute the user command (NOT using exec, so we can unset tokens after)
   #
   # Enable one-shot token protection - tokens are cached in memory and
   # unset from the environment so /proc/self/environ is cleared
   export LD_PRELOAD=/usr/local/lib/one-shot-token.so
-  exec capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")"
+
+  # Setup signal handler to forward signals to agent process and perform cleanup
+  cleanup_and_exit() {
+    if [ -n "$AGENT_PID" ]; then
+      kill -TERM "$AGENT_PID" 2>/dev/null || true
+      wait "$AGENT_PID" 2>/dev/null || true
+    fi
+    exit 143  # Standard exit code for SIGTERM
+  }
+  trap cleanup_and_exit TERM INT
+
+  # SECURITY: Run agent command in background, then unset tokens from parent shell
+  # This prevents tokens from being accessible via /proc/1/environ after agent starts
+  # The one-shot-token library caches tokens in the agent process, so agent can still read them
+  capsh --drop=$CAPS_TO_DROP -- -c "exec gosu awfuser $(printf '%q ' "$@")" &
+  AGENT_PID=$!
+
+  # Wait for agent to initialize and cache tokens (5 seconds)
+  sleep 5
+
+  # Unset all sensitive tokens from parent shell environment
+  unset_sensitive_tokens
+
+  # Wait for agent command to complete and capture its exit code
+  wait $AGENT_PID
+  EXIT_CODE=$?
+  trap - TERM INT
+  exit $EXIT_CODE
 fi

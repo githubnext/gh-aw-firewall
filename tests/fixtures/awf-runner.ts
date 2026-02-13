@@ -141,11 +141,14 @@ export class AwfRunner {
     // Extract work directory from stderr logs
     const workDir = this.extractWorkDir(result.stderr || '');
 
+    // Normalize exit code to handle undefined (defaults to 0)
+    const exitCode = result.exitCode ?? 0;
+
     return {
-      exitCode: result.exitCode || 0,
+      exitCode,
       stdout: result.stdout || '',
       stderr: result.stderr || '',
-      success: result.exitCode === 0,
+      success: exitCode === 0,
       timedOut: false,
       workDir,
     };
@@ -285,11 +288,14 @@ export class AwfRunner {
 
     const workDir = this.extractWorkDir(result.stderr || '');
 
+    // Normalize exit code to handle undefined (defaults to 0)
+    const exitCode = result.exitCode ?? 0;
+
     return {
-      exitCode: result.exitCode || 0,
+      exitCode,
       stdout: result.stdout || '',
       stderr: result.stderr || '',
-      success: result.exitCode === 0,
+      success: exitCode === 0,
       timedOut: false,
       workDir,
     };
