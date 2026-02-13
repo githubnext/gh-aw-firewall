@@ -10,6 +10,7 @@ A network firewall for agentic workflows with domain whitelisting. This tool pro
 - **L7 Domain Whitelisting**: Control HTTP/HTTPS traffic at the application layer
 - **Host-Level Enforcement**: Uses iptables DOCKER-USER chain to enforce firewall on ALL containers
 - **Chroot Mode**: Transparent access to host binaries (Python, Node.js, Go) while maintaining network isolation
+- **API Proxy Sidecar**: Optional Node.js-based proxy for secure LLM API credential management (OpenAI Codex, Anthropic Claude) that routes through Squid
 
 ## Requirements
 
@@ -33,6 +34,7 @@ The `--` separator divides firewall options from the command to run.
 - [Quick start](docs/quickstart.md) — install, verify, and run your first command
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
 - [Chroot mode](docs/chroot-mode.md) — use host binaries with network isolation
+- [API proxy sidecar](docs/api-proxy-sidecar.md) — secure credential management for LLM APIs
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [GitHub Actions](docs/github_actions.md) — CI/CD integration and MCP server setup
 - [Environment variables](docs/environment.md) — passing environment variables to containers

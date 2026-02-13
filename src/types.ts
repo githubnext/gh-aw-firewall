@@ -380,6 +380,63 @@ export interface WrapperConfig {
    * @example ['https://github.com/myorg/*', 'https://api.example.com/v1/*']
    */
   allowedUrls?: string[];
+
+  /**
+   * Enable API proxy sidecar for holding authentication credentials
+   *
+   * When true, deploys a Node.js proxy sidecar container that:
+   * - Holds OpenAI and Anthropic API keys securely
+   * - Automatically injects authentication headers
+   * - Routes all traffic through Squid to respect domain whitelisting
+   * - Proxies requests to LLM providers
+   *
+   * The sidecar exposes two endpoints accessible from the agent container:
+   * - http://api-proxy:10000 - OpenAI API proxy (for Codex)
+   * - http://api-proxy:10001 - Anthropic API proxy (for Claude)
+   *
+   * When the corresponding API key is provided, the following environment
+   * variables are set in the agent container:
+   * - OPENAI_BASE_URL=http://api-proxy:10000 (set when OPENAI_API_KEY is provided)
+   * - ANTHROPIC_BASE_URL=http://api-proxy:10001 (set when ANTHROPIC_API_KEY is provided)
+   *
+   * API keys are passed via environment variables:
+   * - OPENAI_API_KEY - Optional OpenAI API key for Codex
+   * - ANTHROPIC_API_KEY - Optional Anthropic API key for Claude
+   *
+   * @default false
+   * @example
+   * ```bash
+   * # Enable API proxy with keys from environment
+   * export OPENAI_API_KEY="sk-..."
+   * export ANTHROPIC_API_KEY="sk-ant-..."
+   * awf --enable-api-proxy --allow-domains api.openai.com,api.anthropic.com -- command
+   * ```
+   */
+  enableApiProxy?: boolean;
+
+  /**
+   * OpenAI API key for Codex (used by API proxy sidecar)
+   *
+   * When enableApiProxy is true, this key is injected into the Node.js sidecar
+   * container and used to authenticate requests to api.openai.com.
+   *
+   * The key is NOT exposed to the agent container - only the proxy URL is provided.
+   *
+   * @default undefined
+   */
+  openaiApiKey?: string;
+
+  /**
+   * Anthropic API key for Claude (used by API proxy sidecar)
+   *
+   * When enableApiProxy is true, this key is injected into the Node.js sidecar
+   * container and used to authenticate requests to api.anthropic.com.
+   *
+   * The key is NOT exposed to the agent container - only the proxy URL is provided.
+   *
+   * @default undefined
+   */
+  anthropicApiKey?: string;
 }
 
 /**

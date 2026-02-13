@@ -59,6 +59,7 @@ export async function ensureFirewallNetwork(): Promise<{
   subnet: string;
   squidIp: string;
   agentIp: string;
+  proxyIp: string;
 }> {
   logger.debug(`Ensuring firewall network '${NETWORK_NAME}' exists...`);
 
@@ -91,6 +92,7 @@ export async function ensureFirewallNetwork(): Promise<{
     subnet: NETWORK_SUBNET,
     squidIp: '172.30.0.10',
     agentIp: '172.30.0.20',
+    proxyIp: '172.30.0.30',
   };
 }
 
@@ -244,6 +246,10 @@ export async function setupHostIptables(squidIp: string, squidPort: number, dnsS
     '-s', squidIp,
     '-j', 'ACCEPT',
   ]);
+
+  // Note: API proxy sidecar (when enabled) does NOT get a firewall exemption.
+  // It routes through Squid via HTTP_PROXY/HTTPS_PROXY environment variables,
+  // ensuring domain whitelisting is enforced by Squid ACLs.
 
   // 2. Allow established and related connections (return traffic)
   await execa('iptables', [

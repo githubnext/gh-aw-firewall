@@ -244,6 +244,53 @@ export function processAgentImageOption(
 }
 
 /**
+ * Result of validating API proxy configuration
+ */
+export interface ApiProxyValidationResult {
+  /** Whether the API proxy should be enabled */
+  enabled: boolean;
+  /** Warning messages to display */
+  warnings: string[];
+  /** Debug messages to display */
+  debugMessages: string[];
+}
+
+/**
+ * Validates the API proxy configuration and returns appropriate messages.
+ * Accepts booleans (not actual keys) to prevent sensitive data from flowing
+ * through to log output (CodeQL: clear-text logging of sensitive information).
+ * @param enableApiProxy - Whether --enable-api-proxy flag was provided
+ * @param hasOpenaiKey - Whether an OpenAI API key is present
+ * @param hasAnthropicKey - Whether an Anthropic API key is present
+ * @returns ApiProxyValidationResult with warnings and debug messages
+ */
+export function validateApiProxyConfig(
+  enableApiProxy: boolean,
+  hasOpenaiKey?: boolean,
+  hasAnthropicKey?: boolean
+): ApiProxyValidationResult {
+  if (!enableApiProxy) {
+    return { enabled: false, warnings: [], debugMessages: [] };
+  }
+
+  const warnings: string[] = [];
+  const debugMessages: string[] = [];
+
+  if (!hasOpenaiKey && !hasAnthropicKey) {
+    warnings.push('⚠️  API proxy enabled but no API keys found in environment');
+    warnings.push('   Set OPENAI_API_KEY or ANTHROPIC_API_KEY to use the proxy');
+  }
+  if (hasOpenaiKey) {
+    debugMessages.push('OpenAI API key detected - will be held securely in sidecar');
+  }
+  if (hasAnthropicKey) {
+    debugMessages.push('Anthropic API key detected - will be held securely in sidecar');
+  }
+
+  return { enabled: true, warnings, debugMessages };
+}
+
+/**
  * Result of validating flag combinations
  */
 export interface FlagValidationResult {
@@ -669,6 +716,13 @@ program
     'Comma-separated list of allowed URL patterns for HTTPS (requires --ssl-bump).\n' +
     '                                   Supports wildcards: https://github.com/myorg/*'
   )
+  .option(
+    '--enable-api-proxy',
+    'Enable API proxy sidecar for holding authentication credentials.\n' +
+    '                                   Deploys a Node.js proxy that injects API keys securely.\n' +
+    '                                   Supports OpenAI (Codex) and Anthropic (Claude) APIs.',
+    false
+  )
   .argument('[args...]', 'Command and arguments to execute (use -- to separate from options)')
   .action(async (args: string[], options) => {
     // Require -- separator for passing command arguments
@@ -930,6 +984,9 @@ program
       allowHostPorts: options.allowHostPorts,
       sslBump: options.sslBump,
       allowedUrls,
+      enableApiProxy: options.enableApiProxy,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     };
 
     // Warn if --env-all is used
@@ -963,11 +1020,27 @@ program
       }
     }
 
-    // Log config with redacted secrets
-    const redactedConfig = {
-      ...config,
-      agentCommand: redactSecrets(config.agentCommand),
-    };
+    // Validate and warn about API proxy configuration
+    // Pass booleans (not actual keys) to prevent sensitive data flow to logger
+    const apiProxyValidation = validateApiProxyConfig(
+      config.enableApiProxy || false,
+      !!config.openaiApiKey,
+      !!config.anthropicApiKey
+    );
+    for (const warning of apiProxyValidation.warnings) {
+      logger.warn(warning);
+    }
+    for (const msg of apiProxyValidation.debugMessages) {
+      logger.debug(msg);
+    }
+
+    // Log config with redacted secrets - remove API keys entirely
+    // to prevent sensitive data from flowing to logger (CodeQL sensitive data logging)
+    const redactedConfig: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (key === 'openaiApiKey' || key === 'anthropicApiKey') continue;
+      redactedConfig[key] = key === 'agentCommand' ? redactSecrets(value as string) : value;
+    }
     logger.debug('Configuration:', JSON.stringify(redactedConfig, null, 2));
     logger.info(`Allowed domains: ${allowedDomains.join(', ')}`);
     if (blockedDomains.length > 0) {
