@@ -1486,12 +1486,13 @@ describe('docker-manager', () => {
         expect(env.OPENAI_API_KEY).toBeUndefined();
       });
 
-      it('should use GHCR image by default', () => {
+      it('should always build api-proxy locally (GHCR image not yet published)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
-        expect(proxy.image).toBe('ghcr.io/github/gh-aw-firewall/api-proxy:latest');
-        expect(proxy.build).toBeUndefined();
+        expect(proxy.build).toBeDefined();
+        expect((proxy.build as any).context).toContain('containers/api-proxy');
+        expect(proxy.image).toBeUndefined();
       });
 
       it('should build locally when buildLocal is true', () => {
@@ -1503,11 +1504,13 @@ describe('docker-manager', () => {
         expect(proxy.image).toBeUndefined();
       });
 
-      it('should use custom registry and tag', () => {
+      it('should always build api-proxy locally regardless of registry/tag settings', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false, imageRegistry: 'my-registry.com', imageTag: 'v1.0.0' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
-        expect(proxy.image).toBe('my-registry.com/api-proxy:v1.0.0');
+        expect(proxy.build).toBeDefined();
+        expect((proxy.build as any).context).toContain('containers/api-proxy');
+        expect(proxy.image).toBeUndefined();
       });
 
       it('should configure healthcheck for api-proxy', () => {

@@ -841,7 +841,8 @@ export function generateDockerCompose(
   }
 
   // Pass API proxy flag to agent for iptables configuration
-  if (config.enableApiProxy) {
+  // Only set when api-proxy will actually be deployed (i.e., at least one API key is provided)
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
     environment.AWF_ENABLE_API_PROXY = '1';
   }
 
@@ -899,8 +900,9 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled
-  if (config.enableApiProxy && networkConfig.proxyIp) {
+  // Add Node.js API proxy sidecar if enabled and at least one API key is provided
+  // The api-proxy service is only useful when there are API keys to proxy
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
     const proxyService: any = {
       container_name: 'awf-api-proxy',
       networks: {
@@ -1117,8 +1119,8 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
-  // When API proxy is enabled, add api-proxy to allowed domains so agent can communicate with it
-  const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp
+  // When API proxy is enabled and has API keys, add api-proxy to allowed domains so agent can communicate with it
+  const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)
     ? [...config.allowedDomains, 'api-proxy']
     : config.allowedDomains;
 
