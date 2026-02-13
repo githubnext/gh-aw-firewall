@@ -1112,8 +1112,13 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
+  // When API proxy is enabled, add api-proxy to allowed domains so agent can communicate with it
+  const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp
+    ? [...config.allowedDomains, 'api-proxy']
+    : config.allowedDomains;
+
   const squidConfig = generateSquidConfig({
-    domains: config.allowedDomains,
+    domains: domainsForSquid,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
     sslBump: config.sslBump,
