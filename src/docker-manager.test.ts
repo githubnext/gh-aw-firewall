@@ -1906,12 +1906,13 @@ describe('docker-manager', () => {
         // May fail after writing configs
       }
 
-      // Verify squid.conf includes api-proxy in allowed domains
+      // Verify squid.conf includes api-proxy hostname and IP in allowed domains
       const squidConfPath = path.join(testDir, 'squid.conf');
       if (fs.existsSync(squidConfPath)) {
         const content = fs.readFileSync(squidConfPath, 'utf-8');
         expect(content).toContain('github.com');
         expect(content).toContain('api-proxy');
+        expect(content).toContain('172.30.0.30'); // api-proxy IP address
       }
     });
 

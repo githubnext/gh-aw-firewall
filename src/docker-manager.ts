@@ -1147,9 +1147,10 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
-  // When API proxy is enabled and has API keys, add api-proxy to allowed domains so agent can communicate with it
+  // When API proxy is enabled and has API keys, add api-proxy hostname and IP to allowed domains so agent can communicate with it
+  // The IP address is necessary because some tools may bypass NO_PROXY settings or use the IP directly
   const domainsForSquid = config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)
-    ? [...config.allowedDomains, 'api-proxy']
+    ? [...config.allowedDomains, 'api-proxy', networkConfig.proxyIp]
     : config.allowedDomains;
 
   const squidConfig = generateSquidConfig({
