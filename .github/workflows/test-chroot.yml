@@ -273,7 +273,7 @@ jobs:
     name: Test Chroot /proc Filesystem
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: test-chroot-languages  # Run after language tests pass
+    # No dependency on languages - runs in parallel for faster CI
 
     steps:
       - name: Checkout repository
@@ -347,7 +347,7 @@ jobs:
     name: Test Chroot Edge Cases
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: test-chroot-languages  # Run after language tests pass
+    # No dependency on languages - runs in parallel for faster CI
 
     steps:
       - name: Checkout repository
