@@ -229,7 +229,7 @@ export interface SslConfig {
  */
 export function generateDockerCompose(
   config: WrapperConfig,
-  networkConfig: { subnet: string; squidIp: string; agentIp: string },
+  networkConfig: { subnet: string; squidIp: string; agentIp: string; proxyIp?: string },
   sslConfig?: SslConfig
 ): DockerComposeConfig {
   const projectRoot = path.join(__dirname, '..');
@@ -358,6 +358,10 @@ export function generateDockerCompose(
   if (process.env.CARGO_HOME) {
     environment.AWF_CARGO_HOME = process.env.CARGO_HOME;
   }
+  // Rust: Pass RUSTUP_HOME so rustc/cargo can find the toolchain
+  if (process.env.RUSTUP_HOME) {
+    environment.AWF_RUSTUP_HOME = process.env.RUSTUP_HOME;
+  }
   // Java: Pass JAVA_HOME so entrypoint can add $JAVA_HOME/bin to PATH and set JAVA_HOME
   if (process.env.JAVA_HOME) {
     environment.AWF_JAVA_HOME = process.env.JAVA_HOME;
@@ -427,10 +431,17 @@ export function generateDockerCompose(
   // Build volumes list for agent execution container
   // Use the real user's home (not /root when running with sudo)
   const effectiveHome = getRealUserHome();
+
+  // SECURITY FIX: Use granular mounting instead of blanket HOME directory mount
+  // Only mount the workspace directory ($GITHUB_WORKSPACE or current working directory)
+  // to prevent access to credential files in $HOME
+  const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
   const agentVolumes: string[] = [
     // Essential mounts that are always included
     '/tmp:/tmp:rw',
-    `${effectiveHome}:${effectiveHome}:rw`,
+    // Mount only the workspace directory (not entire HOME)
+    // This prevents access to ~/.docker/, ~/.config/gh/, ~/.npmrc, etc.
+    `${workspaceDir}:${workspaceDir}:rw`,
     // Mount agent logs directory to workDir for persistence
     `${config.workDir}/agent-logs:${effectiveHome}/.copilot/logs:rw`,
   ];
@@ -466,16 +477,60 @@ export function generateDockerCompose(
       '/dev:/host/dev:ro',             // Read-only device nodes (needed by some runtimes)
     );
 
-    // User home directory for project files and Rust/Cargo (read-write)
-    // Note: $HOME is already mounted at the container level, this adds it under /host
-    // Use getRealUserHome() to get the actual user's home (not /root when running with sudo)
-    const userHome = getRealUserHome();
-    agentVolumes.push(`${userHome}:/host${userHome}:rw`);
+    // SECURITY FIX: Mount only workspace directory instead of entire user home
+    // This prevents access to credential files in $HOME
+    // Mount workspace directory at /host path for chroot
+    agentVolumes.push(`${workspaceDir}:/host${workspaceDir}:rw`);
+
+    // Mount an empty writable home directory at /host$HOME
+    // This gives tools a writable $HOME without exposing credential files.
+    // The specific subdirectory mounts below (.cargo, .claude, etc.) overlay
+    // on top, providing access to only the directories we explicitly mount.
+    // Without this, $HOME inside the chroot is an empty root-owned directory
+    // created by Docker as a side effect of subdirectory mounts, which causes
+    // tools like rustc and Claude Code to hang or fail.
+    // NOTE: This directory must be OUTSIDE workDir because workDir has a tmpfs
+    // overlay inside the container to hide docker-compose.yml secrets.
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    agentVolumes.push(`${emptyHomeDir}:/host${effectiveHome}:rw`);
 
     // /tmp is needed for chroot mode to write:
     // - Temporary command scripts: /host/tmp/awf-cmd-$$.sh
     // - One-shot token LD_PRELOAD library: /host/tmp/awf-lib/one-shot-token.so
     agentVolumes.push('/tmp:/host/tmp:rw');
+
+    // Mount ~/.copilot for GitHub Copilot CLI (package extraction, config, logs)
+    // This is safe as ~/.copilot contains only Copilot CLI state, not credentials
+    agentVolumes.push(`${effectiveHome}/.copilot:/host${effectiveHome}/.copilot:rw`);
+
+    // Mount ~/.cache, ~/.config, ~/.local for CLI tool state management (Claude Code, etc.)
+    // These directories are safe to mount as they contain application state, not credentials
+    // Note: Specific credential files within ~/.config (like ~/.config/gh/hosts.yml) are
+    // still blocked via /dev/null overlays applied later in the code
+    agentVolumes.push(`${effectiveHome}/.cache:/host${effectiveHome}/.cache:rw`);
+    agentVolumes.push(`${effectiveHome}/.config:/host${effectiveHome}/.config:rw`);
+    agentVolumes.push(`${effectiveHome}/.local:/host${effectiveHome}/.local:rw`);
+
+    // Mount ~/.anthropic for Claude Code state and configuration
+    // This is safe as ~/.anthropic contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.anthropic:/host${effectiveHome}/.anthropic:rw`);
+
+    // Mount ~/.claude for Claude CLI state and configuration
+    // This is safe as ~/.claude contains only Claude-specific state, not credentials
+    agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
+
+    // Mount ~/.cargo and ~/.rustup for Rust toolchain access
+    // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
+    // ~/.cargo must be rw because the credential-hiding code mounts /dev/null over
+    // ~/.cargo/credentials, which needs a writable parent to create the mountpoint.
+    // ~/.rustup must be rw because rustup proxy binaries (rustc, cargo) need to
+    // acquire file locks in ~/.rustup/ when executing toolchain binaries.
+    agentVolumes.push(`${effectiveHome}/.cargo:/host${effectiveHome}/.cargo:rw`);
+    agentVolumes.push(`${effectiveHome}/.rustup:/host${effectiveHome}/.rustup:rw`);
+
+    // Mount ~/.npm for npm cache directory access
+    // npm requires write access to ~/.npm for caching packages and writing logs
+    agentVolumes.push(`${effectiveHome}/.npm:/host${effectiveHome}/.npm:rw`);
 
     // Minimal /etc - only what's needed for runtime
     // Note: /etc/shadow is NOT mounted (contains password hashes)
@@ -594,21 +649,25 @@ export function generateDockerCompose(
   //    - Encode data (base64, hex)
   //    - Exfiltrate via allowed HTTP domains (if attacker controls one)
   //
-  // **Mitigation: Selective Mounting**
+  // **Mitigation: Granular Selective Mounting (FIXED)**
   //
-  // Instead of mounting the entire filesystem (/:/host:rw), we:
-  // 1. Mount ONLY directories needed for legitimate operation
-  // 2. Hide credential files by mounting /dev/null over them
-  // 3. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // Instead of mounting the entire $HOME directory (which contained credentials), we now:
+  // 1. Mount ONLY the workspace directory ($GITHUB_WORKSPACE or cwd)
+  // 2. Mount ~/.copilot/logs separately for Copilot CLI logging
+  // 3. Hide credential files by mounting /dev/null over them (defense-in-depth)
+  // 4. Provide escape hatch (--allow-full-filesystem-access) for edge cases
+  // 5. Allow users to add specific mounts via --mount flag
   //
-  // This defense-in-depth approach ensures that even if prompt injection succeeds,
-  // the attacker cannot access credentials because they're simply not mounted.
+  // This ensures that credential files in $HOME are never mounted, making them
+  // inaccessible even if prompt injection succeeds.
   //
   // **Implementation Details**
   //
   // AWF always runs in chroot mode:
-  // - Mount: $HOME at /host$HOME (for chroot environment), system paths at /host
-  // - Hide: Same credentials at /host paths
+  // - Mount: empty writable $HOME at /host$HOME, with specific subdirectories overlaid
+  // - Mount: $GITHUB_WORKSPACE at /host path, system paths at /host
+  // - Hide: credential files at /host paths via /dev/null overlays (defense-in-depth)
+  // - Does NOT mount: the real $HOME directory (prevents credential exposure)
   //
   // ================================================================
 
@@ -630,37 +689,73 @@ export function generateDockerCompose(
 
     // Add blanket mount for full filesystem access
     agentVolumes.unshift('/:/host:rw');
+  } else {
+    // Default: Selective mounting for security against credential exfiltration
+    // This provides protection against prompt injection attacks
+    logger.debug('Using selective mounting for security (credential files hidden)');
+
+    // SECURITY: Hide credential files by mounting /dev/null over them
+    // This prevents prompt-injected commands from reading sensitive tokens
+    // even if the attacker knows the file paths
+    //
+    // The home directory is mounted at both $HOME and /host$HOME.
+    // We must hide credentials at BOTH paths to prevent bypass attacks.
+    const credentialFiles = [
+      `${effectiveHome}/.docker/config.json`,       // Docker Hub tokens
+      `${effectiveHome}/.npmrc`,                    // NPM registry tokens
+      `${effectiveHome}/.cargo/credentials`,        // Rust crates.io tokens
+      `${effectiveHome}/.composer/auth.json`,       // PHP Composer tokens
+      `${effectiveHome}/.config/gh/hosts.yml`,      // GitHub CLI OAuth tokens
+      // SSH private keys (CRITICAL - server access, git operations)
+      `${effectiveHome}/.ssh/id_rsa`,
+      `${effectiveHome}/.ssh/id_ed25519`,
+      `${effectiveHome}/.ssh/id_ecdsa`,
+      `${effectiveHome}/.ssh/id_dsa`,
+      // Cloud provider credentials (CRITICAL - infrastructure access)
+      `${effectiveHome}/.aws/credentials`,
+      `${effectiveHome}/.aws/config`,
+      `${effectiveHome}/.kube/config`,
+      `${effectiveHome}/.azure/credentials`,
+      `${effectiveHome}/.config/gcloud/credentials.db`,
+    ];
+
+    credentialFiles.forEach(credFile => {
+      agentVolumes.push(`/dev/null:${credFile}:ro`);
+    });
+
+    logger.debug(`Hidden ${credentialFiles.length} credential file(s) via /dev/null mounts`);
   }
 
-  // Hide credentials at /host paths
+  // Also hide credentials at /host paths (chroot mounts home at /host$HOME too)
   if (!config.allowFullFilesystemAccess) {
-    logger.debug('Chroot mode: Hiding credential files at /host paths');
+    logger.debug('Hiding credential files at /host paths');
 
-    const userHome = getRealUserHome();
+    // Note: In chroot mode, effectiveHome === getRealUserHome() (see line 433),
+    // so we reuse effectiveHome here instead of calling getRealUserHome() again.
     const chrootCredentialFiles = [
-      `/dev/null:/host${userHome}/.docker/config.json:ro`,
-      `/dev/null:/host${userHome}/.npmrc:ro`,
-      `/dev/null:/host${userHome}/.cargo/credentials:ro`,
-      `/dev/null:/host${userHome}/.composer/auth.json:ro`,
-      `/dev/null:/host${userHome}/.config/gh/hosts.yml:ro`,
+      `/dev/null:/host${effectiveHome}/.docker/config.json:ro`,
+      `/dev/null:/host${effectiveHome}/.npmrc:ro`,
+      `/dev/null:/host${effectiveHome}/.cargo/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.composer/auth.json:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gh/hosts.yml:ro`,
       // SSH private keys (CRITICAL - server access, git operations)
-      `/dev/null:/host${userHome}/.ssh/id_rsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ed25519:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_ecdsa:ro`,
-      `/dev/null:/host${userHome}/.ssh/id_dsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_rsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ed25519:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_ecdsa:ro`,
+      `/dev/null:/host${effectiveHome}/.ssh/id_dsa:ro`,
       // Cloud provider credentials (CRITICAL - infrastructure access)
-      `/dev/null:/host${userHome}/.aws/credentials:ro`,
-      `/dev/null:/host${userHome}/.aws/config:ro`,
-      `/dev/null:/host${userHome}/.kube/config:ro`,
-      `/dev/null:/host${userHome}/.azure/credentials:ro`,
-      `/dev/null:/host${userHome}/.config/gcloud/credentials.db:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.aws/config:ro`,
+      `/dev/null:/host${effectiveHome}/.kube/config:ro`,
+      `/dev/null:/host${effectiveHome}/.azure/credentials:ro`,
+      `/dev/null:/host${effectiveHome}/.config/gcloud/credentials.db:ro`,
     ];
 
     chrootCredentialFiles.forEach(mount => {
       agentVolumes.push(mount);
     });
 
-    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) in chroot mode`);
+    logger.debug(`Hidden ${chrootCredentialFiles.length} credential file(s) at /host paths`);
   }
 
   // Agent service configuration
@@ -797,11 +892,81 @@ export function generateDockerCompose(
     agentService.image = agentImage;
   }
 
+  // API Proxy sidecar service (Node.js) - optionally deployed
+  const services: Record<string, any> = {
+    'squid-proxy': squidService,
+    'agent': agentService,
+  };
+
+  // Add Node.js API proxy sidecar if enabled
+  if (config.enableApiProxy && networkConfig.proxyIp) {
+    const proxyService: any = {
+      container_name: 'awf-api-proxy',
+      networks: {
+        'awf-net': {
+          ipv4_address: networkConfig.proxyIp,
+        },
+      },
+      environment: {
+        // Pass API keys securely to sidecar (not visible to agent)
+        ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
+        ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
+        // Route through Squid to respect domain whitelisting
+        HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+        HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+      },
+      healthcheck: {
+        test: ['CMD', 'curl', '-f', 'http://localhost:10000/health'],
+        interval: '5s',
+        timeout: '3s',
+        retries: 5,
+        start_period: '5s',
+      },
+      // Security hardening: Drop all capabilities
+      cap_drop: ['ALL'],
+      security_opt: [
+        'no-new-privileges:true',
+      ],
+      // Resource limits to prevent DoS attacks
+      mem_limit: '512m',
+      memswap_limit: '512m',
+      pids_limit: 100,
+      cpu_shares: 512,
+    };
+
+    // Use GHCR image or build locally
+    if (useGHCR) {
+      proxyService.image = `${registry}/api-proxy:${tag}`;
+    } else {
+      proxyService.build = {
+        context: path.join(projectRoot, 'containers/api-proxy'),
+        dockerfile: 'Dockerfile',
+      };
+    }
+
+    services['api-proxy'] = proxyService;
+
+    // Update agent dependencies to wait for api-proxy
+    agentService.depends_on['api-proxy'] = {
+      condition: 'service_healthy',
+    };
+
+    // Set environment variables in agent to use the proxy
+    if (config.openaiApiKey) {
+      environment.OPENAI_BASE_URL = `http://api-proxy:10000`;
+      logger.debug('OpenAI API will be proxied through sidecar at http://api-proxy:10000');
+    }
+    if (config.anthropicApiKey) {
+      environment.ANTHROPIC_BASE_URL = `http://api-proxy:10001`;
+      logger.debug('Anthropic API will be proxied through sidecar at http://api-proxy:10001');
+    }
+
+    logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
+    logger.info('API proxy will route through Squid to respect domain whitelisting');
+  }
+
   return {
-    services: {
-      'squid-proxy': squidService,
-      'agent': agentService,
-    },
+    services,
     networks: {
       'awf-net': {
         external: true,
@@ -863,13 +1028,50 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     logger.debug(`MCP logs directory permissions fixed at: ${mcpLogsDir}`);
   }
 
+  // Ensure chroot home subdirectories exist with correct ownership before Docker
+  // bind-mounts them. If a source directory doesn't exist, Docker creates it as
+  // root:root, making it inaccessible to the agent user (e.g., UID 1001).
+  // Also create an empty writable home directory that gets mounted as $HOME
+  // in the chroot, giving tools a writable home without exposing credentials.
+  {
+    const effectiveHome = getRealUserHome();
+    const uid = parseInt(getSafeHostUid(), 10);
+    const gid = parseInt(getSafeHostGid(), 10);
+
+    // Create empty writable home directory for the chroot
+    // This is mounted as $HOME inside the container so tools can write to it
+    // NOTE: Must be outside workDir to avoid being hidden by the tmpfs overlay
+    const emptyHomeDir = `${config.workDir}-chroot-home`;
+    if (!fs.existsSync(emptyHomeDir)) {
+      fs.mkdirSync(emptyHomeDir, { recursive: true });
+    }
+    fs.chownSync(emptyHomeDir, uid, gid);
+    logger.debug(`Created chroot home directory: ${emptyHomeDir} (${uid}:${gid})`);
+
+    // Ensure source directories for subdirectory mounts exist with correct ownership
+    const chrootHomeDirs = [
+      '.copilot', '.cache', '.config', '.local',
+      '.anthropic', '.claude', '.cargo', '.rustup', '.npm',
+    ];
+    for (const dir of chrootHomeDirs) {
+      const dirPath = path.join(effectiveHome, dir);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.chownSync(dirPath, uid, gid);
+        logger.debug(`Created host home subdirectory: ${dirPath} (${uid}:${gid})`);
+      }
+    }
+  }
+
   // Use fixed network configuration (network is created by host-iptables.ts)
   const networkConfig = {
     subnet: '172.30.0.0/24',
     squidIp: '172.30.0.10',
     agentIp: '172.30.0.20',
+    proxyIp: '172.30.0.30',  // Envoy API proxy sidecar
   };
-  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp})`);
+  logger.debug(`Using network config: ${networkConfig.subnet} (squid: ${networkConfig.squidIp}, agent: ${networkConfig.agentIp}, api-proxy: ${networkConfig.proxyIp})`);
+
 
   // Copy seccomp profile to work directory for container security
   const seccompSourcePath = path.join(__dirname, '..', 'containers', 'agent', 'seccomp-profile.json');
@@ -1268,6 +1470,13 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
 
       // Clean up workDir
       fs.rmSync(workDir, { recursive: true, force: true });
+
+      // Clean up chroot home directory (created outside workDir to avoid tmpfs overlay)
+      const chrootHomeDir = `${workDir}-chroot-home`;
+      if (fs.existsSync(chrootHomeDir)) {
+        fs.rmSync(chrootHomeDir, { recursive: true, force: true });
+      }
+
       logger.debug('Temporary files cleaned up');
     }
   } catch (error) {

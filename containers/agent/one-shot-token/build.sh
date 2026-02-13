@@ -1,14 +1,13 @@
 #!/bin/bash
 # Build the one-shot-token LD_PRELOAD library
-# This script compiles the shared library for x86_64 Ubuntu
+# This script compiles the Rust shared library
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_FILE="${SCRIPT_DIR}/one-shot-token.c"
-OUTPUT_FILE="${SCRIPT_DIR}/one-shot-token.so"
+LINK_FILE="${SCRIPT_DIR}/one-shot-token.so"
 
-echo "[build] Compiling one-shot-token.so..."
+echo "[build] Building one-shot-token with Cargo..."
 
 # Compile as a shared library with hardened build flags:
 # -shared: create a shared library
@@ -33,10 +32,10 @@ strip --strip-unneeded "${OUTPUT_FILE}"
 echo "[build] Successfully built: ${OUTPUT_FILE}"
 
 # Verify it's a valid shared library
-if file "${OUTPUT_FILE}" | grep -q "shared object"; then
-    echo "[build] Verified: valid shared object"
+if file "${OUTPUT_FILE}" | grep -qE "shared object|dynamically linked"; then
+    echo "[build] Verified: valid shared library"
 else
-    echo "[build] ERROR: Output is not a valid shared object"
+    echo "[build] ERROR: Output is not a valid shared library"
     exit 1
 fi
 

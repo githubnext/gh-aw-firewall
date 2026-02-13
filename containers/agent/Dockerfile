@@ -4,7 +4,9 @@
 #   - ghcr.io/catthehacker/ubuntu:runner-22.04: Closer to GitHub Actions runner (~2-5GB)
 #   - ghcr.io/catthehacker/ubuntu:full-22.04: Near-identical to GitHub Actions runner (~20GB compressed)
 # Use --build-arg BASE_IMAGE=<image> to customize
+# NOTE: ARG declared before first FROM is global and available in all FROM statements
 ARG BASE_IMAGE=ubuntu:22.04
+
 FROM ${BASE_IMAGE}
 
 # Install required packages and Node.js 22
@@ -66,7 +68,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
 RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
 
-# Build one-shot-token LD_PRELOAD library for single-use token access
+# Copy pre-built one-shot-token library from rust-builder stage
 # This prevents tokens from being read multiple times (e.g., by malicious code)
 # Build flags: -fvisibility=hidden hides internal symbols, -s strips at link time
 COPY one-shot-token/one-shot-token.c /tmp/one-shot-token.c

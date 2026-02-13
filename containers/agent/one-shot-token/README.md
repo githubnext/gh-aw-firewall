@@ -170,11 +170,13 @@ RUN gcc -shared -fPIC -fvisibility=hidden -O2 -Wall -s \
 
 ### Locally (for testing)
 
+Requires Rust toolchain (install via [rustup](https://rustup.rs/)):
+
 ```bash
 ./build.sh
 ```
 
-This produces `one-shot-token.so` in the current directory.
+This builds `target/release/libone_shot_token.so` and creates a symlink `one-shot-token.so` for backwards compatibility.
 
 ### Binary Hardening
 
@@ -293,6 +295,20 @@ Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` s
 - **In-process getenv() calls**: Since values are cached, any code in the same process can still call `getenv()` and get the cached token
 - **Static linking**: Programs statically linked with libc bypass LD_PRELOAD
 - **Direct syscalls**: Code that reads `/proc/self/environ` directly (without getenv) bypasses this protection
+- **Task-level /proc exposure**: `/proc/PID/task/TID/environ` may still expose tokens even after `unsetenv()`. The library checks and logs warnings about this exposure.
+
+### Environment Verification
+
+After calling `unsetenv()` to clear tokens, the library automatically verifies whether the token was successfully removed by directly checking the process's environment pointer. This works correctly in both regular and chroot modes.
+
+**Log messages:**
+- `INFO: Token <name> cleared from process environment` - Token successfully cleared (✓ secure)
+- `WARNING: Token <name> still exposed in process environment` - Token still visible (⚠ security concern)
+- `INFO: Token <name> cleared (environ is null)` - Environment pointer is null
+
+This verification runs automatically after `unsetenv()` on first access to each sensitive token and helps identify potential security issues with environment exposure.
+
+**Note on chroot mode:** The verification uses the process's `environ` pointer directly rather than reading from `/proc/self/environ`. This is necessary because in chroot mode, `/proc` may be bind-mounted from the host and show stale environment data.
 
 ### Defense in Depth
 
@@ -304,7 +320,7 @@ This library is one layer in AWF's security model:
 
 ## Limitations
 
-- **x86_64 Linux only**: The library is compiled for x86_64 Ubuntu
+- **Linux only**: The library is compiled for Linux (x86_64 and potentially other architectures via Rust cross-compilation)
 - **glibc programs only**: Programs using musl libc or statically linked programs are not affected
 - **Single process**: Child processes inherit the LD_PRELOAD but have their own token state and cache (each starts fresh)
 

@@ -19,6 +19,7 @@ network:
     - defaults
     - github
     - rust
+    - crates.io
 tools:
   bash:
     - "*"

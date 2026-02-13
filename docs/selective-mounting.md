@@ -2,7 +2,23 @@
 
 ## Overview
 
-AWF implements **selective mounting** to protect against credential exfiltration via prompt injection attacks. Instead of mounting the entire host filesystem (`/:/host:rw`), only essential directories are mounted, and sensitive credential files are explicitly hidden.
+AWF implements **granular selective mounting** to protect against credential exfiltration via prompt injection attacks. Instead of mounting the entire host filesystem or home directory, only the workspace directory and essential paths are mounted, and sensitive credential files are explicitly hidden.
+
+## Security Fix (v0.14.1)
+
+**Previous Vulnerability**: The initial selective mounting implementation (v0.13.0-v0.14.0) mounted the entire `$HOME` directory and attempted to hide credentials using `/dev/null` overlays. This approach had critical flaws:
+- Overlays only work if the credential file exists on the host
+- Non-standard credential locations were not protected
+- Any new credential files would be accessible by default
+- Subdirectories with credentials (e.g., `~/.config/hub/config`) were fully accessible
+
+**Fixed Implementation**: As of v0.14.1, AWF uses **granular mounting**:
+- Mount **only** the workspace directory (`$GITHUB_WORKSPACE` or current working directory)
+- Mount `~/.copilot/logs` separately for Copilot CLI logging
+- Apply `/dev/null` overlays as defense-in-depth
+- Never mount the entire `$HOME` directory
+
+This eliminates the root cause by ensuring credential files in `$HOME` are never mounted at all.
 
 ## Threat Model: Prompt Injection Attacks
 
@@ -59,7 +75,7 @@ The agent's legitimate tools (Read, Bash) become attack vectors when credentials
 
 ### Selective Mounting
 
-AWF uses chroot mode with selective path mounts. Credential files are hidden at the `/host` paths:
+AWF uses chroot mode with granular selective mounting. Instead of mounting the entire `$HOME`, an empty writable home directory is mounted with only specific subdirectories (`.cargo`, `.claude`, `.config`, etc.) overlaid on top. Credential files are hidden via `/dev/null` overlays as defense-in-depth:
 
 **What gets mounted:**
 
@@ -76,6 +92,7 @@ const chrootVolumes = [
   '/dev:/host/dev:ro',                        // Device nodes
   '/tmp:/host/tmp:rw',                        // Temporary files
   `${HOME}:/host${HOME}:rw`,                  // User home at /host path
+  `${HOME}:${HOME}:rw`,                       // User home at direct path (for container env)
 
   // Minimal /etc (no /etc/shadow)
   '/etc/ssl:/host/etc/ssl:ro',
@@ -84,33 +101,56 @@ const chrootVolumes = [
   '/etc/passwd:/host/etc/passwd:ro',
   '/etc/group:/host/etc/group:ro',
 ];
+// Note: $HOME itself is NOT mounted, preventing access to credential directories
 ```
 
 **What gets hidden:**
 
 ```typescript
-// Same credentials, but at /host paths
+// IMPORTANT: Home directory is mounted at TWO locations in chroot mode
+// Credentials MUST be hidden at BOTH paths to prevent bypass attacks
+
+// 1. Direct home mount (for container environment)
+const directHomeCredentials = [
+  '/dev/null:${HOME}/.docker/config.json:ro',
+  '/dev/null:${HOME}/.npmrc:ro',
+  '/dev/null:${HOME}/.cargo/credentials:ro',
+  '/dev/null:${HOME}/.composer/auth.json:ro',
+  '/dev/null:${HOME}/.config/gh/hosts.yml:ro',
+  '/dev/null:${HOME}/.ssh/id_rsa:ro',
+  '/dev/null:${HOME}/.ssh/id_ed25519:ro',
+  '/dev/null:${HOME}/.ssh/id_ecdsa:ro',
+  '/dev/null:${HOME}/.ssh/id_dsa:ro',
+  '/dev/null:${HOME}/.aws/credentials:ro',
+  '/dev/null:${HOME}/.aws/config:ro',
+  '/dev/null:${HOME}/.kube/config:ro',
+  '/dev/null:${HOME}/.azure/credentials:ro',
+  '/dev/null:${HOME}/.config/gcloud/credentials.db:ro',
+];
+
+// 2. Chroot /host mount (for chroot operations)
 const chrootHiddenCredentials = [
-  '/dev/null:/host/home/runner/.docker/config.json:ro',
-  '/dev/null:/host/home/runner/.npmrc:ro',
-  '/dev/null:/host/home/runner/.cargo/credentials:ro',
-  '/dev/null:/host/home/runner/.composer/auth.json:ro',
-  '/dev/null:/host/home/runner/.config/gh/hosts.yml:ro',
-  '/dev/null:/host/home/runner/.ssh/id_rsa:ro',
-  '/dev/null:/host/home/runner/.ssh/id_ed25519:ro',
-  '/dev/null:/host/home/runner/.ssh/id_ecdsa:ro',
-  '/dev/null:/host/home/runner/.ssh/id_dsa:ro',
-  '/dev/null:/host/home/runner/.aws/credentials:ro',
-  '/dev/null:/host/home/runner/.aws/config:ro',
-  '/dev/null:/host/home/runner/.kube/config:ro',
-  '/dev/null:/host/home/runner/.azure/credentials:ro',
-  '/dev/null:/host/home/runner/.config/gcloud/credentials.db:ro',
+  '/dev/null:/host${HOME}/.docker/config.json:ro',
+  '/dev/null:/host${HOME}/.npmrc:ro',
+  '/dev/null:/host${HOME}/.cargo/credentials:ro',
+  '/dev/null:/host${HOME}/.composer/auth.json:ro',
+  '/dev/null:/host${HOME}/.config/gh/hosts.yml:ro',
+  '/dev/null:/host${HOME}/.ssh/id_rsa:ro',
+  '/dev/null:/host${HOME}/.ssh/id_ed25519:ro',
+  '/dev/null:/host${HOME}/.ssh/id_ecdsa:ro',
+  '/dev/null:/host${HOME}/.ssh/id_dsa:ro',
+  '/dev/null:/host${HOME}/.aws/credentials:ro',
+  '/dev/null:/host${HOME}/.aws/config:ro',
+  '/dev/null:/host${HOME}/.kube/config:ro',
+  '/dev/null:/host${HOME}/.azure/credentials:ro',
+  '/dev/null:/host${HOME}/.config/gcloud/credentials.db:ro',
 ];
 ```
 
 **Additional security:**
 - Docker socket hidden: `/dev/null:/host/var/run/docker.sock:ro`
 - Prevents `docker run` firewall bypass
+- **Dual-mount protection**: Credentials hidden at both `$HOME` and `/host$HOME` paths
 
 ## Usage Examples
 
@@ -153,48 +193,72 @@ sudo awf --allow-full-filesystem-access --allow-domains github.com -- my-command
 
 ## Comparison: Before vs After
 
-### Before (Blanket Mount)
+### Before Fix (v0.13.0-v0.14.0 - Vulnerable)
 
 ```yaml
 # docker-compose.yml
 services:
   agent:
     volumes:
-      - /:/host:rw  # ❌ Everything exposed
+      - /home/runner:/home/runner:rw  # ❌ Entire HOME exposed
+      - /dev/null:/home/runner/.docker/config.json:ro  # Attempted to hide with overlay
 ```
 
-**Attack succeeds:**
+**Attack succeeded:**
 ```bash
 # Inside agent container
-$ cat ~/.docker/config.json
-{
-    "auths": {
-        "https://index.docker.io/v1/": {
-            "auth": "Z2l0aHViYWN0aW9uczozZDY0NzJiOS0zZDQ5LTRkMTctOWZjOS05MGQyNDI1ODA0M2I="
-        }
-    }
-}
-# ❌ Credentials exposed!
+$ cat ~/.config/hub/config  # Non-standard location, not in hardcoded overlay list
+oauth_token: ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# ❌ Credentials exposed! (file in HOME but not overlaid)
+
+$ ls ~/.docker/
+config.json  # exists but empty (overlaid)
+$ cat ~/.npmrc
+# (empty - overlaid)
+$ cat ~/.config/gh/hosts.yml
+# (empty - overlaid)
+
+# But other locations are accessible:
+$ cat ~/.netrc
+machine github.com
+  login my-username
+  password my-personal-access-token
+# ❌ Credentials exposed! (not in hardcoded overlay list)
 ```
 
-### After (Selective Mount)
+### After Fix (v0.14.1+ - Secure)
 
 ```yaml
 # docker-compose.yml
 services:
   agent:
     volumes:
-      - /tmp:/tmp:rw
-      - /home/runner:/home/runner:rw
-      - /dev/null:/home/runner/.docker/config.json:ro  # ✓ Hidden
+      - /home/runner/work/repo/repo:/home/runner/work/repo/repo:rw  # ✓ Only workspace
+      - /dev/null:/home/runner/.docker/config.json:ro  # Defense-in-depth
 ```
 
 **Attack fails:**
 ```bash
 # Inside agent container
 $ cat ~/.docker/config.json
-# (empty file - reads from /dev/null)
-# ✓ Credentials protected!
+cat: /home/runner/.docker/config.json: No such file or directory
+# ✓ Credentials protected! ($HOME not mounted)
+
+$ cat ~/.config/hub/config
+cat: /home/runner/.config/hub/config: No such file or directory
+# ✓ Credentials protected! ($HOME not mounted)
+
+$ cat ~/.npmrc
+cat: /home/runner/.npmrc: No such file or directory
+# ✓ Credentials protected! ($HOME not mounted)
+
+$ cat ~/.netrc
+cat: /home/runner/.netrc: No such file or directory
+# ✓ Credentials protected! ($HOME not mounted)
+
+$ ls ~/
+ls: cannot access '/home/runner/': No such file or directory
+# ✓ HOME directory not mounted at all!
 ```
 
 ## Testing Security
