@@ -22,6 +22,7 @@ echo ""
 sudo awf \
   --allow-domains github.com \
   --log-level debug \
+  --build-local \
   -- curl -s https://api.github.com/zen
 
 echo ""
