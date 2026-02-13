@@ -127,12 +127,12 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
-# Bypass Squid for api-proxy when API proxy is enabled.
+# Bypass Squid for api-proxy when API proxy IP is configured.
 # The agent needs to connect directly to api-proxy (not through Squid).
 # The api-proxy then routes outbound traffic through Squid to enforce domain whitelisting.
 # Architecture: agent -> api-proxy (direct) -> Squid -> internet
 # Use AWF_API_PROXY_IP environment variable set by docker-manager (172.30.0.30)
-if [ -n "$AWF_ENABLE_API_PROXY" ] && [ -n "$AWF_API_PROXY_IP" ]; then
+if [ -n "$AWF_API_PROXY_IP" ]; then
   if is_valid_ipv4 "$AWF_API_PROXY_IP"; then
     echo "[iptables] Allow direct traffic to api-proxy (${AWF_API_PROXY_IP}) - bypassing Squid..."
     # NAT: skip DNAT to Squid for all traffic to api-proxy
@@ -140,8 +140,6 @@ if [ -n "$AWF_ENABLE_API_PROXY" ] && [ -n "$AWF_API_PROXY_IP" ]; then
   else
     echo "[iptables] WARNING: AWF_API_PROXY_IP has invalid format '${AWF_API_PROXY_IP}', skipping api-proxy bypass"
   fi
-elif [ -n "$AWF_ENABLE_API_PROXY" ]; then
-  echo "[iptables] WARNING: AWF_ENABLE_API_PROXY is set but AWF_API_PROXY_IP is not set"
 fi
 
 # Bypass Squid for host.docker.internal when host access is enabled.
