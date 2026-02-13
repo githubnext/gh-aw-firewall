@@ -248,6 +248,54 @@ fn check_task_environ_exposure(token_name: &str) {
     }
 }
 
+/// Manually clear a variable from the environ array
+///
+/// This function removes an environment variable by directly manipulating
+/// the environ pointer. This is done in addition to calling unsetenv()
+/// to ensure the variable is completely cleared from the process environment.
+///
+/// # Safety
+/// This function directly manipulates the environ pointer, which is safe
+/// because:
+/// 1. We only shift pointers within the array, not modify the strings themselves
+/// 2. The environ array is null-terminated, so we won't overrun
+/// 3. This must be called while holding the STATE mutex to prevent races
+unsafe fn clear_from_environ(token_name: &str) {
+    if environ.is_null() {
+        return;
+    }
+
+    let token_prefix = format!("{}=", token_name);
+    let token_prefix_bytes = token_prefix.as_bytes();
+
+    let mut env_ptr = environ;
+
+    // Find and remove the variable from environ array
+    while !(*env_ptr).is_null() {
+        let env_cstr = CStr::from_ptr(*env_ptr);
+        let env_bytes = env_cstr.to_bytes();
+
+        // Check if this entry starts with "token_name="
+        if env_bytes.len() >= token_prefix_bytes.len()
+            && &env_bytes[..token_prefix_bytes.len()] == token_prefix_bytes {
+            // Found the variable - shift remaining entries left
+            let mut shift = env_ptr;
+            loop {
+                let next = shift.add(1);
+                *shift = *next;
+                if (*shift).is_null() {
+                    break;
+                }
+                shift = next;
+            }
+            // Don't increment env_ptr since we just shifted entries
+            return;
+        }
+        env_ptr = env_ptr.add(1);
+    }
+}
+
+
 /// Core implementation for cached token access
 ///
 /// # Safety
@@ -322,6 +370,9 @@ unsafe fn handle_getenv_impl(
 
     // Unset the environment variable so it's no longer accessible
     libc::unsetenv(name);
+
+    // Also manually clear from environ array to ensure complete removal
+    clear_from_environ(name_str);
 
     // Verify the token was cleared from the process environment
     check_task_environ_exposure(name_str);

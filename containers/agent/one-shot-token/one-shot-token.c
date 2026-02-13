@@ -295,6 +295,41 @@ static const char *format_token_value(const char *value) {
 }
 
 /**
+ * Manually clear a variable from the environ array
+ *
+ * This function removes an environment variable by directly manipulating
+ * the environ pointer. This is done in addition to calling unsetenv()
+ * to ensure the variable is completely cleared from the process environment.
+ *
+ * Note: This function assumes token_mutex is already held by the caller.
+ */
+static void clear_from_environ(const char *name) {
+    extern char **environ;
+    if (environ == NULL || name == NULL) {
+        return;
+    }
+
+    size_t name_len = strlen(name);
+    char **env_ptr = environ;
+
+    /* Find and remove the variable from environ array */
+    while (*env_ptr != NULL) {
+        /* Check if this entry starts with "name=" */
+        if (strncmp(*env_ptr, name, name_len) == 0 && (*env_ptr)[name_len] == '=') {
+            /* Found the variable - shift remaining entries left */
+            char **shift = env_ptr;
+            while (*shift != NULL) {
+                *shift = *(shift + 1);
+                shift++;
+            }
+            /* Don't increment env_ptr since we just shifted entries */
+            return;
+        }
+        env_ptr++;
+    }
+}
+
+/**
  * Intercepted getenv function
  *
  * For sensitive tokens:
@@ -347,6 +382,9 @@ char *getenv(const char *name) {
 
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
+
+            /* Also manually clear from environ array to ensure complete removal */
+            clear_from_environ(name);
 
             fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n",
                     name, format_token_value(token_cache[token_idx]));
@@ -411,6 +449,9 @@ char *secure_getenv(const char *name) {
 
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
+
+            /* Also manually clear from environ array to ensure complete removal */
+            clear_from_environ(name);
 
             fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n",
                     name, format_token_value(token_cache[token_idx]));
