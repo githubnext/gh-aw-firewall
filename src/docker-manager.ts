@@ -1174,6 +1174,19 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
   fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
+
+  // Log BASE_URL environment variables for debugging
+  const agentEnv = dockerCompose.services['awf-agent']?.environment || {};
+  if (agentEnv.ANTHROPIC_BASE_URL) {
+    logger.info(`Agent ANTHROPIC_BASE_URL set to: ${agentEnv.ANTHROPIC_BASE_URL}`);
+  } else {
+    logger.info('Agent ANTHROPIC_BASE_URL: not set (using default)');
+  }
+  if (agentEnv.OPENAI_BASE_URL) {
+    logger.info(`Agent OPENAI_BASE_URL set to: ${agentEnv.OPENAI_BASE_URL}`);
+  } else {
+    logger.info('Agent OPENAI_BASE_URL: not set (using default)');
+  }
 }
 
 /**
