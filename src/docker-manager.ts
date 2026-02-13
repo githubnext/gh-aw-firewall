@@ -320,12 +320,16 @@ export function generateDockerCompose(
     'SUDO_GID',       // Sudo metadata
   ]);
 
-  // When api-proxy is enabled, exclude OpenAI API key from agent environment
-  // The key is passed to the api-proxy sidecar only (not to the agent)
-  // Note: ANTHROPIC_API_KEY is NOT excluded - Claude uses it directly in the agent container
-  const willUseApiProxy = config.enableApiProxy && config.openaiApiKey;
+  // When api-proxy is enabled, exclude API keys from agent environment
+  // The keys are passed to the api-proxy sidecar only (not to the agent)
+  const willUseApiProxy = config.enableApiProxy && (config.openaiApiKey || config.anthropicApiKey);
   if (willUseApiProxy) {
-    EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+    if (config.openaiApiKey) {
+      EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+    }
+    if (config.anthropicApiKey) {
+      EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
+    }
   }
 
   // Start with required/overridden environment variables
@@ -911,9 +915,23 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled and OpenAI API key is provided
-  // The api-proxy service is only used for OpenAI/Codex (Claude uses ANTHROPIC_API_KEY directly in agent)
-  if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
+  // Add Nginx API proxy sidecar if enabled and at least one API key is provided
+  // The api-proxy service handles both OpenAI and Anthropic API requests
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+    const proxyEnv: Record<string, string> = {
+      // Route through Squid to respect domain whitelisting
+      HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+      HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
+    };
+
+    // Pass API keys securely to sidecar (not visible to agent)
+    if (config.openaiApiKey) {
+      proxyEnv.OPENAI_API_KEY = config.openaiApiKey;
+    }
+    if (config.anthropicApiKey) {
+      proxyEnv.ANTHROPIC_API_KEY = config.anthropicApiKey;
+    }
+
     const proxyService: any = {
       container_name: 'awf-api-proxy',
       networks: {
@@ -921,13 +939,7 @@ export function generateDockerCompose(
           ipv4_address: networkConfig.proxyIp,
         },
       },
-      environment: {
-        // Pass OpenAI API key securely to sidecar (not visible to agent)
-        OPENAI_API_KEY: config.openaiApiKey,
-        // Route through Squid to respect domain whitelisting
-        HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-        HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
-      },
+      environment: proxyEnv,
       healthcheck: {
         test: ['CMD', 'curl', '-f', 'http://localhost:10000/health'],
         interval: '5s',
@@ -977,15 +989,18 @@ export function generateDockerCompose(
     // Without this, the final DROP rule in setup-iptables.sh blocks port 10000/10001
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
-    // Set environment variables in agent to use the OpenAI proxy
+    // Set environment variables in agent to use the API proxy
     // Use IP address instead of hostname to avoid DNS resolution issues
-    // Note: ANTHROPIC_BASE_URL is NOT set - Claude uses ANTHROPIC_API_KEY directly
     if (config.openaiApiKey) {
       environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
       logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
     }
+    if (config.anthropicApiKey) {
+      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
+      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
+    }
 
-    logger.info('API proxy sidecar enabled for OpenAI/Codex - key will be held securely in sidecar container');
+    logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
     logger.info('API proxy will route through Squid to respect domain whitelisting');
   }
 

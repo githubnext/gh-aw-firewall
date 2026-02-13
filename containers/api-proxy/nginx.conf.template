@@ -1,0 +1,105 @@
+# Nginx configuration for API proxy
+# Routes OpenAI and Anthropic API requests through Squid proxy with token injection
+
+worker_processes auto;
+pid /tmp/nginx.pid;
+error_log stderr notice;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    access_log off;
+
+    # Temporary paths that work without root permissions
+    client_body_temp_path /tmp/client_temp;
+    proxy_temp_path       /tmp/proxy_temp;
+    fastcgi_temp_path     /tmp/fastcgi_temp;
+    uwsgi_temp_path       /tmp/uwsgi_temp;
+    scgi_temp_path        /tmp/scgi_temp;
+
+    # Use environment variables for API keys (set at runtime via envsubst)
+    # These will be replaced with actual values from environment
+    map $http_host $api_key {
+        default "";
+    }
+
+    # OpenAI API proxy on port 10000
+    server {
+        listen 10000;
+        server_name _;
+
+        # Health check endpoint
+        location = /health {
+            access_log off;
+            return 200 "OK\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Proxy all other requests to OpenAI API
+        location / {
+            # Set proxy headers
+            proxy_set_header Host api.openai.com;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Inject Authorization header with OpenAI API key
+            proxy_set_header Authorization "Bearer ${OPENAI_API_KEY}";
+
+            # Route through Squid proxy
+            proxy_pass https://api.openai.com;
+            proxy_http_version 1.1;
+            proxy_ssl_server_name on;
+
+            # Timeouts
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+
+            # Buffer settings
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+    }
+
+    # Anthropic API proxy on port 10001
+    server {
+        listen 10001;
+        server_name _;
+
+        # Health check endpoint
+        location = /health {
+            access_log off;
+            return 200 "OK\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Proxy all other requests to Anthropic API
+        location / {
+            # Set proxy headers
+            proxy_set_header Host api.anthropic.com;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Inject x-api-key header with Anthropic API key
+            proxy_set_header x-api-key "${ANTHROPIC_API_KEY}";
+
+            # Route through Squid proxy
+            proxy_pass https://api.anthropic.com;
+            proxy_http_version 1.1;
+            proxy_ssl_server_name on;
+
+            # Timeouts
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+
+            # Buffer settings
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+    }
+}
