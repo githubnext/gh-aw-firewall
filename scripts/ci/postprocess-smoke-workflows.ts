@@ -94,6 +94,11 @@ const shallowDepthRegex = /^(\s+)depth: 1\n/gm;
 // instead of pre-built GHCR images that may be stale.
 const imageTagRegex = /--image-tag\s+[0-9.]+\s+--skip-pull/g;
 
+// Remove ANTHROPIC_API_KEY from agent environment (security: API key should only be in api-proxy sidecar)
+// The API key is passed to the api-proxy container by awf CLI when --enable-api-proxy is set.
+// Match the env key + value line with any indentation
+const anthropicApiKeyRegex = /^(\s*)ANTHROPIC_API_KEY:\s+\$\{\{\s*secrets\.ANTHROPIC_API_KEY\s*\}\}\n/gm;
+
 for (const workflowPath of workflowPaths) {
   let content = fs.readFileSync(workflowPath, 'utf-8');
   let modified = false;
@@ -137,6 +142,14 @@ for (const workflowPath of workflowPaths) {
     content = content.replace(imageTagRegex, '--build-local');
     modified = true;
     console.log(`  Replaced ${imageTagMatches.length} --image-tag/--skip-pull with --build-local`);
+  }
+
+  // Remove ANTHROPIC_API_KEY from agent environment (security issue: key should only be in api-proxy)
+  const apiKeyMatches = content.match(anthropicApiKeyRegex);
+  if (apiKeyMatches) {
+    content = content.replace(anthropicApiKeyRegex, '');
+    modified = true;
+    console.log(`  Removed ${apiKeyMatches.length} ANTHROPIC_API_KEY env var(s) from agent`);
   }
 
   if (modified) {

@@ -1,32 +1,28 @@
-# Node.js API proxy for credential management
+# Kong API Gateway for credential management
 # Routes through Squid to respect domain whitelisting
-FROM node:22-alpine
+FROM kong:3.5-alpine
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
+# Install curl for healthchecks and envsubst for config templating
+USER root
+RUN apk add --no-cache curl gettext
 
-# Create app directory
-WORKDIR /app
+# Create configuration directory
+RUN mkdir -p /etc/kong
 
-# Copy package files
-COPY package*.json ./
+# Copy Kong declarative configuration template
+COPY kong.yml.template /etc/kong/kong.yml.template
 
-# Install dependencies
-RUN npm ci --only=production
+# Copy entrypoint script that generates config from environment
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Copy application files
-COPY server.js ./
-
-# Create non-root user
-RUN addgroup -S apiproxy && adduser -S apiproxy -G apiproxy
-
-# Switch to non-root user
-USER apiproxy
+# Switch back to kong user
+USER kong
 
 # Expose ports
-# 10000 - OpenAI API proxy
-# 10001 - Anthropic API proxy
-EXPOSE 10000 10001
+# 8000 - HTTP proxy port (we'll use this for OpenAI API)
+# 8001 - Admin API (for health checks)
+EXPOSE 8000 8001
 
-# Start the proxy server
-CMD ["node", "server.js"]
+# Use our custom entrypoint that generates config from env vars
+ENTRYPOINT ["/entrypoint.sh"]

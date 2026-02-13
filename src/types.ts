@@ -384,24 +384,24 @@ export interface WrapperConfig {
   /**
    * Enable API proxy sidecar for holding authentication credentials
    *
-   * When true, deploys a Node.js proxy sidecar container that:
-   * - Holds OpenAI and Anthropic API keys securely
+   * When true, deploys a Kong API Gateway sidecar container that:
+   * - Holds OpenAI API key securely
    * - Automatically injects authentication headers
    * - Routes all traffic through Squid to respect domain whitelisting
    * - Proxies requests to LLM providers
    *
-   * The sidecar exposes two endpoints accessible from the agent container:
-   * - http://api-proxy:10000 - OpenAI API proxy (for Codex)
-   * - http://api-proxy:10001 - Anthropic API proxy (for Claude)
+   * The sidecar exposes Kong Gateway accessible from the agent container:
+   * - http://172.30.0.30:8000 - OpenAI API proxy (for Codex)
    *
-   * When the corresponding API key is provided, the following environment
-   * variables are set in the agent container:
-   * - OPENAI_BASE_URL=http://api-proxy:10000 (set when OPENAI_API_KEY is provided)
-   * - ANTHROPIC_BASE_URL=http://api-proxy:10001 (set when ANTHROPIC_API_KEY is provided)
+   * When OPENAI_API_KEY is provided, the following environment variable is set:
+   * - OPENAI_BASE_URL=http://172.30.0.30:8000
+   *
+   * Note: Anthropic/Claude API key (ANTHROPIC_API_KEY) is passed directly to the
+   * agent container and does not use the api-proxy sidecar.
    *
    * API keys are passed via environment variables:
-   * - OPENAI_API_KEY - Optional OpenAI API key for Codex
-   * - ANTHROPIC_API_KEY - Optional Anthropic API key for Claude
+   * - OPENAI_API_KEY - Optional OpenAI API key for Codex (passed to Kong)
+   * - ANTHROPIC_API_KEY - Optional Anthropic API key for Claude (passed to agent)
    *
    * @default true
    * @example
@@ -546,6 +546,32 @@ export interface SquidConfig {
    * @example "3000-3010,8000-8090"
    */
   allowHostPorts?: string;
+
+  /**
+   * Whether Kong API Gateway sidecar is enabled
+   *
+   * When true, adds ports 8000 (OpenAI proxy) and 8001 (Kong admin) to Safe_ports ACL
+   * to allow traffic to the Kong Gateway sidecar container.
+   *
+   * @default false
+   */
+  enableApiProxy?: boolean;
+
+  /**
+   * List of IP addresses to allow (in addition to domains)
+   *
+   * IP addresses must be specified separately from domains because
+   * Squid uses different ACL types:
+   * - domains use 'dstdomain' ACL type
+   * - IP addresses use 'dst' ACL type
+   *
+   * This is typically used for:
+   * - api-proxy sidecar (172.30.0.30)
+   * - Other container-to-container communication
+   *
+   * @example ['172.30.0.30', '10.0.0.5']
+   */
+  allowedIPs?: string[];
 }
 
 /**

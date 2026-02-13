@@ -53,10 +53,31 @@ interface PatternsByProtocol {
 }
 
 /**
- * Helper to add leading dot to domain for Squid subdomain matching
+ * Helper to format domain for Squid ACL matching
+ *
+ * For fully qualified domains (containing dots), adds a leading dot to enable
+ * subdomain matching (e.g., .github.com matches both github.com and api.github.com).
+ *
+ * For bare hostnames (no dots, like Docker container names), returns as-is without
+ * a leading dot since bare hostnames have no subdomains to match.
+ *
+ * @param domain - Domain or hostname to format
+ * @returns Formatted string for Squid dstdomain ACL
  */
 function formatDomainForSquid(domain: string): string {
-  return domain.startsWith('.') ? domain : `.${domain}`;
+  // Already has leading dot - return as-is
+  if (domain.startsWith('.')) {
+    return domain;
+  }
+
+  // Bare hostname (no dots) - return as-is (e.g., 'api-proxy', 'localhost')
+  // These are typically Docker container names or single-word hostnames
+  if (!domain.includes('.')) {
+    return domain;
+  }
+
+  // Fully qualified domain - add leading dot for subdomain matching
+  return `.${domain}`;
 }
 
 /**
@@ -205,7 +226,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, enableApiProxy, allowedIPs } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -293,6 +314,17 @@ export function generateSquidConfig(config: SquidConfig): string {
     }
   }
 
+  // === IP ADDRESSES (BOTH PROTOCOLS) ===
+  // IP addresses must use 'dst' ACL type, not 'dstdomain'
+  // This is required for api-proxy and other container-to-container communication
+  if (allowedIPs && allowedIPs.length > 0) {
+    aclLines.push('');
+    aclLines.push('# ACL definitions for allowed IP addresses (HTTP and HTTPS)');
+    for (const ip of allowedIPs) {
+      aclLines.push(`acl allowed_ips dst ${ip}`);
+    }
+  }
+
   // Build access rules
   // Order matters: allow rules come before deny rules
 
@@ -325,6 +357,7 @@ export function generateSquidConfig(config: SquidConfig): string {
   // Build the deny rule based on configured domains and their protocols
   const hasBothDomains = domainsByProto.both.length > 0;
   const hasBothPatterns = patternsByProto.both.length > 0;
+  const hasAllowedIPs = allowedIPs && allowedIPs.length > 0;
 
   // Process blocked domains (optional) - blocklist takes precedence over allowlist
   const blockedAclLines: string[] = [];
@@ -361,12 +394,20 @@ export function generateSquidConfig(config: SquidConfig): string {
 
   // Build the deny rule based on configured domains and their protocols
   let denyRule: string;
-  if (hasBothDomains && hasBothPatterns) {
+  if (hasBothDomains && hasBothPatterns && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains !allowed_domains_regex !allowed_ips';
+  } else if (hasBothDomains && hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains !allowed_domains_regex';
+  } else if (hasBothDomains && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains !allowed_ips';
+  } else if (hasBothPatterns && hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_domains_regex !allowed_ips';
   } else if (hasBothDomains) {
     denyRule = 'http_access deny !allowed_domains';
   } else if (hasBothPatterns) {
     denyRule = 'http_access deny !allowed_domains_regex';
+  } else if (hasAllowedIPs) {
+    denyRule = 'http_access deny !allowed_ips';
   } else if (hasHttpOnly || hasHttpsOnly) {
     // Only protocol-specific domains - deny all by default
     // The allow rules above will permit the specific traffic
@@ -436,6 +477,12 @@ export function generateSquidConfig(config: SquidConfig): string {
 acl SSL_ports port 443
 acl Safe_ports port 80          # HTTP
 acl Safe_ports port 443         # HTTPS`;
+
+  // Add Kong Gateway ports when enabled (port 8000 for OpenAI proxy, 8001 for admin API)
+  if (enableApiProxy) {
+    portAclsSection += `\nacl Safe_ports port 8000        # Kong Gateway - OpenAI proxy`;
+    portAclsSection += `\nacl Safe_ports port 8001        # Kong Gateway - Admin API`;
+  }
 
   // Add user-specified ports if --allow-host-ports was provided
   if (enableHostAccess && allowHostPorts) {

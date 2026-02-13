@@ -129,6 +129,46 @@ describe('generateSquidConfig', () => {
     });
   });
 
+  describe('Bare Hostname Handling', () => {
+    it('should handle bare hostnames without adding leading dot', () => {
+      // Bare hostnames (no dots) like Docker container names should not get a leading dot
+      // because they have no subdomains to match
+      const config: SquidConfig = {
+        domains: ['api-proxy', 'localhost'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_domains dstdomain api-proxy');
+      expect(result).toContain('acl allowed_domains dstdomain localhost');
+      expect(result).not.toContain('.api-proxy');
+      expect(result).not.toContain('.localhost');
+    });
+
+    it('should handle mixed bare hostnames and FQDNs', () => {
+      const config: SquidConfig = {
+        domains: ['api-proxy', 'github.com', 'localhost', 'example.org'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      // Bare hostnames without leading dot
+      expect(result).toContain('acl allowed_domains dstdomain api-proxy');
+      expect(result).toContain('acl allowed_domains dstdomain localhost');
+      // FQDNs with leading dot
+      expect(result).toContain('acl allowed_domains dstdomain .github.com');
+      expect(result).toContain('acl allowed_domains dstdomain .example.org');
+    });
+
+    it('should handle bare hostnames with protocol prefixes', () => {
+      const config: SquidConfig = {
+        domains: ['http://api-proxy'],
+        port: defaultPort,
+      };
+      const result = generateSquidConfig(config);
+      expect(result).toContain('acl allowed_http_only dstdomain api-proxy');
+      expect(result).not.toContain('.api-proxy');
+    });
+  });
+
   describe('Redundant Subdomain Removal', () => {
     it('should remove subdomain when parent domain is present', () => {
       const config: SquidConfig = {
@@ -293,12 +333,14 @@ describe('generateSquidConfig', () => {
     });
 
     it('should handle TLD-only domain (edge case)', () => {
+      // TLD-only (e.g., 'com') is a bare hostname with no dots, so no leading dot
       const config: SquidConfig = {
         domains: ['com'],
         port: defaultPort,
       };
       const result = generateSquidConfig(config);
-      expect(result).toContain('acl allowed_domains dstdomain .com');
+      expect(result).toContain('acl allowed_domains dstdomain com');
+      expect(result).not.toContain('.com');
     });
   });
 
@@ -1492,5 +1534,130 @@ describe('Empty Domain List', () => {
     expect(result).not.toContain('acl allowed_domains');
     expect(result).not.toContain('acl allowed_http_only');
     expect(result).not.toContain('acl allowed_https_only');
+  });
+});
+
+describe('Kong Gateway Port Configuration', () => {
+  it('should add ports 8000 and 8001 to Safe_ports when enableApiProxy is true', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: true,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl Safe_ports port 8000        # Kong Gateway - OpenAI proxy');
+    expect(result).toContain('acl Safe_ports port 8001        # Kong Gateway - Admin API');
+  });
+
+  it('should NOT add ports 8000 and 8001 when enableApiProxy is false', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: false,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('acl Safe_ports port 8000');
+    expect(result).not.toContain('acl Safe_ports port 8001');
+  });
+
+  it('should NOT add ports 8000 and 8001 when enableApiProxy is undefined', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('acl Safe_ports port 8000');
+    expect(result).not.toContain('acl Safe_ports port 8001');
+  });
+
+  it('should add Kong Gateway ports along with user-specified ports', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+      enableApiProxy: true,
+      enableHostAccess: true,
+      allowHostPorts: '3000,8080',
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl Safe_ports port 8000        # Kong Gateway - OpenAI proxy');
+    expect(result).toContain('acl Safe_ports port 8001        # Kong Gateway - Admin API');
+    expect(result).toContain('acl Safe_ports port 3000      # User-specified via --allow-host-ports');
+    expect(result).toContain('acl Safe_ports port 8080      # User-specified via --allow-host-ports');
+  });
+});
+
+describe('IP Address ACL Support', () => {
+  it('should generate dst ACL for IP addresses', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: ['172.30.0.30', '10.0.0.5'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('# ACL definitions for allowed IP addresses (HTTP and HTTPS)');
+    expect(result).toContain('acl allowed_ips dst 172.30.0.30');
+    expect(result).toContain('acl allowed_ips dst 10.0.0.5');
+  });
+
+  it('should include IPs in deny rule with domains', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains !allowed_ips');
+  });
+
+  it('should include IPs in deny rule with patterns', () => {
+    const config: SquidConfig = {
+      domains: ['*.github.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains_regex !allowed_ips');
+  });
+
+  it('should include IPs in deny rule with both domains and patterns', () => {
+    const config: SquidConfig = {
+      domains: ['github.com', '*.example.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains !allowed_domains_regex !allowed_ips');
+  });
+
+  it('should work with only IPs (no domains)', () => {
+    const config: SquidConfig = {
+      domains: [],
+      allowedIPs: ['172.30.0.30', '10.0.0.5'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl allowed_ips dst 172.30.0.30');
+    expect(result).toContain('acl allowed_ips dst 10.0.0.5');
+    expect(result).toContain('http_access deny !allowed_ips');
+    expect(result).not.toContain('allowed_domains');
+  });
+
+  it('should not generate IP ACLs when allowedIPs is undefined', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('allowed_ips');
+  });
+
+  it('should not generate IP ACLs when allowedIPs is empty array', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: [],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('allowed_ips');
   });
 });

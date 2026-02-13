@@ -127,11 +127,19 @@ fi
 echo "[iptables] Allow traffic to Squid proxy (${SQUID_IP}:${SQUID_PORT})..."
 iptables -t nat -A OUTPUT -d "$SQUID_IP" -j RETURN
 
-# Allow direct traffic to API proxy sidecar (bypasses Squid)
-# The api-proxy container holds API keys and proxies to LLM APIs through Squid
+# Bypass Squid for api-proxy when API proxy IP is configured.
+# The agent needs to connect directly to api-proxy (not through Squid).
+# The api-proxy then routes outbound traffic through Squid to enforce domain whitelisting.
+# Architecture: agent -> api-proxy (direct) -> Squid -> internet
+# Use AWF_API_PROXY_IP environment variable set by docker-manager (172.30.0.30)
 if [ -n "$AWF_API_PROXY_IP" ]; then
-  echo "[iptables] Allow direct traffic to API proxy sidecar (${AWF_API_PROXY_IP})..."
-  iptables -t nat -A OUTPUT -d "$AWF_API_PROXY_IP" -j RETURN
+  if is_valid_ipv4 "$AWF_API_PROXY_IP"; then
+    echo "[iptables] Allow direct traffic to api-proxy (${AWF_API_PROXY_IP}) - bypassing Squid..."
+    # NAT: skip DNAT to Squid for all traffic to api-proxy
+    iptables -t nat -A OUTPUT -d "$AWF_API_PROXY_IP" -j RETURN
+  else
+    echo "[iptables] WARNING: AWF_API_PROXY_IP has invalid format '${AWF_API_PROXY_IP}', skipping api-proxy bypass"
+  fi
 fi
 
 # Bypass Squid for host.docker.internal when host access is enabled.
@@ -270,9 +278,12 @@ iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
 
-# Allow traffic to API proxy sidecar (ports 10000/10001)
+# Allow traffic to Kong API Gateway sidecar (port 8000 for OpenAI proxy, 8001 for admin API)
+# Must be added before the final DROP rule
 if [ -n "$AWF_API_PROXY_IP" ]; then
-  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" -j ACCEPT
+  echo "[iptables] Allow traffic to Kong Gateway (${AWF_API_PROXY_IP}) ports 8000, 8001..."
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 8000 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 8001 -j ACCEPT
 fi
 
 # Drop all other TCP traffic (default deny policy)

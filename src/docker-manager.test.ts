@@ -1450,22 +1450,20 @@ describe('docker-manager', () => {
         expect((proxy.networks as any)['awf-net'].ipv4_address).toBe('172.30.0.30');
       });
 
-      it('should include api-proxy service when enableApiProxy is true with Anthropic key', () => {
+      it('should NOT include api-proxy service when only Anthropic key is provided', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
-        expect(result.services['api-proxy']).toBeDefined();
-        const proxy = result.services['api-proxy'];
-        expect(proxy.container_name).toBe('awf-api-proxy');
+        expect(result.services['api-proxy']).toBeUndefined();
       });
 
-      it('should include api-proxy service with both keys', () => {
+      it('should include api-proxy service with OpenAI key only (Anthropic key goes to agent)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key', anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         expect(result.services['api-proxy']).toBeDefined();
         const proxy = result.services['api-proxy'];
         const env = proxy.environment as Record<string, string>;
         expect(env.OPENAI_API_KEY).toBe('sk-test-openai-key');
-        expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test-key');
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       });
 
       it('should only pass OpenAI key when only OpenAI key is provided', () => {
@@ -1477,16 +1475,13 @@ describe('docker-manager', () => {
         expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       });
 
-      it('should only pass Anthropic key when only Anthropic key is provided', () => {
+      it('should NOT deploy api-proxy when only Anthropic key is provided', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
-        const proxy = result.services['api-proxy'];
-        const env = proxy.environment as Record<string, string>;
-        expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test-key');
-        expect(env.OPENAI_API_KEY).toBeUndefined();
+        expect(result.services['api-proxy']).toBeUndefined();
       });
 
-      it('should always build api-proxy locally (not published to GHCR yet)', () => {
+      it('should always build api-proxy locally (GHCR image not yet published)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
@@ -1504,7 +1499,7 @@ describe('docker-manager', () => {
         expect(proxy.image).toBeUndefined();
       });
 
-      it('should always build api-proxy locally even with custom registry and tag', () => {
+      it('should always build api-proxy locally regardless of registry/tag settings', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key', buildLocal: false, imageRegistry: 'my-registry.com', imageTag: 'v1.0.0' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
@@ -1518,8 +1513,11 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
+        expect(env.NO_PROXY).toContain('127.0.0.1');
+        expect(env.NO_PROXY).toContain('localhost');
         expect(env.NO_PROXY).toContain('api-proxy');
         expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.NO_PROXY).toContain('172.30.0.0/16');
         expect(env.no_proxy).toBe(env.NO_PROXY);
       });
 
@@ -1529,10 +1527,12 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         // Should contain both the host access NO_PROXY entries and api-proxy
+        expect(env.NO_PROXY).toContain('127.0.0.1');
         expect(env.NO_PROXY).toContain('localhost');
         expect(env.NO_PROXY).toContain('host.docker.internal');
         expect(env.NO_PROXY).toContain('api-proxy');
         expect(env.NO_PROXY).toContain('172.30.0.30');
+        expect(env.NO_PROXY).toContain('172.30.0.0/16');
         expect(env.no_proxy).toBe(env.NO_PROXY);
       });
 
@@ -1549,7 +1549,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
         expect(proxy.healthcheck).toBeDefined();
-        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:10000/health']);
+        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:8001/status']);
       });
 
       it('should drop all capabilities', () => {
@@ -1584,7 +1584,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
       });
 
       it('should configure HTTP_PROXY and HTTPS_PROXY in api-proxy to route through Squid', () => {
@@ -1596,30 +1596,30 @@ describe('docker-manager', () => {
         expect(env.HTTPS_PROXY).toBe('http://172.30.0.10:3128');
       });
 
-      it('should set ANTHROPIC_BASE_URL in agent when Anthropic key is provided', () => {
+      it('should NOT set ANTHROPIC_BASE_URL in agent when Anthropic key is provided', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
       });
 
-      it('should set both BASE_URL variables when both keys are provided', () => {
+      it('should set only OPENAI_BASE_URL when both keys are provided', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key', anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
       });
 
-      it('should not set OPENAI_BASE_URL in agent when only Anthropic key is provided', () => {
+      it('should not set OPENAI_BASE_URL or ANTHROPIC_BASE_URL in agent when only Anthropic key is provided', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBeUndefined();
-        expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
       });
 
       it('should not set ANTHROPIC_BASE_URL in agent when only OpenAI key is provided', () => {
@@ -1628,7 +1628,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
       });
     });
   });
@@ -1886,6 +1886,58 @@ describe('docker-manager', () => {
       process.env.HOME = originalHome;
       if (originalSudoUser) {
         process.env.SUDO_USER = originalSudoUser;
+      }
+    });
+
+    it('should include api-proxy in allowed domains when enableApiProxy is true', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: true,
+        openaiApiKey: 'sk-test-key',
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf includes api-proxy hostname and IP in allowed domains
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).toContain('api-proxy');
+        expect(content).toContain('172.30.0.30'); // api-proxy IP address
+      }
+    });
+
+    it('should not include api-proxy in allowed domains when enableApiProxy is false', async () => {
+      const config: WrapperConfig = {
+        allowedDomains: ['github.com'],
+        agentCommand: 'echo test',
+        logLevel: 'info',
+        keepContainers: false,
+        workDir: testDir,
+        enableApiProxy: false,
+      };
+
+      try {
+        await writeConfigs(config);
+      } catch {
+        // May fail after writing configs
+      }
+
+      // Verify squid.conf does not include api-proxy when disabled
+      const squidConfPath = path.join(testDir, 'squid.conf');
+      if (fs.existsSync(squidConfPath)) {
+        const content = fs.readFileSync(squidConfPath, 'utf-8');
+        expect(content).toContain('github.com');
+        expect(content).not.toContain('api-proxy');
       }
     });
   });

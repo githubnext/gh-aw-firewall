@@ -320,6 +320,14 @@ export function generateDockerCompose(
     'SUDO_GID',       // Sudo metadata
   ]);
 
+  // When api-proxy is enabled, exclude OpenAI API key from agent environment
+  // The key is passed to the api-proxy sidecar only (not to the agent)
+  // Note: ANTHROPIC_API_KEY is NOT excluded - Claude uses it directly in the agent container
+  const willUseApiProxy = config.enableApiProxy && config.openaiApiKey;
+  if (willUseApiProxy) {
+    EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+  }
+
   // Start with required/overridden environment variables
   // Use the real user's home (not /root when running with sudo)
   const homeDir = getRealUserHome();
@@ -390,7 +398,10 @@ export function generateDockerCompose(
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
     // Anthropic API key for Claude Code
-    if (process.env.ANTHROPIC_API_KEY) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    // Claude always uses the key directly in the agent container (not via api-proxy)
+    if (process.env.ANTHROPIC_API_KEY) {
+      environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    }
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
     if (process.env.XDG_CONFIG_HOME) environment.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME;
@@ -844,6 +855,12 @@ export function generateDockerCompose(
     environment.AWF_ENABLE_HOST_ACCESS = '1';
   }
 
+  // Pass API proxy flag to agent for iptables configuration
+  // Only set when api-proxy will actually be deployed (i.e., at least one API key is provided)
+  if (config.enableApiProxy && networkConfig.proxyIp && (config.openaiApiKey || config.anthropicApiKey)) {
+    environment.AWF_ENABLE_API_PROXY = '1';
+  }
+
   // Use GHCR image or build locally
   // Priority: GHCR preset images > local build (when requested) > custom images
   // For presets ('default', 'act'), use GHCR images
@@ -898,8 +915,9 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled
-  if (config.enableApiProxy && networkConfig.proxyIp) {
+  // Add Kong API Gateway sidecar if enabled and OpenAI API key is provided
+  // The api-proxy service is only used for OpenAI/Codex (Claude uses ANTHROPIC_API_KEY directly in agent)
+  if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
     const proxyService: any = {
       container_name: 'awf-api-proxy',
       networks: {
@@ -908,19 +926,18 @@ export function generateDockerCompose(
         },
       },
       environment: {
-        // Pass API keys securely to sidecar (not visible to agent)
-        ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
-        ...(config.anthropicApiKey && { ANTHROPIC_API_KEY: config.anthropicApiKey }),
+        // Pass OpenAI API key securely to sidecar (not visible to agent)
+        OPENAI_API_KEY: config.openaiApiKey,
         // Route through Squid to respect domain whitelisting
         HTTP_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
         HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
       },
       healthcheck: {
-        test: ['CMD', 'curl', '-f', 'http://localhost:10000/health'],
+        test: ['CMD', 'curl', '-f', 'http://localhost:8001/status'],
         interval: '5s',
         timeout: '3s',
         retries: 5,
-        start_period: '5s',
+        start_period: '10s',
       },
       // Security hardening: Drop all capabilities
       cap_drop: ['ALL'],
@@ -950,7 +967,8 @@ export function generateDockerCompose(
 
     // Add api-proxy to NO_PROXY so agent traffic goes directly to the sidecar
     // instead of routing through Squid (which would block the "api-proxy" hostname)
-    const proxyNoProxy = `api-proxy,${networkConfig.proxyIp}`;
+    // Include localhost, the specific IP, and the network CIDR to ensure all tools can bypass Squid
+    const proxyNoProxy = `127.0.0.1,localhost,${networkConfig.proxyIp},172.30.0.0/16,api-proxy`;
     if (environment.NO_PROXY) {
       environment.NO_PROXY += `,${proxyNoProxy}`;
       environment.no_proxy = environment.NO_PROXY;
@@ -960,22 +978,20 @@ export function generateDockerCompose(
     }
 
     // Pass api-proxy IP to iptables setup so it can allow direct traffic
-    // Without this, the final DROP rule in setup-iptables.sh blocks port 10000/10001
+    // Without this, the final DROP rule in setup-iptables.sh blocks ports 8000/8001
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
-    // Set environment variables in agent to use the proxy
-    // Use IP address instead of hostname to avoid DNS resolution issues in chroot mode
+    // Set environment variables in agent to use the Kong Gateway proxy
+    // Use IP address instead of hostname to avoid DNS resolution issues
+    // Kong listens on port 8000 for proxy traffic
+    // Note: ANTHROPIC_BASE_URL is NOT set - Claude uses ANTHROPIC_API_KEY directly
     if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
-      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
-    }
-    if (config.anthropicApiKey) {
-      environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
-      logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
+      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:8000`;
+      logger.debug(`OpenAI API will be proxied through Kong Gateway at http://${networkConfig.proxyIp}:8000`);
     }
 
-    logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
-    logger.info('API proxy will route through Squid to respect domain whitelisting');
+    logger.info('Kong API Gateway enabled for OpenAI/Codex - key will be held securely in Kong container');
+    logger.info('Kong will route through Squid to respect domain whitelisting');
   }
 
   return {
@@ -1132,8 +1148,21 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
 
   // Write Squid config
   // Note: Use container path for SSL database since it's mounted at /var/spool/squid_ssl_db
+  // When API proxy is enabled and has API keys, add api-proxy hostname and IP to allowed domains/IPs so agent can communicate with it
+  // The IP address (172.30.0.30) must be separate from domains because Squid uses different ACL types:
+  // - domains use 'dstdomain' ACL (for DNS names like 'api-proxy')
+  // - IP addresses use 'dst' ACL (for IPs like '172.30.0.30')
+  const shouldAddApiProxyAccess = config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey;
+  const domainsForSquid = shouldAddApiProxyAccess
+    ? [...config.allowedDomains, 'api-proxy']
+    : config.allowedDomains;
+  const ipsForSquid = shouldAddApiProxyAccess && networkConfig.proxyIp
+    ? [networkConfig.proxyIp]
+    : undefined;
+
   const squidConfig = generateSquidConfig({
-    domains: config.allowedDomains,
+    domains: domainsForSquid,
+    allowedIPs: ipsForSquid,
     blockedDomains: config.blockedDomains,
     port: SQUID_PORT,
     sslBump: config.sslBump,
@@ -1142,6 +1171,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     urlPatterns,
     enableHostAccess: config.enableHostAccess,
     allowHostPorts: config.allowHostPorts,
+    enableApiProxy: config.enableApiProxy,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig, { mode: 0o600 });
@@ -1154,6 +1184,19 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
   const dockerComposePath = path.join(config.workDir, 'docker-compose.yml');
   fs.writeFileSync(dockerComposePath, yaml.dump(dockerCompose), { mode: 0o600 });
   logger.debug(`Docker Compose config written to: ${dockerComposePath}`);
+
+  // Log BASE_URL environment variables for debugging
+  const agentEnv = dockerCompose.services['awf-agent']?.environment || {};
+  if (agentEnv.ANTHROPIC_BASE_URL) {
+    logger.info(`Agent ANTHROPIC_BASE_URL set to: ${agentEnv.ANTHROPIC_BASE_URL}`);
+  } else {
+    logger.info('Agent ANTHROPIC_BASE_URL: not set (using default)');
+  }
+  if (agentEnv.OPENAI_BASE_URL) {
+    logger.info(`Agent OPENAI_BASE_URL set to: ${agentEnv.OPENAI_BASE_URL}`);
+  } else {
+    logger.info('Agent OPENAI_BASE_URL: not set (using default)');
+  }
 }
 
 /**
