@@ -205,7 +205,7 @@ ${urlAclSection}${urlAccessRules}`;
  * // Blocked: internal.example.com -> acl blocked_domains dstdomain .internal.example.com
  */
 export function generateSquidConfig(config: SquidConfig): string {
-  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts } = config;
+  const { domains, blockedDomains, port, sslBump, caFiles, sslDbPath, urlPatterns, enableHostAccess, allowHostPorts, enableApiProxy } = config;
 
   // Parse domains into plain domains and wildcard patterns
   // Note: parseDomainList extracts and preserves protocol info from prefixes (http://, https://)
@@ -293,8 +293,21 @@ export function generateSquidConfig(config: SquidConfig): string {
     }
   }
 
+  // === API PROXY IP ADDRESS ===
+  // When api-proxy sidecar is enabled, allow direct IP access to 172.30.0.30
+  if (enableApiProxy) {
+    aclLines.push('');
+    aclLines.push('# ACL for API proxy sidecar IP address');
+    aclLines.push('acl api_proxy_ip dst 172.30.0.30');
+  }
+
   // Build access rules
   // Order matters: allow rules come before deny rules
+
+  // Allow API proxy IP address for all HTTP/HTTPS traffic (when enabled)
+  if (enableApiProxy) {
+    accessRules.push('http_access allow api_proxy_ip');
+  }
 
   // Allow HTTP-only domains for non-CONNECT requests
   const hasHttpOnly = domainsByProto.http.length > 0 || patternsByProto.http.length > 0;
@@ -436,6 +449,12 @@ export function generateSquidConfig(config: SquidConfig): string {
 acl SSL_ports port 443
 acl Safe_ports port 80          # HTTP
 acl Safe_ports port 443         # HTTPS`;
+
+  // Add API proxy ports if enabled
+  if (enableApiProxy) {
+    portAclsSection += `\nacl Safe_ports port 10000       # OpenAI API proxy`;
+    portAclsSection += `\nacl Safe_ports port 10001       # Anthropic API proxy`;
+  }
 
   // Add user-specified ports if --allow-host-ports was provided
   if (enableHostAccess && allowHostPorts) {
