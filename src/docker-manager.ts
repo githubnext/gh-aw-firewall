@@ -1164,6 +1164,7 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     urlPatterns,
     enableHostAccess: config.enableHostAccess,
     allowHostPorts: config.allowHostPorts,
+    enableApiProxy: config.enableApiProxy,
   });
   const squidConfigPath = path.join(config.workDir, 'squid.conf');
   fs.writeFileSync(squidConfigPath, squidConfig, { mode: 0o600 });
