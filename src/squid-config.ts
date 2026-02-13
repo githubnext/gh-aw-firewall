@@ -53,10 +53,31 @@ interface PatternsByProtocol {
 }
 
 /**
- * Helper to add leading dot to domain for Squid subdomain matching
+ * Helper to format domain for Squid ACL matching
+ *
+ * For fully qualified domains (containing dots), adds a leading dot to enable
+ * subdomain matching (e.g., .github.com matches both github.com and api.github.com).
+ *
+ * For bare hostnames (no dots, like Docker container names), returns as-is without
+ * a leading dot since bare hostnames have no subdomains to match.
+ *
+ * @param domain - Domain or hostname to format
+ * @returns Formatted string for Squid dstdomain ACL
  */
 function formatDomainForSquid(domain: string): string {
-  return domain.startsWith('.') ? domain : `.${domain}`;
+  // Already has leading dot - return as-is
+  if (domain.startsWith('.')) {
+    return domain;
+  }
+
+  // Bare hostname (no dots) - return as-is (e.g., 'api-proxy', 'localhost')
+  // These are typically Docker container names or single-word hostnames
+  if (!domain.includes('.')) {
+    return domain;
+  }
+
+  // Fully qualified domain - add leading dot for subdomain matching
+  return `.${domain}`;
 }
 
 /**
