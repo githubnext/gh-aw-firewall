@@ -403,7 +403,7 @@ export interface WrapperConfig {
    * - OPENAI_API_KEY - Optional OpenAI API key for Codex
    * - ANTHROPIC_API_KEY - Optional Anthropic API key for Claude
    *
-   * @default false
+   * @default true
    * @example
    * ```bash
    * # Enable API proxy with keys from environment
