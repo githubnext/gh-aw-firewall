@@ -48,6 +48,7 @@ app.get('/health', (req, res) => {
 });
 
 // OpenAI API proxy (port 10000)
+// Always start the server to keep container running for healthchecks
 if (OPENAI_API_KEY) {
   app.use(createProxyMiddleware({
     target: 'https://api.openai.com',
@@ -63,21 +64,27 @@ if (OPENAI_API_KEY) {
       res.status(502).json({ error: 'Proxy error', message: err.message });
     }
   }));
-
-  app.listen(10000, '0.0.0.0', () => {
-    console.log('[API Proxy] OpenAI proxy listening on port 10000');
-    console.log('[API Proxy] Routing through Squid to api.openai.com');
-  });
+  console.log('[API Proxy] OpenAI proxy configured');
+} else {
+  console.log('[API Proxy] OpenAI API key not configured - proxy disabled for port 10000');
 }
 
+app.listen(10000, '0.0.0.0', () => {
+  console.log('[API Proxy] OpenAI proxy listening on port 10000');
+  if (OPENAI_API_KEY) {
+    console.log('[API Proxy] Routing through Squid to api.openai.com');
+  }
+});
+
 // Anthropic API proxy (port 10001)
+// Always start the server to keep container running
+const anthropicApp = express();
+
+anthropicApp.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', service: 'anthropic-proxy' });
+});
+
 if (ANTHROPIC_API_KEY) {
-  const anthropicApp = express();
-
-  anthropicApp.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', service: 'anthropic-proxy' });
-  });
-
   anthropicApp.use(createProxyMiddleware({
     target: 'https://api.anthropic.com',
     changeOrigin: true,
@@ -93,12 +100,17 @@ if (ANTHROPIC_API_KEY) {
       res.status(502).json({ error: 'Proxy error', message: err.message });
     }
   }));
-
-  anthropicApp.listen(10001, '0.0.0.0', () => {
-    console.log('[API Proxy] Anthropic proxy listening on port 10001');
-    console.log('[API Proxy] Routing through Squid to api.anthropic.com');
-  });
+  console.log('[API Proxy] Anthropic proxy configured');
+} else {
+  console.log('[API Proxy] Anthropic API key not configured - proxy disabled for port 10001');
 }
+
+anthropicApp.listen(10001, '0.0.0.0', () => {
+  console.log('[API Proxy] Anthropic proxy listening on port 10001');
+  if (ANTHROPIC_API_KEY) {
+    console.log('[API Proxy] Routing through Squid to api.anthropic.com');
+  }
+});
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
