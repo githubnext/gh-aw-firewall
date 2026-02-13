@@ -292,6 +292,11 @@ AWFEOF
       echo "[entrypoint] Adding CARGO_HOME/bin to PATH: ${AWF_CARGO_HOME}/bin"
       echo "export PATH=\"${AWF_CARGO_HOME}/bin:\$PATH\"" >> "/host${SCRIPT_FILE}"
       echo "export CARGO_HOME=\"${AWF_CARGO_HOME}\"" >> "/host${SCRIPT_FILE}"
+      # Also set RUSTUP_HOME if provided (needed for rustc to find toolchain)
+      if [ -n "${AWF_RUSTUP_HOME}" ]; then
+        echo "[entrypoint] Setting RUSTUP_HOME: ${AWF_RUSTUP_HOME}"
+        echo "export RUSTUP_HOME=\"${AWF_RUSTUP_HOME}\"" >> "/host${SCRIPT_FILE}"
+      fi
     else
       # Fallback: detect Cargo from default location if CARGO_HOME not provided
       # This ensures Rust binaries work even when CARGO_HOME env var is not set
