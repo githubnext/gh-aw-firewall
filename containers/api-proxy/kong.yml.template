@@ -1,0 +1,36 @@
+_format_version: "3.0"
+
+# Services define the upstream APIs Kong will proxy to
+services:
+  - name: openai-api
+    url: https://api.openai.com
+    # Route traffic through Squid proxy for domain whitelisting
+    # Kong will use HTTP_PROXY/HTTPS_PROXY environment variables
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: openai-route
+        # Match all paths - Kong listens on port 8000
+        paths:
+          - /
+        # Strip the path prefix if needed
+        strip_path: false
+
+    plugins:
+      # Inject Authorization header with OpenAI API key
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "Authorization: Bearer ${OPENAI_API_KEY}"
+
+      # Add correlation ID for tracking
+      - name: correlation-id
+        config:
+          header_name: X-Kong-Request-ID
+          generator: uuid
+
+      # Enable proxy support (Kong uses HTTP_PROXY/HTTPS_PROXY env vars automatically)
+      # No explicit plugin needed - Kong natively supports HTTP_PROXY

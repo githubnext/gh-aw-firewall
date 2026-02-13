@@ -1549,7 +1549,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const proxy = result.services['api-proxy'];
         expect(proxy.healthcheck).toBeDefined();
-        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:10000/health']);
+        expect((proxy.healthcheck as any).test).toEqual(['CMD', 'curl', '-f', 'http://localhost:8001/status']);
       });
 
       it('should drop all capabilities', () => {
@@ -1584,7 +1584,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
       });
 
       it('should configure HTTP_PROXY and HTTPS_PROXY in api-proxy to route through Squid', () => {
@@ -1609,7 +1609,7 @@ describe('docker-manager', () => {
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
       });
 
@@ -1628,7 +1628,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:8000');
       });
     });
   });

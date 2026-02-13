@@ -911,7 +911,7 @@ export function generateDockerCompose(
     'agent': agentService,
   };
 
-  // Add Node.js API proxy sidecar if enabled and OpenAI API key is provided
+  // Add Kong API Gateway sidecar if enabled and OpenAI API key is provided
   // The api-proxy service is only used for OpenAI/Codex (Claude uses ANTHROPIC_API_KEY directly in agent)
   if (config.enableApiProxy && networkConfig.proxyIp && config.openaiApiKey) {
     const proxyService: any = {
@@ -929,11 +929,11 @@ export function generateDockerCompose(
         HTTPS_PROXY: `http://${networkConfig.squidIp}:${SQUID_PORT}`,
       },
       healthcheck: {
-        test: ['CMD', 'curl', '-f', 'http://localhost:10000/health'],
+        test: ['CMD', 'curl', '-f', 'http://localhost:8001/status'],
         interval: '5s',
         timeout: '3s',
         retries: 5,
-        start_period: '5s',
+        start_period: '10s',
       },
       // Security hardening: Drop all capabilities
       cap_drop: ['ALL'],
@@ -974,19 +974,20 @@ export function generateDockerCompose(
     }
 
     // Pass api-proxy IP to iptables setup so it can allow direct traffic
-    // Without this, the final DROP rule in setup-iptables.sh blocks port 10000/10001
+    // Without this, the final DROP rule in setup-iptables.sh blocks ports 8000/8001
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
 
-    // Set environment variables in agent to use the OpenAI proxy
+    // Set environment variables in agent to use the Kong Gateway proxy
     // Use IP address instead of hostname to avoid DNS resolution issues
+    // Kong listens on port 8000 for proxy traffic
     // Note: ANTHROPIC_BASE_URL is NOT set - Claude uses ANTHROPIC_API_KEY directly
     if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
-      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
+      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:8000`;
+      logger.debug(`OpenAI API will be proxied through Kong Gateway at http://${networkConfig.proxyIp}:8000`);
     }
 
-    logger.info('API proxy sidecar enabled for OpenAI/Codex - key will be held securely in sidecar container');
-    logger.info('API proxy will route through Squid to respect domain whitelisting');
+    logger.info('Kong API Gateway enabled for OpenAI/Codex - key will be held securely in Kong container');
+    logger.info('Kong will route through Squid to respect domain whitelisting');
   }
 
   return {

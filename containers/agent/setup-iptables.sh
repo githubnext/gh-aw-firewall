@@ -278,12 +278,12 @@ iptables -A OUTPUT -p tcp -d 127.0.0.11 --dport 53 -j ACCEPT
 # Allow traffic to Squid proxy (after NAT redirection)
 iptables -A OUTPUT -p tcp -d "$SQUID_IP" -j ACCEPT
 
-# Allow traffic to API proxy sidecar (ports 10000 for OpenAI, 10001 for Anthropic)
+# Allow traffic to Kong API Gateway sidecar (port 8000 for OpenAI proxy, 8001 for admin API)
 # Must be added before the final DROP rule
 if [ -n "$AWF_API_PROXY_IP" ]; then
-  echo "[iptables] Allow traffic to api-proxy (${AWF_API_PROXY_IP}) ports 10000, 10001..."
-  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 10000 -j ACCEPT
-  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 10001 -j ACCEPT
+  echo "[iptables] Allow traffic to Kong Gateway (${AWF_API_PROXY_IP}) ports 8000, 8001..."
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 8000 -j ACCEPT
+  iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" --dport 8001 -j ACCEPT
 fi
 
 # Drop all other TCP traffic (default deny policy)

@@ -478,10 +478,10 @@ acl SSL_ports port 443
 acl Safe_ports port 80          # HTTP
 acl Safe_ports port 443         # HTTPS`;
 
-  // Add api-proxy ports when enabled (ports 10000 for OpenAI, 10001 for Anthropic)
+  // Add Kong Gateway ports when enabled (port 8000 for OpenAI proxy, 8001 for admin API)
   if (enableApiProxy) {
-    portAclsSection += `\nacl Safe_ports port 10000       # API proxy - OpenAI`;
-    portAclsSection += `\nacl Safe_ports port 10001       # API proxy - Anthropic`;
+    portAclsSection += `\nacl Safe_ports port 8000        # Kong Gateway - OpenAI proxy`;
+    portAclsSection += `\nacl Safe_ports port 8001        # Kong Gateway - Admin API`;
   }
 
   // Add user-specified ports if --allow-host-ports was provided
