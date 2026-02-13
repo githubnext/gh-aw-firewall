@@ -1585,3 +1585,79 @@ describe('API Proxy Port Configuration', () => {
     expect(result).toContain('acl Safe_ports port 8080      # User-specified via --allow-host-ports');
   });
 });
+
+describe('IP Address ACL Support', () => {
+  it('should generate dst ACL for IP addresses', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: ['172.30.0.30', '10.0.0.5'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('# ACL definitions for allowed IP addresses (HTTP and HTTPS)');
+    expect(result).toContain('acl allowed_ips dst 172.30.0.30');
+    expect(result).toContain('acl allowed_ips dst 10.0.0.5');
+  });
+
+  it('should include IPs in deny rule with domains', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains !allowed_ips');
+  });
+
+  it('should include IPs in deny rule with patterns', () => {
+    const config: SquidConfig = {
+      domains: ['*.github.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains_regex !allowed_ips');
+  });
+
+  it('should include IPs in deny rule with both domains and patterns', () => {
+    const config: SquidConfig = {
+      domains: ['github.com', '*.example.com'],
+      allowedIPs: ['172.30.0.30'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('http_access deny !allowed_domains !allowed_domains_regex !allowed_ips');
+  });
+
+  it('should work with only IPs (no domains)', () => {
+    const config: SquidConfig = {
+      domains: [],
+      allowedIPs: ['172.30.0.30', '10.0.0.5'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).toContain('acl allowed_ips dst 172.30.0.30');
+    expect(result).toContain('acl allowed_ips dst 10.0.0.5');
+    expect(result).toContain('http_access deny !allowed_ips');
+    expect(result).not.toContain('allowed_domains');
+  });
+
+  it('should not generate IP ACLs when allowedIPs is undefined', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('allowed_ips');
+  });
+
+  it('should not generate IP ACLs when allowedIPs is empty array', () => {
+    const config: SquidConfig = {
+      domains: ['github.com'],
+      allowedIPs: [],
+      port: 3128,
+    };
+    const result = generateSquidConfig(config);
+    expect(result).not.toContain('allowed_ips');
+  });
+});
