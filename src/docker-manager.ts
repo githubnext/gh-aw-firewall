@@ -1011,8 +1011,8 @@ export function generateDockerCompose(
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
     // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
     // if (config.openaiApiKey) {
-    //   environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
-    //   logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
+    //   environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000/v1`;
+    //   logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000/v1`);
     // }
     if (config.anthropicApiKey) {
       environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
