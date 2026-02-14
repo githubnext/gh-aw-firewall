@@ -119,17 +119,15 @@ fi
 # If health check fails, the script exits with non-zero code and prevents agent from running
 /usr/local/bin/api-proxy-health-check.sh || exit 1
 
-# Validate Claude Code API key helper configuration
+# Configure Claude Code API key helper
 # This ensures the apiKeyHelper is properly configured in the config file
-# If validation fails, exit before running the agent to prevent using wrong credentials
+# The config file must exist before Claude Code starts for authentication to work
 if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
   echo "[entrypoint] Claude Code API key helper configured: $CLAUDE_CODE_API_KEY_HELPER"
 
-  # Check if config file exists - if it does, validate it
-  # If it doesn't exist yet, skip validation (it may be created by the user command)
   CONFIG_FILE="$HOME/.claude.json"
   if [ -f "$CONFIG_FILE" ]; then
-    echo "[entrypoint] Validating existing Claude Code config file..."
+    echo "[entrypoint] Claude Code config file exists, validating..."
 
     # Check if apiKeyHelper is present in config file
     if ! grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
@@ -151,8 +149,10 @@ if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
 
     echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
   else
-    echo "[entrypoint] Config file not found yet - will be created by user command"
-    echo "[entrypoint] Environment variable set: CLAUDE_CODE_API_KEY_HELPER=$CLAUDE_CODE_API_KEY_HELPER"
+    echo "[entrypoint] Creating Claude Code config file with apiKeyHelper..."
+    echo "{\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}" > "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+    echo "[entrypoint] ✓ Created $CONFIG_FILE with apiKeyHelper: $CLAUDE_CODE_API_KEY_HELPER"
   fi
 fi
 
