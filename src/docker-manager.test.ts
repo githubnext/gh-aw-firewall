@@ -1568,6 +1568,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
       it('should set both BASE_URL variables when both keys are provided', () => {
@@ -1577,6 +1578,7 @@ describe('docker-manager', () => {
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
       it('should not set OPENAI_BASE_URL in agent when only Anthropic key is provided', () => {
@@ -1586,6 +1588,7 @@ describe('docker-manager', () => {
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBeUndefined();
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
       it('should not set ANTHROPIC_BASE_URL in agent when only OpenAI key is provided', () => {
@@ -1612,6 +1615,22 @@ describe('docker-manager', () => {
         const env = agent.environment as Record<string, string>;
         expect(env.NO_PROXY).toContain('172.30.0.30');
         expect(env.no_proxy).toContain('172.30.0.30');
+      });
+
+      it('should set CLAUDE_CODE_API_KEY_HELPER when Anthropic key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
+      });
+
+      it('should not set CLAUDE_CODE_API_KEY_HELPER when only OpenAI key is provided', () => {
+        const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
+        const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+        const agent = result.services.agent;
+        const env = agent.environment as Record<string, string>;
+        expect(env.CLAUDE_CODE_API_KEY_HELPER).toBeUndefined();
       });
 
       it('should not leak ANTHROPIC_API_KEY to agent when api-proxy is enabled', () => {

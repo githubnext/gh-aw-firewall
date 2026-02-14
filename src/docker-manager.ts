@@ -997,6 +997,11 @@ export function generateDockerCompose(
     if (config.anthropicApiKey) {
       environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
       logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
+
+      // Set API key helper for Claude Code CLI to use credential isolation
+      // The helper script returns a placeholder key; real authentication happens via ANTHROPIC_BASE_URL
+      environment.CLAUDE_CODE_API_KEY_HELPER = '/usr/local/bin/get-claude-key.sh';
+      logger.debug('Claude Code API key helper configured: /usr/local/bin/get-claude-key.sh');
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
