@@ -62,11 +62,12 @@ RUN if ! getent group awfuser >/dev/null 2>&1; then \
     mkdir -p /home/awfuser/.copilot/logs && \
     chown -R awfuser:awfuser /home/awfuser
 
-# Copy iptables setup script and PID logger
+# Copy iptables setup script, PID logger, and API proxy health check
 COPY setup-iptables.sh /usr/local/bin/setup-iptables.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY pid-logger.sh /usr/local/bin/pid-logger.sh
-RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh
+COPY api-proxy-health-check.sh /usr/local/bin/api-proxy-health-check.sh
+RUN chmod +x /usr/local/bin/setup-iptables.sh /usr/local/bin/entrypoint.sh /usr/local/bin/pid-logger.sh /usr/local/bin/api-proxy-health-check.sh
 
 # Copy pre-built one-shot-token library from rust-builder stage
 # This prevents tokens from being read multiple times (e.g., by malicious code)

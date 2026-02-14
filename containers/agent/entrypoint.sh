@@ -114,6 +114,11 @@ fi
 # Setup iptables rules
 /usr/local/bin/setup-iptables.sh
 
+# Run API proxy health checks (verifies credential isolation and connectivity)
+# This must run AFTER iptables setup (which allows api-proxy traffic) but BEFORE user command
+# If health check fails, the script exits with non-zero code and prevents agent from running
+/usr/local/bin/api-proxy-health-check.sh || exit 1
+
 # Print proxy environment
 echo "[entrypoint] Proxy configuration:"
 echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY"
