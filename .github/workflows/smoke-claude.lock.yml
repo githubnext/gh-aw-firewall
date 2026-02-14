@@ -27,7 +27,7 @@
 #   Imports:
 #     - shared/mcp-pagination.md
 #
-# frontmatter-hash: 5aa2e5c0484ef2b480a130f0879df7d9dbb43087d50d42b4a9edebaea63365fd
+# frontmatter-hash: cddd89980f18349e0ff1b8597c2c85aea8464bed2786100df83cb9520099aa3e
 
 name: "Smoke Claude"
 "on":
@@ -922,7 +922,7 @@ jobs:
           path: /tmp/gh-aw/cache-memory
       - if: always()
         name: Show final Claude Code config
-        run: "echo \"=== Final Claude Code Config ===\"\nif [ -f ~/.claude/config.json ]; then\n  echo \"File: ~/.claude/config.json\"\n  cat ~/.claude/config.json\nelse\n  echo \"~/.claude/config.json not found\"\nfi\nif [ -f ~/.claude.json ]; then\n  echo \"\"\n  echo \"File: ~/.claude.json\"\n  cat ~/.claude.json\nelse\n  echo \"~/.claude.json not found\"\nfi\n"
+        run: "echo \"=== Final Claude Code Config ===\"\nif [ -f ~/.claude.json ]; then\n  echo \"File: ~/.claude.json\"\n  cat ~/.claude.json\nelse\n  echo \"~/.claude.json not found\"\nfi\nif [ -f ~/.claude/config.json ]; then\n  echo \"\"\n  echo \"File: ~/.claude/config.json (legacy)\"\n  cat ~/.claude/config.json\nelse\n  echo \"~/.claude/config.json not found\"\nfi\n"
       - name: Validate safe outputs were invoked
         run: "OUTPUTS_FILE=\"${GH_AW_SAFE_OUTPUTS:-/opt/gh-aw/safeoutputs/outputs.jsonl}\"\nif [ ! -s \"$OUTPUTS_FILE\" ]; then\n  echo \"::error::No safe outputs were invoked. Smoke tests require the agent to call safe output tools.\"\n  exit 1\nfi\necho \"Safe output entries found: $(wc -l < \"$OUTPUTS_FILE\")\"\nif [ \"$GITHUB_EVENT_NAME\" = \"pull_request\" ]; then\n  if ! grep -q '\"add_comment\"' \"$OUTPUTS_FILE\"; then\n    echo \"::error::Agent did not call add_comment on a pull_request trigger.\"\n    exit 1\n  fi\n  echo \"add_comment verified for PR trigger\"\nfi\necho \"Safe output validation passed\""
 

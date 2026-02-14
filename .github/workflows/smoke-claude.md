@@ -53,18 +53,18 @@ post-steps:
     if: always()
     run: |
       echo "=== Final Claude Code Config ==="
-      if [ -f ~/.claude/config.json ]; then
-        echo "File: ~/.claude/config.json"
-        cat ~/.claude/config.json
-      else
-        echo "~/.claude/config.json not found"
-      fi
       if [ -f ~/.claude.json ]; then
-        echo ""
         echo "File: ~/.claude.json"
         cat ~/.claude.json
       else
         echo "~/.claude.json not found"
+      fi
+      if [ -f ~/.claude/config.json ]; then
+        echo ""
+        echo "File: ~/.claude/config.json (legacy)"
+        cat ~/.claude/config.json
+      else
+        echo "~/.claude/config.json not found"
       fi
   - name: Validate safe outputs were invoked
     run: |

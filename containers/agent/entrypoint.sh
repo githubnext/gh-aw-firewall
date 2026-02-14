@@ -127,7 +127,7 @@ if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
 
   # Check if config file exists - if it does, validate it
   # If it doesn't exist yet, skip validation (it may be created by the user command)
-  CONFIG_FILE="$HOME/.claude/config.json"
+  CONFIG_FILE="$HOME/.claude.json"
   if [ -f "$CONFIG_FILE" ]; then
     echo "[entrypoint] Validating existing Claude Code config file..."
 
