@@ -35,6 +35,7 @@ The `--` separator divides firewall options from the command to run.
 - [Usage guide](docs/usage.md) — CLI flags, domain allowlists, examples
 - [Chroot mode](docs/chroot-mode.md) — use host binaries with network isolation
 - [API proxy sidecar](docs/api-proxy-sidecar.md) — secure credential management for LLM APIs
+- [Authentication architecture](docs/authentication-architecture.md) — deep dive into token handling and credential isolation
 - [SSL Bump](docs/ssl-bump.md) — HTTPS content inspection for URL path filtering
 - [GitHub Actions](docs/github_actions.md) — CI/CD integration and MCP server setup
 - [Environment variables](docs/environment.md) — passing environment variables to containers

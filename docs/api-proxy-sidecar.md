@@ -2,6 +2,9 @@
 
 The AWF firewall supports an optional Node.js-based API proxy sidecar that securely holds LLM API credentials and automatically injects authentication headers while routing all traffic through Squid to respect domain whitelisting.
 
+> [!NOTE]
+> For a comprehensive deep dive into how AWF handles authentication tokens and credential isolation, see the [Authentication Architecture](authentication-architecture.md) guide.
+
 ## Overview
 
 When enabled, the API proxy sidecar:
