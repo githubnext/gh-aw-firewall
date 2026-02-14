@@ -31,6 +31,16 @@ if [ -n "$ANTHROPIC_BASE_URL" ]; then
   fi
   echo "[health-check] ✓ Anthropic credentials NOT in agent environment (correct)"
 
+  # Verify ANTHROPIC_AUTH_TOKEN is placeholder (if present)
+  if [ -n "$ANTHROPIC_AUTH_TOKEN" ]; then
+    if [ "$ANTHROPIC_AUTH_TOKEN" != "placeholder-token-for-credential-isolation" ]; then
+      echo "[health-check][ERROR] ANTHROPIC_AUTH_TOKEN contains non-placeholder value!"
+      echo "[health-check][ERROR] Token should be 'placeholder-token-for-credential-isolation'"
+      exit 1
+    fi
+    echo "[health-check] ✓ ANTHROPIC_AUTH_TOKEN is placeholder value (correct)"
+  fi
+
   # Perform health check using BASE_URL
   echo "[health-check] Testing connectivity to Anthropic API proxy at $ANTHROPIC_BASE_URL..."
 

@@ -1568,6 +1568,7 @@ describe('docker-manager', () => {
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
@@ -1578,6 +1579,7 @@ describe('docker-manager', () => {
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
@@ -1588,6 +1590,7 @@ describe('docker-manager', () => {
         const env = agent.environment as Record<string, string>;
         expect(env.OPENAI_BASE_URL).toBeUndefined();
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
@@ -1646,6 +1649,8 @@ describe('docker-manager', () => {
           expect(env.ANTHROPIC_API_KEY).toBeUndefined();
           // Agent should have the BASE_URL to reach the sidecar instead
           expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+          // Agent should have placeholder token for Claude Code compatibility
+          expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         } finally {
           if (origKey !== undefined) {
             process.env.ANTHROPIC_API_KEY = origKey;
@@ -1730,6 +1735,8 @@ describe('docker-manager', () => {
           // Even with envAll, agent should NOT have ANTHROPIC_API_KEY when api-proxy is enabled
           expect(env.ANTHROPIC_API_KEY).toBeUndefined();
           expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+          // But should have placeholder token for Claude Code compatibility
+          expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         } finally {
           if (origKey !== undefined) {
             process.env.ANTHROPIC_API_KEY = origKey;
