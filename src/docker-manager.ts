@@ -560,7 +560,9 @@ export function generateDockerCompose(
         fs.mkdirSync(parentDir, { recursive: true, mode: 0o755 });
       }
       // Create empty file that will be populated by entrypoint
-      fs.writeFileSync(claudeJsonPath, '{}', { mode: 0o600 });
+      // Use 0o666 mode to allow container root to write and host user to read
+      // The entrypoint script runs as root and modifies this file
+      fs.writeFileSync(claudeJsonPath, '{}', { mode: 0o666 });
       logger.debug(`Created ${claudeJsonPath} for chroot mounting`);
     }
     agentVolumes.push(`${claudeJsonPath}:/host${claudeJsonPath}:rw`);
