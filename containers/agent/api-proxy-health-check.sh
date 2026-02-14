@@ -64,17 +64,15 @@ if [ -n "$OPENAI_BASE_URL" ]; then
   echo "[health-check] Checking OpenAI API proxy configuration..."
 
   # Verify credentials are NOT in agent environment
-  # Note: CODEX_API_KEY check is temporarily disabled - Codex receives credentials directly
-  if [ -n "$OPENAI_API_KEY" ] || [ -n "$OPENAI_KEY" ]; then
-    echo "[health-check][ERROR] OpenAI API key found in agent environment!"
+  if [ -n "$OPENAI_API_KEY" ] || [ -n "$CODEX_API_KEY" ] || [ -n "$OPENAI_KEY" ]; then
+    echo "[health-check][ERROR] OpenAI/Codex API key found in agent environment!"
     echo "[health-check][ERROR] Credential isolation failed - keys should only be in api-proxy container"
     echo "[health-check][ERROR] OPENAI_API_KEY=${OPENAI_API_KEY:+<present>}"
-    # echo "[health-check][ERROR] CODEX_API_KEY=${CODEX_API_KEY:+<present>}"  # Temporarily disabled - Codex uses direct credentials
+    echo "[health-check][ERROR] CODEX_API_KEY=${CODEX_API_KEY:+<present>}"
     echo "[health-check][ERROR] OPENAI_KEY=${OPENAI_KEY:+<present>}"
     exit 1
   fi
-  echo "[health-check] ✓ OpenAI credentials NOT in agent environment (correct)"
-  # Note: CODEX_API_KEY is intentionally passed through for Codex agent compatibility
+  echo "[health-check] ✓ OpenAI/Codex credentials NOT in agent environment (correct)"
 
   # Perform health check using BASE_URL
   echo "[health-check] Testing connectivity to OpenAI API proxy at $OPENAI_BASE_URL..."
