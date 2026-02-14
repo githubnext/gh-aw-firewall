@@ -1635,6 +1635,90 @@ describe('docker-manager', () => {
           }
         }
       });
+
+      it('should not leak OPENAI_API_KEY to agent when api-proxy is enabled', () => {
+        // Simulate the key being in process.env (as it would be in real usage)
+        const origKey = process.env.OPENAI_API_KEY;
+        process.env.OPENAI_API_KEY = 'sk-secret-key';
+        try {
+          const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-secret-key' };
+          const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+          const agent = result.services.agent;
+          const env = agent.environment as Record<string, string>;
+          // Agent should NOT have the raw API key — only the sidecar gets it
+          expect(env.OPENAI_API_KEY).toBeUndefined();
+          // Agent should have the BASE_URL to reach the sidecar instead
+          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        } finally {
+          if (origKey !== undefined) {
+            process.env.OPENAI_API_KEY = origKey;
+          } else {
+            delete process.env.OPENAI_API_KEY;
+          }
+        }
+      });
+
+      it('should not leak CODEX_API_KEY to agent when api-proxy is enabled with envAll', () => {
+        // Simulate the key being in process.env AND envAll enabled
+        const origKey = process.env.CODEX_API_KEY;
+        process.env.CODEX_API_KEY = 'sk-codex-secret';
+        try {
+          const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test', envAll: true };
+          const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+          const agent = result.services.agent;
+          const env = agent.environment as Record<string, string>;
+          // Even with envAll, agent should NOT have CODEX_API_KEY when api-proxy is enabled
+          expect(env.CODEX_API_KEY).toBeUndefined();
+          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        } finally {
+          if (origKey !== undefined) {
+            process.env.CODEX_API_KEY = origKey;
+          } else {
+            delete process.env.CODEX_API_KEY;
+          }
+        }
+      });
+
+      it('should not leak OPENAI_API_KEY to agent when api-proxy is enabled with envAll', () => {
+        // Simulate envAll scenario (smoke-codex uses --env-all)
+        const origKey = process.env.OPENAI_API_KEY;
+        process.env.OPENAI_API_KEY = 'sk-openai-secret';
+        try {
+          const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-openai-secret', envAll: true };
+          const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+          const agent = result.services.agent;
+          const env = agent.environment as Record<string, string>;
+          // Even with envAll, agent should NOT have OPENAI_API_KEY when api-proxy is enabled
+          expect(env.OPENAI_API_KEY).toBeUndefined();
+          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        } finally {
+          if (origKey !== undefined) {
+            process.env.OPENAI_API_KEY = origKey;
+          } else {
+            delete process.env.OPENAI_API_KEY;
+          }
+        }
+      });
+
+      it('should not leak ANTHROPIC_API_KEY to agent when api-proxy is enabled with envAll', () => {
+        const origKey = process.env.ANTHROPIC_API_KEY;
+        process.env.ANTHROPIC_API_KEY = 'sk-ant-secret';
+        try {
+          const configWithProxy = { ...mockConfig, enableApiProxy: true, anthropicApiKey: 'sk-ant-secret', envAll: true };
+          const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
+          const agent = result.services.agent;
+          const env = agent.environment as Record<string, string>;
+          // Even with envAll, agent should NOT have ANTHROPIC_API_KEY when api-proxy is enabled
+          expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+          expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
+        } finally {
+          if (origKey !== undefined) {
+            process.env.ANTHROPIC_API_KEY = origKey;
+          } else {
+            delete process.env.ANTHROPIC_API_KEY;
+          }
+        }
+      });
     });
   });
 
