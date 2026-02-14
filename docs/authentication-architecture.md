@@ -1,8 +1,11 @@
-# Authentication Architecture: How AWF Handles Claude/Anthropic API Tokens
+# Authentication Architecture: How AWF Handles LLM API Tokens
 
 ## Overview
 
-The Agentic Workflow Firewall (AWF) implements a multi-layered security architecture to protect Claude/Anthropic API authentication tokens while providing transparent proxying for AI agent calls. This document explains the complete authentication flow, token isolation mechanisms, and network routing.
+The Agentic Workflow Firewall (AWF) implements a multi-layered security architecture to protect LLM API authentication tokens while providing transparent proxying for AI agent calls. This document explains the complete authentication flow, token isolation mechanisms, and network routing for both **OpenAI/Codex** and **Anthropic/Claude** APIs.
+
+> [!IMPORTANT]
+> **Both OpenAI/Codex and Anthropic/Claude use identical credential isolation architecture.** API keys are held exclusively in the api-proxy sidecar container (never in the agent container), and both providers route through the same Squid proxy for domain filtering. The only differences are the port numbers (10000 for OpenAI, 10001 for Anthropic) and authentication header formats (`Authorization: Bearer` vs `x-api-key`).
 
 ## Architecture Components
 
@@ -211,8 +214,10 @@ These are **standard environment variables** recognized by:
 
 When the agent code makes an API call:
 
+**Example 1: Anthropic/Claude**
+
 ```python
-# Example: Claude Code or custom agent
+# Example: Claude Code or custom agent using Anthropic SDK
 import anthropic
 
 client = anthropic.Anthropic()
@@ -225,7 +230,23 @@ response = client.messages.create(
 )
 ```
 
-The SDK **automatically uses the base URL** without requiring any code changes. The agent thinks it's talking to the real API.
+**Example 2: OpenAI/Codex**
+
+```python
+# Example: Codex or custom agent using OpenAI SDK
+import openai
+
+client = openai.OpenAI()
+# SDK reads OPENAI_BASE_URL from environment
+# Sends request to http://172.30.0.30:10000 instead of api.openai.com
+
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+```
+
+The SDKs **automatically use the base URL** without requiring any code changes. The agent thinks it's talking to the real API, but requests are routed through the secure api-proxy sidecar.
 
 ### 5. Network Routing: iptables Rules
 
@@ -248,7 +269,7 @@ iptables -A OUTPUT -p tcp -d "$AWF_API_PROXY_IP" -j ACCEPT
 
 Without these rules, traffic to `172.30.0.30` would be redirected to Squid via NAT rules, creating a routing loop.
 
-**Traffic Flow:**
+**Traffic Flow for Anthropic/Claude:**
 
 1. Agent SDK makes HTTP request to `172.30.0.30:10001`
 2. iptables allows direct TCP connection (no redirection)
@@ -256,6 +277,17 @@ Without these rules, traffic to `172.30.0.30` would be redirected to Squid via N
 4. API proxy injects `x-api-key: sk-ant-...` header
 5. API proxy forwards to `api.anthropic.com` via Squid (using `HttpsProxyAgent`)
 6. Squid enforces domain whitelist (only `api.anthropic.com` allowed)
+7. Squid forwards to real API endpoint
+8. Response flows back: API → Squid → api-proxy → agent
+
+**Traffic Flow for OpenAI/Codex:**
+
+1. Agent SDK makes HTTP request to `172.30.0.30:10000`
+2. iptables allows direct TCP connection (no redirection)
+3. API proxy receives request on port 10000
+4. API proxy injects `Authorization: Bearer sk-...` header
+5. API proxy forwards to `api.openai.com` via Squid (using `HttpsProxyAgent`)
+6. Squid enforces domain whitelist (only `api.openai.com` allowed)
 7. Squid forwards to real API endpoint
 8. Response flows back: API → Squid → api-proxy → agent
 
@@ -425,15 +457,41 @@ Even if exploited, the api-proxy has no elevated privileges and limited resource
 
 ### Enabling API Proxy Mode
 
+**Example 1: Using with Claude Code**
+
 ```bash
-# Export API keys on host
+# Export Anthropic API key on host
 export ANTHROPIC_API_KEY="sk-ant-api03-..."
+
+# Run AWF with --enable-api-proxy flag
+awf --enable-api-proxy \
+    --allow-domains api.anthropic.com \
+    "claude-code --prompt 'Hello world'"
+```
+
+**Example 2: Using with Codex**
+
+```bash
+# Export OpenAI API key on host
 export OPENAI_API_KEY="sk-..."
 
 # Run AWF with --enable-api-proxy flag
 awf --enable-api-proxy \
+    --allow-domains api.openai.com \
+    "codex --prompt 'Hello world'"
+```
+
+**Example 3: Using both providers**
+
+```bash
+# Export both API keys on host
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+export OPENAI_API_KEY="sk-..."
+
+# Run AWF with --enable-api-proxy flag, allowing both domains
+awf --enable-api-proxy \
     --allow-domains api.anthropic.com,api.openai.com \
-    "claude-code --prompt 'Hello world'"
+    "your-multi-llm-agent"
 ```
 
 ### Domain Whitelist
