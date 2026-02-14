@@ -119,7 +119,7 @@ agent:
       ipv4_address: 172.30.0.20
 ```
 
-**Key Security Decision:** API keys are **intentionally excluded** from the agent container environment (lines 983-1005 in `docker-manager.ts`).
+**Key Security Decision:** API keys are **intentionally excluded** from the agent container environment (see lines 323-331, 404, and 413-417 in `docker-manager.ts`).
 
 ### 3. API Proxy: Credential Injection Layer
 

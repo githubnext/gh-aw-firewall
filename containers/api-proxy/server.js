@@ -175,6 +175,7 @@ if (OPENAI_API_KEY) {
     }
 
     console.log(`[OpenAI Proxy] ${sanitizeForLog(req.method)} ${sanitizeForLog(req.url)}`);
+    console.log(`[OpenAI Proxy] Injecting Authorization header with OPENAI_API_KEY`);
     proxyRequest(req, res, 'api.openai.com', {
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
     });
@@ -216,6 +217,7 @@ if (ANTHROPIC_API_KEY) {
     }
 
     console.log(`[Anthropic Proxy] ${sanitizeForLog(req.method)} ${sanitizeForLog(req.url)}`);
+    console.log(`[Anthropic Proxy] Injecting x-api-key header with ANTHROPIC_API_KEY`);
     // Only set anthropic-version as default; preserve agent-provided version
     const anthropicHeaders = { 'x-api-key': ANTHROPIC_API_KEY };
     if (!req.headers['anthropic-version']) {
