@@ -123,35 +123,37 @@ fi
 # This ensures the apiKeyHelper is properly configured in the config file
 # If validation fails, exit before running the agent to prevent using wrong credentials
 if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
-  echo "[entrypoint] Validating Claude Code API key helper configuration..."
+  echo "[entrypoint] Claude Code API key helper configured: $CLAUDE_CODE_API_KEY_HELPER"
 
-  # Check if config file exists
+  # Check if config file exists - if it does, validate it
+  # If it doesn't exist yet, skip validation (it may be created by the user command)
   CONFIG_FILE="$HOME/.claude/config.json"
-  if [ ! -f "$CONFIG_FILE" ]; then
-    echo "[entrypoint][ERROR] Claude Code config file not found at $CONFIG_FILE"
-    echo "[entrypoint][ERROR] Cannot verify apiKeyHelper configuration"
-    exit 1
-  fi
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "[entrypoint] Validating existing Claude Code config file..."
 
-  # Check if apiKeyHelper is present in config file
-  if ! grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
-    echo "[entrypoint][ERROR] apiKeyHelper not found in Claude Code config file"
-    echo "[entrypoint][ERROR] Expected: {\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}"
-    echo "[entrypoint][ERROR] Actual config:"
-    cat "$CONFIG_FILE" >&2
-    exit 1
-  fi
+    # Check if apiKeyHelper is present in config file
+    if ! grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
+      echo "[entrypoint][ERROR] apiKeyHelper not found in Claude Code config file"
+      echo "[entrypoint][ERROR] Expected: {\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}"
+      echo "[entrypoint][ERROR] Actual config:"
+      cat "$CONFIG_FILE" >&2
+      exit 1
+    fi
 
-  # Verify the value matches the environment variable
-  CONFIGURED_HELPER=$(grep -o '"apiKeyHelper":"[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
-  if [ "$CONFIGURED_HELPER" != "$CLAUDE_CODE_API_KEY_HELPER" ]; then
-    echo "[entrypoint][ERROR] apiKeyHelper mismatch:"
-    echo "[entrypoint][ERROR]   Environment variable: $CLAUDE_CODE_API_KEY_HELPER"
-    echo "[entrypoint][ERROR]   Config file value: $CONFIGURED_HELPER"
-    exit 1
-  fi
+    # Verify the value matches the environment variable
+    CONFIGURED_HELPER=$(grep -o '"apiKeyHelper":"[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
+    if [ "$CONFIGURED_HELPER" != "$CLAUDE_CODE_API_KEY_HELPER" ]; then
+      echo "[entrypoint][ERROR] apiKeyHelper mismatch:"
+      echo "[entrypoint][ERROR]   Environment variable: $CLAUDE_CODE_API_KEY_HELPER"
+      echo "[entrypoint][ERROR]   Config file value: $CONFIGURED_HELPER"
+      exit 1
+    fi
 
-  echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
+    echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
+  else
+    echo "[entrypoint] Config file not found yet - will be created by user command"
+    echo "[entrypoint] Environment variable set: CLAUDE_CODE_API_KEY_HELPER=$CLAUDE_CODE_API_KEY_HELPER"
+  fi
 fi
 
 # Print proxy environment
