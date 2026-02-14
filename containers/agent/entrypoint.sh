@@ -122,10 +122,17 @@ fi
 # Configure Claude Code API key helper
 # This ensures the apiKeyHelper is properly configured in the config file
 # The config file must exist before Claude Code starts for authentication to work
+# In chroot mode, we write to /host$HOME/.claude.json so it's accessible after chroot
 if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
   echo "[entrypoint] Claude Code API key helper configured: $CLAUDE_CODE_API_KEY_HELPER"
 
-  CONFIG_FILE="$HOME/.claude.json"
+  # In chroot mode, write to /host path so file is accessible after chroot transition
+  if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
+    CONFIG_FILE="/host$HOME/.claude.json"
+  else
+    CONFIG_FILE="$HOME/.claude.json"
+  fi
+
   if [ -f "$CONFIG_FILE" ]; then
     echo "[entrypoint] Claude Code config file exists, validating..."
 

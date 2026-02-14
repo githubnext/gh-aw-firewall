@@ -549,6 +549,22 @@ export function generateDockerCompose(
     // This is safe as ~/.claude contains only Claude-specific state, not credentials
     agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
 
+    // Mount ~/.claude.json for Claude Code authentication configuration
+    // This file must be accessible in chroot mode for Claude Code to find apiKeyHelper
+    // We create the file if it doesn't exist, then mount it
+    const claudeJsonPath = path.join(effectiveHome, '.claude.json');
+    if (!fs.existsSync(claudeJsonPath)) {
+      // Create parent directory if needed
+      const parentDir = path.dirname(claudeJsonPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true, mode: 0o755 });
+      }
+      // Create empty file that will be populated by entrypoint
+      fs.writeFileSync(claudeJsonPath, '{}', { mode: 0o600 });
+      logger.debug(`Created ${claudeJsonPath} for chroot mounting`);
+    }
+    agentVolumes.push(`${claudeJsonPath}:/host${claudeJsonPath}:rw`);
+
     // Mount ~/.cargo and ~/.rustup for Rust toolchain access
     // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
     // ~/.cargo must be rw because the credential-hiding code mounts /dev/null over
