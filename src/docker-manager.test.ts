@@ -1682,8 +1682,9 @@ describe('docker-manager', () => {
         }
       });
 
-      it('should not leak CODEX_API_KEY to agent when api-proxy is enabled with envAll', () => {
+      it('should pass CODEX_API_KEY to agent even when api-proxy is enabled with envAll', () => {
         // Simulate the key being in process.env AND envAll enabled
+        // CODEX_API_KEY is intentionally passed through (unlike other keys) for Codex agent compatibility
         const origKey = process.env.CODEX_API_KEY;
         process.env.CODEX_API_KEY = 'sk-codex-secret';
         try {
@@ -1691,8 +1692,8 @@ describe('docker-manager', () => {
           const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
           const agent = result.services.agent;
           const env = agent.environment as Record<string, string>;
-          // Even with envAll, agent should NOT have CODEX_API_KEY when api-proxy is enabled
-          expect(env.CODEX_API_KEY).toBeUndefined();
+          // CODEX_API_KEY is intentionally passed to agent for Codex compatibility
+          expect(env.CODEX_API_KEY).toBe('sk-codex-secret');
           expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
         } finally {
           if (origKey !== undefined) {

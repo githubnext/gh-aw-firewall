@@ -328,10 +328,10 @@ export function generateDockerCompose(
 
   // When api-proxy is enabled, exclude API keys from agent environment
   // (they are held securely in the api-proxy sidecar instead)
+  // Note: CODEX_API_KEY is intentionally NOT excluded - Codex needs direct credential access
   if (config.enableApiProxy) {
     EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
     EXCLUDED_ENV_VARS.add('OPENAI_KEY');
-    EXCLUDED_ENV_VARS.add('CODEX_API_KEY');
     EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
     EXCLUDED_ENV_VARS.add('CLAUDE_API_KEY');
   }
@@ -418,8 +418,9 @@ export function generateDockerCompose(
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
     // API keys for LLM providers — skip when api-proxy is enabled
     // (the sidecar holds the keys; the agent uses *_BASE_URL instead)
+    // Exception: CODEX_API_KEY is always passed through for Codex agent compatibility
     if (process.env.OPENAI_API_KEY && !config.enableApiProxy) environment.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    if (process.env.CODEX_API_KEY && !config.enableApiProxy) environment.CODEX_API_KEY = process.env.CODEX_API_KEY;
+    if (process.env.CODEX_API_KEY) environment.CODEX_API_KEY = process.env.CODEX_API_KEY;
     if (process.env.ANTHROPIC_API_KEY && !config.enableApiProxy) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
