@@ -122,6 +122,37 @@ jobs:
             --type spdxjson \
             ghcr.io/${{ github.repository }}/agent@${{ steps.build_agent.outputs.digest }}
 
+      - name: Build and push API Proxy image
+        id: build_api_proxy
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ./containers/api-proxy
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/api-proxy:${{ steps.version_early.outputs.version_number }}
+            ghcr.io/${{ github.repository }}/api-proxy:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign API Proxy image with cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/api-proxy@${{ steps.build_api_proxy.outputs.digest }}
+
+      - name: Generate SBOM for API Proxy image
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0.22.2
+        with:
+          image: ghcr.io/${{ github.repository }}/api-proxy@${{ steps.build_api_proxy.outputs.digest }}
+          format: spdx-json
+          output-file: api-proxy-sbom.spdx.json
+
+      - name: Attest SBOM for API Proxy image
+        run: |
+          cosign attest --yes \
+            --predicate api-proxy-sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/api-proxy@${{ steps.build_api_proxy.outputs.digest }}
+
       # Build agent-act image with catthehacker/ubuntu:act-24.04 base for GitHub Actions parity
       - name: Build and push Agent-Act image
         id: build_agent_act
