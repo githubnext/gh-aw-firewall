@@ -1009,10 +1009,11 @@ export function generateDockerCompose(
     // Use IP address instead of hostname for BASE_URLs since Docker DNS may not resolve
     // container names in chroot mode
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
-    if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
-      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
-    }
+    // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+    // if (config.openaiApiKey) {
+    //   environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
+    //   logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
+    // }
     if (config.anthropicApiKey) {
       environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
       logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);

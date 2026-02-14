@@ -1545,12 +1545,13 @@ describe('docker-manager', () => {
         expect(dependsOn['api-proxy'].condition).toBe('service_healthy');
       });
 
-      it('should set OPENAI_BASE_URL in agent when OpenAI key is provided', () => {
+      it('should not set OPENAI_BASE_URL in agent when OpenAI key is provided (temporarily disabled)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+        expect(env.OPENAI_BASE_URL).toBeUndefined();
       });
 
       it('should configure HTTP_PROXY and HTTPS_PROXY in api-proxy to route through Squid', () => {
@@ -1572,12 +1573,13 @@ describe('docker-manager', () => {
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
-      it('should set both BASE_URL variables when both keys are provided', () => {
+      it('should only set ANTHROPIC_BASE_URL when both keys are provided (OPENAI_BASE_URL temporarily disabled)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-openai-key', anthropicApiKey: 'sk-ant-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+        expect(env.OPENAI_BASE_URL).toBeUndefined();
         expect(env.ANTHROPIC_BASE_URL).toBe('http://172.30.0.30:10001');
         expect(env.ANTHROPIC_AUTH_TOKEN).toBe('placeholder-token-for-credential-isolation');
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
@@ -1594,13 +1596,14 @@ describe('docker-manager', () => {
         expect(env.CLAUDE_CODE_API_KEY_HELPER).toBe('/usr/local/bin/get-claude-key.sh');
       });
 
-      it('should not set ANTHROPIC_BASE_URL in agent when only OpenAI key is provided', () => {
+      it('should not set ANTHROPIC_BASE_URL or OPENAI_BASE_URL in agent when only OpenAI key is provided (OPENAI_BASE_URL temporarily disabled)', () => {
         const configWithProxy = { ...mockConfig, enableApiProxy: true, openaiApiKey: 'sk-test-key' };
         const result = generateDockerCompose(configWithProxy, mockNetworkConfigWithProxy);
         const agent = result.services.agent;
         const env = agent.environment as Record<string, string>;
         expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
-        expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+        // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+        expect(env.OPENAI_BASE_URL).toBeUndefined();
       });
 
       it('should set AWF_API_PROXY_IP in agent environment', () => {
@@ -1671,8 +1674,8 @@ describe('docker-manager', () => {
           const env = agent.environment as Record<string, string>;
           // Agent should NOT have the raw API key — only the sidecar gets it
           expect(env.OPENAI_API_KEY).toBeUndefined();
-          // Agent should have the BASE_URL to reach the sidecar instead
-          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+          // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+          expect(env.OPENAI_BASE_URL).toBeUndefined();
         } finally {
           if (origKey !== undefined) {
             process.env.OPENAI_API_KEY = origKey;
@@ -1694,7 +1697,8 @@ describe('docker-manager', () => {
           const env = agent.environment as Record<string, string>;
           // CODEX_API_KEY is intentionally passed to agent for Codex compatibility
           expect(env.CODEX_API_KEY).toBe('sk-codex-secret');
-          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+          // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+          expect(env.OPENAI_BASE_URL).toBeUndefined();
         } finally {
           if (origKey !== undefined) {
             process.env.CODEX_API_KEY = origKey;
@@ -1715,7 +1719,8 @@ describe('docker-manager', () => {
           const env = agent.environment as Record<string, string>;
           // Even with envAll, agent should NOT have OPENAI_API_KEY when api-proxy is enabled
           expect(env.OPENAI_API_KEY).toBeUndefined();
-          expect(env.OPENAI_BASE_URL).toBe('http://172.30.0.30:10000');
+          // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+          expect(env.OPENAI_BASE_URL).toBeUndefined();
         } finally {
           if (origKey !== undefined) {
             process.env.OPENAI_API_KEY = origKey;
