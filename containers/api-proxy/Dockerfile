@@ -28,5 +28,6 @@ USER apiproxy
 # 10001 - Anthropic API proxy
 EXPOSE 10000 10001
 
-# Start the proxy server
-CMD ["node", "server.js"]
+# Redirect stdout/stderr to log file for persistence
+# Use shell form to enable redirection and tee for both file and console
+CMD node server.js 2>&1 | tee -a /var/log/api-proxy/api-proxy.log

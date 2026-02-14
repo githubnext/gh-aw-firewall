@@ -242,6 +242,12 @@ export function generateDockerCompose(
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
 
+  // API proxy logs path: if proxyLogsDir is specified, write to sibling directory
+  // Otherwise, write to workDir/api-proxy-logs (will be moved to /tmp after cleanup)
+  const apiProxyLogsPath = config.proxyLogsDir
+    ? path.join(path.dirname(config.proxyLogsDir), 'api-proxy-logs')
+    : path.join(config.workDir, 'api-proxy-logs');
+
   // Build Squid volumes list
   const squidVolumes = [
     `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
@@ -931,6 +937,10 @@ export function generateDockerCompose(
           ipv4_address: networkConfig.proxyIp,
         },
       },
+      volumes: [
+        // Mount log directory for api-proxy logs
+        `${apiProxyLogsPath}:/var/log/api-proxy:rw`,
+      ],
       environment: {
         // Pass API keys securely to sidecar (not visible to agent)
         ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
@@ -1038,6 +1048,20 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     fs.chmodSync(squidLogsDir, 0o777);
   }
   logger.debug(`Squid logs directory created at: ${squidLogsDir}`);
+
+  // Create api-proxy logs directory for persistence
+  // If proxyLogsDir is specified, write to sibling directory (timeout-safe)
+  // Otherwise, write to workDir/api-proxy-logs (will be moved to /tmp after cleanup)
+  // Note: API proxy runs as user 'apiproxy' (non-root)
+  const apiProxyLogsDir = config.proxyLogsDir
+    ? path.join(path.dirname(config.proxyLogsDir), 'api-proxy-logs')
+    : path.join(config.workDir, 'api-proxy-logs');
+  if (!fs.existsSync(apiProxyLogsDir)) {
+    fs.mkdirSync(apiProxyLogsDir, { recursive: true, mode: 0o777 });
+    // Explicitly set permissions to 0o777 (not affected by umask)
+    fs.chmodSync(apiProxyLogsDir, 0o777);
+  }
+  logger.debug(`API proxy logs directory created at: ${apiProxyLogsDir}`);
 
   // Create /tmp/gh-aw/mcp-logs directory
   // This directory exists on the HOST for MCP gateway to write logs
@@ -1462,6 +1486,33 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
           logger.info(`Agent logs preserved at: ${agentLogsDestination}`);
         } catch (error) {
           logger.debug('Could not preserve agent logs:', error);
+        }
+      }
+
+      // Preserve api-proxy logs before cleanup
+      if (proxyLogsDir) {
+        // Logs were written directly to sibling of proxyLogsDir during runtime (timeout-safe)
+        // Just fix permissions so they're readable
+        const apiProxyLogsDir = path.join(path.dirname(proxyLogsDir), 'api-proxy-logs');
+        if (fs.existsSync(apiProxyLogsDir)) {
+          try {
+            execa.sync('chmod', ['-R', 'a+rX', apiProxyLogsDir]);
+            logger.info(`API proxy logs available at: ${apiProxyLogsDir}`);
+          } catch (error) {
+            logger.debug('Could not fix api-proxy log permissions:', error);
+          }
+        }
+      } else {
+        // Default behavior: move from workDir/api-proxy-logs to timestamped /tmp directory
+        const apiProxyLogsDir = path.join(workDir, 'api-proxy-logs');
+        const apiProxyLogsDestination = path.join(os.tmpdir(), `api-proxy-logs-${timestamp}`);
+        if (fs.existsSync(apiProxyLogsDir) && fs.readdirSync(apiProxyLogsDir).length > 0) {
+          try {
+            fs.renameSync(apiProxyLogsDir, apiProxyLogsDestination);
+            logger.info(`API proxy logs preserved at: ${apiProxyLogsDestination}`);
+          } catch (error) {
+            logger.debug('Could not preserve api-proxy logs:', error);
+          }
         }
       }
 
