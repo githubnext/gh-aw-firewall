@@ -134,28 +134,27 @@ if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
   fi
 
   if [ -f "$CONFIG_FILE" ]; then
-    echo "[entrypoint] Claude Code config file exists, validating..."
-
-    # Check if apiKeyHelper is present in config file
-    if ! grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
-      echo "[entrypoint][ERROR] apiKeyHelper not found in Claude Code config file"
-      echo "[entrypoint][ERROR] Expected: {\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}"
-      echo "[entrypoint][ERROR] Actual config:"
-      cat "$CONFIG_FILE" >&2
-      exit 1
+    # File exists - check if it has apiKeyHelper
+    if grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
+      # apiKeyHelper exists - validate it matches the environment variable
+      echo "[entrypoint] Claude Code config file exists with apiKeyHelper, validating..."
+      CONFIGURED_HELPER=$(grep -o '"apiKeyHelper":"[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
+      if [ "$CONFIGURED_HELPER" != "$CLAUDE_CODE_API_KEY_HELPER" ]; then
+        echo "[entrypoint][ERROR] apiKeyHelper mismatch:"
+        echo "[entrypoint][ERROR]   Environment variable: $CLAUDE_CODE_API_KEY_HELPER"
+        echo "[entrypoint][ERROR]   Config file value: $CONFIGURED_HELPER"
+        exit 1
+      fi
+      echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
+    else
+      # File exists but no apiKeyHelper - write it (overwrites empty {} created by docker-manager)
+      echo "[entrypoint] Claude Code config file exists but missing apiKeyHelper, writing..."
+      echo "{\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}" > "$CONFIG_FILE"
+      chmod 600 "$CONFIG_FILE"
+      echo "[entrypoint] ✓ Wrote apiKeyHelper to $CONFIG_FILE"
     fi
-
-    # Verify the value matches the environment variable
-    CONFIGURED_HELPER=$(grep -o '"apiKeyHelper":"[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
-    if [ "$CONFIGURED_HELPER" != "$CLAUDE_CODE_API_KEY_HELPER" ]; then
-      echo "[entrypoint][ERROR] apiKeyHelper mismatch:"
-      echo "[entrypoint][ERROR]   Environment variable: $CLAUDE_CODE_API_KEY_HELPER"
-      echo "[entrypoint][ERROR]   Config file value: $CONFIGURED_HELPER"
-      exit 1
-    fi
-
-    echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
   else
+    # File doesn't exist - create it
     echo "[entrypoint] Creating Claude Code config file with apiKeyHelper..."
     echo "{\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}" > "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
