@@ -114,6 +114,54 @@ fi
 # Setup iptables rules
 /usr/local/bin/setup-iptables.sh
 
+# Run API proxy health checks (verifies credential isolation and connectivity)
+# This must run AFTER iptables setup (which allows api-proxy traffic) but BEFORE user command
+# If health check fails, the script exits with non-zero code and prevents agent from running
+/usr/local/bin/api-proxy-health-check.sh || exit 1
+
+# Configure Claude Code API key helper
+# This ensures the apiKeyHelper is properly configured in the config file
+# The config file must exist before Claude Code starts for authentication to work
+# In chroot mode, we write to /host$HOME/.claude.json so it's accessible after chroot
+if [ -n "$CLAUDE_CODE_API_KEY_HELPER" ]; then
+  echo "[entrypoint] Claude Code API key helper configured: $CLAUDE_CODE_API_KEY_HELPER"
+
+  # In chroot mode, write to /host path so file is accessible after chroot transition
+  if [ "${AWF_CHROOT_ENABLED}" = "true" ]; then
+    CONFIG_FILE="/host$HOME/.claude.json"
+  else
+    CONFIG_FILE="$HOME/.claude.json"
+  fi
+
+  if [ -f "$CONFIG_FILE" ]; then
+    # File exists - check if it has apiKeyHelper
+    if grep -q '"apiKeyHelper"' "$CONFIG_FILE"; then
+      # apiKeyHelper exists - validate it matches the environment variable
+      echo "[entrypoint] Claude Code config file exists with apiKeyHelper, validating..."
+      CONFIGURED_HELPER=$(grep -o '"apiKeyHelper":"[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
+      if [ "$CONFIGURED_HELPER" != "$CLAUDE_CODE_API_KEY_HELPER" ]; then
+        echo "[entrypoint][ERROR] apiKeyHelper mismatch:"
+        echo "[entrypoint][ERROR]   Environment variable: $CLAUDE_CODE_API_KEY_HELPER"
+        echo "[entrypoint][ERROR]   Config file value: $CONFIGURED_HELPER"
+        exit 1
+      fi
+      echo "[entrypoint] ✓ Claude Code API key helper validated: $CLAUDE_CODE_API_KEY_HELPER"
+    else
+      # File exists but no apiKeyHelper - write it (overwrites empty {} created by docker-manager)
+      echo "[entrypoint] Claude Code config file exists but missing apiKeyHelper, writing..."
+      echo "{\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}" > "$CONFIG_FILE"
+      chmod 666 "$CONFIG_FILE"
+      echo "[entrypoint] ✓ Wrote apiKeyHelper to $CONFIG_FILE"
+    fi
+  else
+    # File doesn't exist - create it
+    echo "[entrypoint] Creating Claude Code config file with apiKeyHelper..."
+    echo "{\"apiKeyHelper\":\"$CLAUDE_CODE_API_KEY_HELPER\"}" > "$CONFIG_FILE"
+    chmod 666 "$CONFIG_FILE"
+    echo "[entrypoint] ✓ Created $CONFIG_FILE with apiKeyHelper: $CLAUDE_CODE_API_KEY_HELPER"
+  fi
+fi
+
 # Print proxy environment
 echo "[entrypoint] Proxy configuration:"
 echo "[entrypoint]   HTTP_PROXY=$HTTP_PROXY"

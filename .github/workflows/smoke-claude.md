@@ -49,6 +49,23 @@ safe-outputs:
       run-failure: "💫 **TO BE CONTINUED...** [{workflow_name}]({run_url}) {status}! Our hero faces unexpected challenges..."
 timeout-minutes: 10
 post-steps:
+  - name: Show final Claude Code config
+    if: always()
+    run: |
+      echo "=== Final Claude Code Config ==="
+      if [ -f ~/.claude.json ]; then
+        echo "File: ~/.claude.json"
+        cat ~/.claude.json
+      else
+        echo "~/.claude.json not found"
+      fi
+      if [ -f ~/.claude/config.json ]; then
+        echo ""
+        echo "File: ~/.claude/config.json (legacy)"
+        cat ~/.claude/config.json
+      else
+        echo "~/.claude/config.json not found"
+      fi
   - name: Validate safe outputs were invoked
     run: |
       OUTPUTS_FILE="${GH_AW_SAFE_OUTPUTS:-/opt/gh-aw/safeoutputs/outputs.jsonl}"

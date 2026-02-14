@@ -85,6 +85,25 @@ describe('API Proxy Sidecar', () => {
     expect(result.stdout).toContain(`ANTHROPIC_BASE_URL=http://${API_PROXY_IP}:10001`);
   }, 180000);
 
+  test('should set ANTHROPIC_AUTH_TOKEN to placeholder in agent when Anthropic key is provided', async () => {
+    const result = await runner.runWithSudo(
+      'bash -c "echo ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_AUTH_TOKEN"',
+      {
+        allowDomains: ['api.anthropic.com'],
+        enableApiProxy: true,
+        buildLocal: true,
+        logLevel: 'debug',
+        timeout: 120000,
+        env: {
+          ANTHROPIC_API_KEY: 'sk-ant-fake-test-key-12345',
+        },
+      }
+    );
+
+    expect(result).toSucceed();
+    expect(result.stdout).toContain('ANTHROPIC_AUTH_TOKEN=placeholder-token-for-credential-isolation');
+  }, 180000);
+
   test('should set OPENAI_BASE_URL in agent when OpenAI key is provided', async () => {
     const result = await runner.runWithSudo(
       'bash -c "echo OPENAI_BASE_URL=$OPENAI_BASE_URL"',

@@ -242,6 +242,12 @@ export function generateDockerCompose(
   // Squid logs path: use proxyLogsDir if specified (direct write), otherwise workDir/squid-logs
   const squidLogsPath = config.proxyLogsDir || `${config.workDir}/squid-logs`;
 
+  // API proxy logs path: if proxyLogsDir is specified, write to sibling directory
+  // Otherwise, write to workDir/api-proxy-logs (will be moved to /tmp after cleanup)
+  const apiProxyLogsPath = config.proxyLogsDir
+    ? path.join(path.dirname(config.proxyLogsDir), 'api-proxy-logs')
+    : path.join(config.workDir, 'api-proxy-logs');
+
   // Build Squid volumes list
   const squidVolumes = [
     `${config.workDir}/squid.conf:/etc/squid/squid.conf:ro`,
@@ -319,6 +325,16 @@ export function generateDockerCompose(
     'SUDO_UID',       // Sudo metadata
     'SUDO_GID',       // Sudo metadata
   ]);
+
+  // When api-proxy is enabled, exclude API keys from agent environment
+  // (they are held securely in the api-proxy sidecar instead)
+  // Note: CODEX_API_KEY is intentionally NOT excluded - Codex needs direct credential access
+  if (config.enableApiProxy) {
+    EXCLUDED_ENV_VARS.add('OPENAI_API_KEY');
+    EXCLUDED_ENV_VARS.add('OPENAI_KEY');
+    EXCLUDED_ENV_VARS.add('ANTHROPIC_API_KEY');
+    EXCLUDED_ENV_VARS.add('CLAUDE_API_KEY');
+  }
 
   // Start with required/overridden environment variables
   // Use the real user's home (not /root when running with sudo)
@@ -400,8 +416,11 @@ export function generateDockerCompose(
     if (process.env.GITHUB_TOKEN) environment.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (process.env.GH_TOKEN) environment.GH_TOKEN = process.env.GH_TOKEN;
     if (process.env.GITHUB_PERSONAL_ACCESS_TOKEN) environment.GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
-    // Anthropic API key for Claude Code — skip when api-proxy is enabled
-    // (the sidecar holds the key; the agent uses ANTHROPIC_BASE_URL instead)
+    // API keys for LLM providers — skip when api-proxy is enabled
+    // (the sidecar holds the keys; the agent uses *_BASE_URL instead)
+    // Exception: CODEX_API_KEY is always passed through for Codex agent compatibility
+    if (process.env.OPENAI_API_KEY && !config.enableApiProxy) environment.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (process.env.CODEX_API_KEY) environment.CODEX_API_KEY = process.env.CODEX_API_KEY;
     if (process.env.ANTHROPIC_API_KEY && !config.enableApiProxy) environment.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (process.env.USER) environment.USER = process.env.USER;
     if (process.env.TERM) environment.TERM = process.env.TERM;
@@ -530,6 +549,24 @@ export function generateDockerCompose(
     // Mount ~/.claude for Claude CLI state and configuration
     // This is safe as ~/.claude contains only Claude-specific state, not credentials
     agentVolumes.push(`${effectiveHome}/.claude:/host${effectiveHome}/.claude:rw`);
+
+    // Mount ~/.claude.json for Claude Code authentication configuration
+    // This file must be accessible in chroot mode for Claude Code to find apiKeyHelper
+    // We create the file if it doesn't exist, then mount it
+    const claudeJsonPath = path.join(effectiveHome, '.claude.json');
+    if (!fs.existsSync(claudeJsonPath)) {
+      // Create parent directory if needed
+      const parentDir = path.dirname(claudeJsonPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true, mode: 0o755 });
+      }
+      // Create empty file that will be populated by entrypoint
+      // Use 0o666 mode to allow container root to write and host user to read
+      // The entrypoint script runs as root and modifies this file
+      fs.writeFileSync(claudeJsonPath, '{}', { mode: 0o666 });
+      logger.debug(`Created ${claudeJsonPath} for chroot mounting`);
+    }
+    agentVolumes.push(`${claudeJsonPath}:/host${claudeJsonPath}:rw`);
 
     // Mount ~/.cargo and ~/.rustup for Rust toolchain access
     // On GitHub Actions runners, Rust is installed via rustup at $HOME/.cargo and $HOME/.rustup
@@ -919,6 +956,10 @@ export function generateDockerCompose(
           ipv4_address: networkConfig.proxyIp,
         },
       },
+      volumes: [
+        // Mount log directory for api-proxy logs
+        `${apiProxyLogsPath}:/var/log/api-proxy:rw`,
+      ],
       environment: {
         // Pass API keys securely to sidecar (not visible to agent)
         ...(config.openaiApiKey && { OPENAI_API_KEY: config.openaiApiKey }),
@@ -968,13 +1009,24 @@ export function generateDockerCompose(
     // Use IP address instead of hostname for BASE_URLs since Docker DNS may not resolve
     // container names in chroot mode
     environment.AWF_API_PROXY_IP = networkConfig.proxyIp;
-    if (config.openaiApiKey) {
-      environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000`;
-      logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000`);
-    }
+    // OPENAI_BASE_URL temporarily disabled for Codex - will be re-enabled in future
+    // if (config.openaiApiKey) {
+    //   environment.OPENAI_BASE_URL = `http://${networkConfig.proxyIp}:10000/v1`;
+    //   logger.debug(`OpenAI API will be proxied through sidecar at http://${networkConfig.proxyIp}:10000/v1`);
+    // }
     if (config.anthropicApiKey) {
       environment.ANTHROPIC_BASE_URL = `http://${networkConfig.proxyIp}:10001`;
       logger.debug(`Anthropic API will be proxied through sidecar at http://${networkConfig.proxyIp}:10001`);
+
+      // Set placeholder token for Claude Code CLI compatibility
+      // Real authentication happens via ANTHROPIC_BASE_URL pointing to api-proxy
+      environment.ANTHROPIC_AUTH_TOKEN = 'placeholder-token-for-credential-isolation';
+      logger.debug('ANTHROPIC_AUTH_TOKEN set to placeholder value for credential isolation');
+
+      // Set API key helper for Claude Code CLI to use credential isolation
+      // The helper script returns a placeholder key; real authentication happens via ANTHROPIC_BASE_URL
+      environment.CLAUDE_CODE_API_KEY_HELPER = '/usr/local/bin/get-claude-key.sh';
+      logger.debug('Claude Code API key helper configured: /usr/local/bin/get-claude-key.sh');
     }
 
     logger.info('API proxy sidecar enabled - API keys will be held securely in sidecar container');
@@ -1026,6 +1078,20 @@ export async function writeConfigs(config: WrapperConfig): Promise<void> {
     fs.chmodSync(squidLogsDir, 0o777);
   }
   logger.debug(`Squid logs directory created at: ${squidLogsDir}`);
+
+  // Create api-proxy logs directory for persistence
+  // If proxyLogsDir is specified, write to sibling directory (timeout-safe)
+  // Otherwise, write to workDir/api-proxy-logs (will be moved to /tmp after cleanup)
+  // Note: API proxy runs as user 'apiproxy' (non-root)
+  const apiProxyLogsDir = config.proxyLogsDir
+    ? path.join(path.dirname(config.proxyLogsDir), 'api-proxy-logs')
+    : path.join(config.workDir, 'api-proxy-logs');
+  if (!fs.existsSync(apiProxyLogsDir)) {
+    fs.mkdirSync(apiProxyLogsDir, { recursive: true, mode: 0o777 });
+    // Explicitly set permissions to 0o777 (not affected by umask)
+    fs.chmodSync(apiProxyLogsDir, 0o777);
+  }
+  logger.debug(`API proxy logs directory created at: ${apiProxyLogsDir}`);
 
   // Create /tmp/gh-aw/mcp-logs directory
   // This directory exists on the HOST for MCP gateway to write logs
@@ -1450,6 +1516,33 @@ export async function cleanup(workDir: string, keepFiles: boolean, proxyLogsDir?
           logger.info(`Agent logs preserved at: ${agentLogsDestination}`);
         } catch (error) {
           logger.debug('Could not preserve agent logs:', error);
+        }
+      }
+
+      // Preserve api-proxy logs before cleanup
+      if (proxyLogsDir) {
+        // Logs were written directly to sibling of proxyLogsDir during runtime (timeout-safe)
+        // Just fix permissions so they're readable
+        const apiProxyLogsDir = path.join(path.dirname(proxyLogsDir), 'api-proxy-logs');
+        if (fs.existsSync(apiProxyLogsDir)) {
+          try {
+            execa.sync('chmod', ['-R', 'a+rX', apiProxyLogsDir]);
+            logger.info(`API proxy logs available at: ${apiProxyLogsDir}`);
+          } catch (error) {
+            logger.debug('Could not fix api-proxy log permissions:', error);
+          }
+        }
+      } else {
+        // Default behavior: move from workDir/api-proxy-logs to timestamped /tmp directory
+        const apiProxyLogsDir = path.join(workDir, 'api-proxy-logs');
+        const apiProxyLogsDestination = path.join(os.tmpdir(), `api-proxy-logs-${timestamp}`);
+        if (fs.existsSync(apiProxyLogsDir) && fs.readdirSync(apiProxyLogsDir).length > 0) {
+          try {
+            fs.renameSync(apiProxyLogsDir, apiProxyLogsDestination);
+            logger.info(`API proxy logs preserved at: ${apiProxyLogsDestination}`);
+          } catch (error) {
+            logger.debug('Could not preserve api-proxy logs:', error);
+          }
         }
       }
 
