@@ -10,6 +10,9 @@
  *   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
  *   If not set, uses built-in defaults
  *
+ *   AWF_ONE_SHOT_TOKEN_DEBUG - Enable debug logging output (default: off)
+ *   Set to "1" or "true" to enable logging. Logging is silent by default.
+ *
  * Build hardening:
  *   Default token names are XOR-obfuscated to prevent cleartext extraction
  *   via strings(1) or objdump. Internal symbols use hidden visibility.
@@ -126,6 +129,9 @@ static __thread int in_getenv = 0;
 /* Initialization flag */
 static int tokens_initialized = 0;
 
+/* Debug logging flag (controlled by AWF_ONE_SHOT_TOKEN_DEBUG environment variable) */
+static int debug_enabled = 0;
+
 /* Pointer to the real getenv function */
 static char *(*real_getenv)(const char *name) = NULL;
 
@@ -150,6 +156,34 @@ static void ensure_real_secure_getenv(void) {
 }
 
 /**
+ * Check if debug logging is enabled via AWF_ONE_SHOT_TOKEN_DEBUG environment variable.
+ * Returns 1 if AWF_ONE_SHOT_TOKEN_DEBUG is set to "1" or "true" (case-insensitive), 0 otherwise.
+ *
+ * CRITICAL: This function must call the real getenv directly to avoid infinite recursion
+ * when checking the debug flag during initialization. The AWF_ONE_SHOT_TOKEN_DEBUG variable
+ * is never cached or cleared by this library.
+ */
+static int is_debug_enabled(void) {
+    const char *debug_value = real_getenv("AWF_ONE_SHOT_TOKEN_DEBUG");
+
+    if (debug_value == NULL || debug_value[0] == '\0') {
+        return 0;
+    }
+
+    /* Check if value is "1" */
+    if (strcmp(debug_value, "1") == 0) {
+        return 1;
+    }
+
+    /* Check if value is "true" (case-insensitive) */
+    if (strcasecmp(debug_value, "true") == 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
  * Initialize the token list from AWF_ONE_SHOT_TOKENS environment variable
  * or use defaults if not set. This is called once at first getenv() call.
  * Note: This function must be called with token_mutex held.
@@ -158,6 +192,9 @@ static void init_token_list(void) {
     if (tokens_initialized) {
         return;
     }
+
+    /* Check if debug logging is enabled */
+    debug_enabled = is_debug_enabled();
 
     /* Get the configuration from environment */
     const char *config = real_getenv("AWF_ONE_SHOT_TOKENS");
@@ -208,12 +245,16 @@ static void init_token_list(void) {
         /* If AWF_ONE_SHOT_TOKENS was set but resulted in zero tokens (e.g., ",,," or whitespace only),
          * fall back to defaults to avoid silently disabling all protection */
         if (num_tokens == 0) {
-            fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens\n");
-            fprintf(stderr, "[one-shot-token] WARNING: Falling back to default token list to maintain protection\n");
+            if (debug_enabled) {
+                fprintf(stderr, "[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens\n");
+                fprintf(stderr, "[one-shot-token] WARNING: Falling back to default token list to maintain protection\n");
+            }
             /* num_tokens is already 0 here; assignment is defensive programming for future refactoring */
             num_tokens = 0;
         } else {
-            fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
+            if (debug_enabled) {
+                fprintf(stderr, "[one-shot-token] Initialized with %d custom token(s) from AWF_ONE_SHOT_TOKENS\n", num_tokens);
+            }
             tokens_initialized = 1;
             return;
         }
@@ -234,7 +275,9 @@ static void init_token_list(void) {
         num_tokens++;
     }
 
-    fprintf(stderr, "[one-shot-token] Initialized with %d default token(s)\n", num_tokens);
+    if (debug_enabled) {
+        fprintf(stderr, "[one-shot-token] Initialized with %d default token(s)\n", num_tokens);
+    }
 
     tokens_initialized = 1;
 }
@@ -348,8 +391,10 @@ char *getenv(const char *name) {
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n",
-                    name, format_token_value(token_cache[token_idx]));
+            if (debug_enabled) {
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s)\n",
+                        name, format_token_value(token_cache[token_idx]));
+            }
 
             result = token_cache[token_idx];
         }
@@ -412,8 +457,10 @@ char *secure_getenv(const char *name) {
             /* Unset the variable from the environment so /proc/self/environ is cleared */
             unsetenv(name);
 
-            fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n",
-                    name, format_token_value(token_cache[token_idx]));
+            if (debug_enabled) {
+                fprintf(stderr, "[one-shot-token] Token %s accessed and cached (value: %s) (via secure_getenv)\n",
+                        name, format_token_value(token_cache[token_idx]));
+            }
 
             result = token_cache[token_idx];
         }
