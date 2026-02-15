@@ -9,6 +9,9 @@
 //!   AWF_ONE_SHOT_TOKENS - Comma-separated list of token names to protect
 //!   If not set, uses built-in defaults
 //!
+//!   AWF_ONE_SHOT_TOKEN_DEBUG - Enable debug logging output (default: off)
+//!   Set to "1" or "true" to enable logging. Logging is silent by default.
+//!
 //! Compile: cargo build --release
 //! Usage: LD_PRELOAD=/path/to/libone_shot_token.so ./your-program
 
@@ -58,6 +61,8 @@ struct TokenState {
     cache: HashMap<String, *mut c_char>,
     /// Whether initialization has completed
     initialized: bool,
+    /// Whether debug logging is enabled (controlled by AWF_ONE_SHOT_TOKEN_DEBUG)
+    debug_enabled: bool,
 }
 
 // SAFETY: TokenState is only accessed through a Mutex, ensuring thread safety
@@ -70,6 +75,7 @@ impl TokenState {
             tokens: Vec::new(),
             cache: HashMap::new(),
             initialized: false,
+            debug_enabled: false,
         }
     }
 }
@@ -99,6 +105,9 @@ static REAL_SECURE_GETENV: Lazy<Option<GetenvFn>> = Lazy::new(|| {
     unsafe {
         let symbol = libc::dlsym(libc::RTLD_NEXT, c"secure_getenv".as_ptr());
         if symbol.is_null() {
+            // Note: We can't check debug flag here because it would cause infinite recursion
+            // during initialization. This is a rare case (secure_getenv unavailable) so we
+            // always log it.
             eprintln!("[one-shot-token] WARNING: secure_getenv not available, falling back to getenv");
             None
         } else {
@@ -126,6 +135,31 @@ unsafe fn call_real_secure_getenv(name: *const c_char) -> *mut c_char {
     }
 }
 
+/// Check if debug logging is enabled via AWF_ONE_SHOT_TOKEN_DEBUG environment variable
+///
+/// Returns true if AWF_ONE_SHOT_TOKEN_DEBUG is set to "1" or "true" (case-insensitive)
+/// This function must NOT be called through the intercepted getenv to avoid infinite recursion
+fn is_debug_enabled() -> bool {
+    // CRITICAL: We must call the real getenv directly here to avoid infinite recursion
+    // when checking the debug flag during initialization
+    let debug_var = CString::new("AWF_ONE_SHOT_TOKEN_DEBUG").unwrap();
+    // SAFETY: We're calling the real getenv with a valid C string
+    let debug_ptr = unsafe { call_real_getenv(debug_var.as_ptr()) };
+
+    if debug_ptr.is_null() {
+        return false;
+    }
+
+    // SAFETY: debug_ptr is valid if not null
+    let debug_value = unsafe { CStr::from_ptr(debug_ptr) };
+    if let Ok(debug_str) = debug_value.to_str() {
+        let debug_str_lower = debug_str.to_lowercase();
+        return debug_str_lower == "1" || debug_str_lower == "true";
+    }
+
+    false
+}
+
 /// Initialize the token list from AWF_ONE_SHOT_TOKENS or defaults
 ///
 /// # Safety
@@ -134,6 +168,9 @@ fn init_token_list(state: &mut TokenState) {
     if state.initialized {
         return;
     }
+
+    // Check if debug logging is enabled
+    state.debug_enabled = is_debug_enabled();
 
     // Get configuration from environment
     let config_cstr = CString::new("AWF_ONE_SHOT_TOKENS").unwrap();
@@ -154,17 +191,21 @@ fn init_token_list(state: &mut TokenState) {
                 }
 
                 if !state.tokens.is_empty() {
-                    eprintln!(
-                        "[one-shot-token] Initialized with {} custom token(s) from AWF_ONE_SHOT_TOKENS",
-                        state.tokens.len()
-                    );
+                    if state.debug_enabled {
+                        eprintln!(
+                            "[one-shot-token] Initialized with {} custom token(s) from AWF_ONE_SHOT_TOKENS",
+                            state.tokens.len()
+                        );
+                    }
                     state.initialized = true;
                     return;
                 }
 
                 // Config was set but parsed to zero tokens - fall back to defaults
-                eprintln!("[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens");
-                eprintln!("[one-shot-token] WARNING: Falling back to default token list to maintain protection");
+                if state.debug_enabled {
+                    eprintln!("[one-shot-token] WARNING: AWF_ONE_SHOT_TOKENS was set but parsed to zero tokens");
+                    eprintln!("[one-shot-token] WARNING: Falling back to default token list to maintain protection");
+                }
             }
         }
     }
@@ -177,10 +218,12 @@ fn init_token_list(state: &mut TokenState) {
         state.tokens.push((*token).to_string());
     }
 
-    eprintln!(
-        "[one-shot-token] Initialized with {} default token(s)",
-        state.tokens.len()
-    );
+    if state.debug_enabled {
+        eprintln!(
+            "[one-shot-token] Initialized with {} default token(s)",
+            state.tokens.len()
+        );
+    }
     state.initialized = true;
 }
 
@@ -208,14 +251,16 @@ fn format_token_value(value: &str) -> String {
 /// by directly checking the process's environ pointer. This works correctly
 /// in both chroot and non-chroot modes (reading /proc/self/environ fails in
 /// chroot because it shows the host's procfs, not the chrooted process's state).
-fn check_task_environ_exposure(token_name: &str) {
+fn check_task_environ_exposure(token_name: &str, debug_enabled: bool) {
     // SAFETY: environ is a standard POSIX global that points to the process's environment.
     // It's safe to read as long as we don't hold references across modifications.
     // We're only reading it after unsetenv() has completed, so the pointer is stable.
     unsafe {
         let mut env_ptr = environ;
         if env_ptr.is_null() {
-            eprintln!("[one-shot-token] INFO: Token {} cleared (environ is null)", token_name);
+            if debug_enabled {
+                eprintln!("[one-shot-token] INFO: Token {} cleared (environ is null)", token_name);
+            }
             return;
         }
 
@@ -230,10 +275,12 @@ fn check_task_environ_exposure(token_name: &str) {
             // Check if this entry starts with our token name
             if env_bytes.len() >= token_prefix_bytes.len()
                 && &env_bytes[..token_prefix_bytes.len()] == token_prefix_bytes {
-                eprintln!(
-                    "[one-shot-token] WARNING: Token {} still exposed in process environment",
-                    token_name
-                );
+                if debug_enabled {
+                    eprintln!(
+                        "[one-shot-token] WARNING: Token {} still exposed in process environment",
+                        token_name
+                    );
+                }
                 return;
             }
 
@@ -241,10 +288,12 @@ fn check_task_environ_exposure(token_name: &str) {
         }
 
         // Token not found in environment - success!
-        eprintln!(
-            "[one-shot-token] INFO: Token {} cleared from process environment",
-            token_name
-        );
+        if debug_enabled {
+            eprintln!(
+                "[one-shot-token] INFO: Token {} cleared from process environment",
+                token_name
+            );
+        }
     }
 }
 
@@ -317,6 +366,9 @@ unsafe fn handle_getenv_impl(
     // Copy the value
     ptr::copy_nonoverlapping(value_bytes.as_ptr(), cached as *mut u8, value_bytes.len());
 
+    // Get debug flag before dropping the state
+    let debug_enabled = state.debug_enabled;
+
     // Cache the pointer so subsequent reads return the same value
     state.cache.insert(name_str.to_string(), cached);
 
@@ -324,13 +376,15 @@ unsafe fn handle_getenv_impl(
     libc::unsetenv(name);
 
     // Verify the token was cleared from the process environment
-    check_task_environ_exposure(name_str);
+    check_task_environ_exposure(name_str, debug_enabled);
 
-    let suffix = if via_secure { " (via secure_getenv)" } else { "" };
-    eprintln!(
-        "[one-shot-token] Token {} accessed and cached (value: {}){}",
-        name_str, format_token_value(value_str), suffix
-    );
+    if debug_enabled {
+        let suffix = if via_secure { " (via secure_getenv)" } else { "" };
+        eprintln!(
+            "[one-shot-token] Token {} accessed and cached (value: {}){}",
+            name_str, format_token_value(value_str), suffix
+        );
+    }
 
     cached
 }

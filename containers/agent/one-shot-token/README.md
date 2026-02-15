@@ -8,6 +8,26 @@ This protects against exfiltration via `/proc/self/environ` inspection while all
 
 ## Configuration
 
+### Debug Logging
+
+By default, the library operates **silently** with no output to stderr. To enable debug logging, set the `AWF_ONE_SHOT_TOKEN_DEBUG` environment variable:
+
+```bash
+# Enable debug logging
+export AWF_ONE_SHOT_TOKEN_DEBUG=1
+# or
+export AWF_ONE_SHOT_TOKEN_DEBUG=true
+
+# Run your command with the library preloaded
+LD_PRELOAD=/usr/local/lib/one-shot-token.so ./your-program
+```
+
+**Important notes:**
+- Debug logging is **off by default** to reduce noise in production environments
+- When enabled, the library logs initialization messages and token access events to stderr
+- The `AWF_ONE_SHOT_TOKEN_DEBUG` variable is never cached or cleared (prevents infinite recursion)
+- Set to `"1"` or `"true"` (case-insensitive) to enable debug logging
+
 ### Default Protected Tokens
 
 By default, the library protects these token variables:
@@ -223,18 +243,22 @@ EOF
 # Compile the test program
 gcc -o test_getenv test_getenv.c
 
-# Test with the one-shot token library preloaded
+# Test with the one-shot token library preloaded (with debug logging)
 export GITHUB_TOKEN="test-token-12345"
+export AWF_ONE_SHOT_TOKEN_DEBUG=1
 LD_PRELOAD=./one-shot-token.so ./test_getenv
 ```
 
-Expected output:
+Expected output (with debug logging enabled):
 ```
 [one-shot-token] Initialized with 11 default token(s)
 [one-shot-token] Token GITHUB_TOKEN accessed and cached (value: test...)
+[one-shot-token] INFO: Token GITHUB_TOKEN cleared from process environment
 First read: test-token-12345
 Second read: test-token-12345
 ```
+
+**Note:** Without `AWF_ONE_SHOT_TOKEN_DEBUG=1`, the library operates silently with no stderr output.
 
 ### Custom Token Test
 
@@ -242,8 +266,9 @@ Second read: test-token-12345
 # Build the library
 ./build.sh
 
-# Test with custom tokens
+# Test with custom tokens (with debug logging)
 export AWF_ONE_SHOT_TOKENS="MY_API_KEY,SECRET_TOKEN"
+export AWF_ONE_SHOT_TOKEN_DEBUG=1
 export MY_API_KEY="secret-value-123"
 export SECRET_TOKEN="another-secret"
 
@@ -255,13 +280,15 @@ LD_PRELOAD=./one-shot-token.so bash -c '
 '
 ```
 
-Expected output:
+Expected output (with debug logging enabled):
 ```
 [one-shot-token] Initialized with 2 custom token(s) from AWF_ONE_SHOT_TOKENS
 [one-shot-token] Token MY_API_KEY accessed and cached (value: secr...)
+[one-shot-token] INFO: Token MY_API_KEY cleared from process environment
 First MY_API_KEY: secret-value-123
 Second MY_API_KEY: secret-value-123
 [one-shot-token] Token SECRET_TOKEN accessed and cached (value: anot...)
+[one-shot-token] INFO: Token SECRET_TOKEN cleared from process environment
 First SECRET_TOKEN: another-secret
 Second SECRET_TOKEN: another-secret
 ```
@@ -271,15 +298,19 @@ Second SECRET_TOKEN: another-secret
 When using the library with AWF (Agentic Workflow Firewall):
 
 ```bash
-# Use default tokens
+# Use default tokens (silent mode)
 sudo awf --allow-domains github.com -- your-command
 
-# Use custom tokens
+# Use custom tokens with debug logging
 export AWF_ONE_SHOT_TOKENS="MY_TOKEN,CUSTOM_API_KEY"
+export AWF_ONE_SHOT_TOKEN_DEBUG=1
 sudo -E awf --allow-domains github.com -- your-command
 ```
 
-Note: The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` so it's available when the library initializes.
+**Important notes:**
+- The `AWF_ONE_SHOT_TOKENS` variable must be exported before running `awf` so it's available when the library initializes
+- Set `AWF_ONE_SHOT_TOKEN_DEBUG=1` to enable debug logging; otherwise the library operates silently
+- Use `sudo -E` to preserve environment variables when running with sudo
 
 ## Security Considerations
 

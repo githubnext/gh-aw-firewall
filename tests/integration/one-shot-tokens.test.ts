@@ -26,6 +26,9 @@
  * process environment is unaffected by child unsetenv() calls, so both
  * `printenv` reads succeed. The caching is most relevant for programs that
  * call getenv() multiple times within the same process (e.g., Python, Node.js).
+ *
+ * Debug Logging: Tests set AWF_ONE_SHOT_TOKEN_DEBUG=1 to enable debug logging
+ * for verification. Without this flag, the library operates silently.
  */
 
 /// <reference path="../jest-custom-matchers.d.ts" />
@@ -66,6 +69,7 @@ describe('One-Shot Token Protection', () => {
           buildLocal: true, // Build container locally to include one-shot-token.so
           env: {
             GITHUB_TOKEN: 'ghp_test_token_12345',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -95,6 +99,7 @@ describe('One-Shot Token Protection', () => {
           buildLocal: true,
           env: {
             COPILOT_GITHUB_TOKEN: 'copilot_test_token_67890',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -122,6 +127,7 @@ describe('One-Shot Token Protection', () => {
           buildLocal: true,
           env: {
             OPENAI_API_KEY: 'sk-test-openai-key',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -158,6 +164,7 @@ describe('One-Shot Token Protection', () => {
           env: {
             GITHUB_TOKEN: 'ghp_multi_token_1',
             OPENAI_API_KEY: 'sk-multi-key-2',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -190,6 +197,7 @@ describe('One-Shot Token Protection', () => {
           buildLocal: true,
           env: {
             NORMAL_VAR: 'not_a_token',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -225,6 +233,7 @@ print(f"Second: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: 'ghp_python_test_token',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -267,6 +276,7 @@ print(f"Second getenv: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: 'ghp_environ_check',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -297,6 +307,7 @@ print(f"Second getenv: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: 'ghp_chroot_token_12345',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -327,6 +338,7 @@ print(f"Second getenv: [{second}]")
           buildLocal: true,
           env: {
             COPILOT_GITHUB_TOKEN: 'copilot_chroot_token_67890',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -355,6 +367,7 @@ print(f"Second: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: 'ghp_chroot_python_token',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -384,6 +397,7 @@ print(f"Second: [{second}]")
           buildLocal: true,
           env: {
             NORMAL_VAR: 'chroot_not_a_token',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -417,6 +431,7 @@ print(f"Second: [{second}]")
           env: {
             GITHUB_TOKEN: 'ghp_chroot_multi_1',
             OPENAI_API_KEY: 'sk-chroot-multi-2',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -447,6 +462,7 @@ print(f"Second: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: '',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
@@ -498,6 +514,7 @@ print(f"Second: [{second}]")
           buildLocal: true,
           env: {
             GITHUB_TOKEN: 'ghp_test-with-special_chars@#$%',
+            AWF_ONE_SHOT_TOKEN_DEBUG: '1',
           },
         }
       );
